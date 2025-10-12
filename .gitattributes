@@ -1,0 +1,10 @@
+# Enfore end of line is LF for all text files
+* text=auto eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.mp4 binary
+*.ico binary
