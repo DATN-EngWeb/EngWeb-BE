@@ -10,6 +10,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
+    git \
     # for psycopg
     libpq5 \
     libpq-dev \
@@ -18,16 +19,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     dos2unix \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Install pipenv
+RUN pip install --no-cache-dir pipenv
+
+# Copy Pipfile & Pipfile.lock first (for caching layers)
+COPY Pipfile Pipfile.lock ./
+
+# Install dependencies (into system, not virtualenv)
+RUN pipenv install --deploy --system
 
 # Copy project
 COPY . .
 
 EXPOSE 8000
+
 RUN dos2unix /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 CMD ["/app/entrypoint.sh"]
-
-
