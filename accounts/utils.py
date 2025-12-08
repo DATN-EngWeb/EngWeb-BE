@@ -1,5 +1,4 @@
 import random
-import base64
 import os
 from django.core.cache import cache
 from django.core.mail import EmailMessage
@@ -7,6 +6,7 @@ from django.conf import settings
 from datetime import datetime, timedelta
 import json
 import time
+from email.mime.image import MIMEImage
 
 # create otp code
 def create_otp_code():
@@ -32,37 +32,28 @@ def cache_register_otp(user_id, otp_code, email):
     }
     
     cache.set(cache_key, json.dumps(cache_data))
-    
-    time.sleep(3)
-    ttl = cache.ttl(cache_key)
-    print(f"TTL: {ttl}")
-    test = cache.get(cache_key)
-    print(f"Test cache: {cache_key}: {test}, {datetime.now().isoformat()}")
-    
-    time.sleep(3)
-    ttl = cache.ttl(cache_key)
-    print(f"TTL: {ttl}")
-    test = cache.get(cache_key)
-    print(f"Test cache: {cache_key}: {test}, {datetime.now().isoformat()}")
 
-# get logo as base64 for email embedding
-def get_logo_base64():
-    """Read logo file and convert to base64 for email embedding"""
+# get logo bytes for email embedding (attached image)
+def get_logo_bytes():
+    """Read logo file and return raw bytes for inline attachment"""
     logo_path = os.path.join(settings.BASE_DIR, 'static', 'logo.png')
     try:
         with open(logo_path, 'rb') as logo_file:
-            logo_data = logo_file.read()
-            logo_base64 = base64.b64encode(logo_data).decode('utf-8')
-            return f"data:image/png;base64,{logo_base64}"
+            return logo_file.read()
     except FileNotFoundError:
         return None
 
 # send otp code to email
 def send_registration_otp_email(email, otp_code):
-    logo_data = get_logo_base64()
-    logo_html = f'<img src="{logo_data}" alt="NENS Logo" style="max-width: 120px; height: auto; margin-bottom: 20px;" />' if logo_data else ''
+    logo_data = get_logo_bytes()
+    logo_cid = 'nens-logo'
+    logo_html = (
+        f'<img src="cid:{logo_cid}" alt="NENS Logo" style="max-width: 120px; height: auto; margin-bottom: 20px;" />'
+        if logo_data
+        else ''
+    )
     
-    subject = "NENS - Account Registration OTP Verification"
+    subject = "Your NENS verification code"
     html_body = f"""
     <!DOCTYPE html>
     <html>
@@ -154,26 +145,26 @@ def send_registration_otp_email(email, otp_code):
                 <div class="logo-container">
                     {logo_html}
                 </div>
-                <h1>Account Registration OTP Verification</h1>
-                <p>Dear valued customer,</p>
-                <p>Thank you for registering with NENS! To complete your account registration, please use the OTP code below:</p>
+                <h1>Verify your email to get started</h1>
+                <p>Hi there,</p>
+                <p>Welcome to NENS! Use the code below to confirm your email and finish setting up your account.</p>
                 
                 <div class="otp-container">
                     <div class="otp-code">{otp_code}</div>
                 </div>
                 
                 <div class="info-box">
-                    <p><strong>Important:</strong></p>
-                    <p>• This OTP code is valid for 5 minutes only</p>
-                    <p>• Do not share this code with anyone</p>
-                    <p>• If you did not request this registration, please ignore this email</p>
+                    <p><strong>Quick notes:</strong></p>
+                    <p>• The code expires in 5 minutes</p>
+                    <p>• Please keep it private — never share it with anyone</p>
+                    <p>• Didn’t request this? You can safely ignore this email</p>
                 </div>
                 
-                <p>Enter this code on the verification page to complete your registration process.</p>
+                <p>Enter the code on the verification page to complete your signup. If you run into any issues, just request a new code from the app.</p>
                 
                 <div class="footer">
-                    <p>Best regards,</p>
-                    <div class="footer-brand">NENS - No English No Success</div>
+                    <p>Thank you for choosing NENS.</p>
+                    <div class="footer-brand">NENS — No English No Success</div>
                 </div>
             </div>
         </div>
@@ -188,6 +179,11 @@ def send_registration_otp_email(email, otp_code):
         to=[email]
     )
     email_message.content_subtype = "html"
+    if logo_data:
+        image = MIMEImage(logo_data)
+        image.add_header('Content-ID', f'<{logo_cid}>')
+        image.add_header('Content-Disposition', 'inline', filename='logo.png')
+        email_message.attach(image)
     email_message.send(fail_silently=False)
 
 # verify registration otp
