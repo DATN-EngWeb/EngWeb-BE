@@ -45,8 +45,9 @@ class User(AbstractUser):
         max_length=1,
         choices=[
             ('P', 'Pending Verification'), # has not been verified OTP yet(both student and teacher)
+            ('I', 'Incomplete Profile'), # verified OTP but profile information is incomplete (only teacher)
+            ('W', 'Waiting Approval'), # verified OTP, profile complete, waiting for admin approval (only teacher)
             ('V', 'Verified'), # verified OTP (both student and teacher)
-            ('W', 'Waiting Approval'), # verified but waiting for admin approval (only teacher)
             ('D', 'Disabled'), # disabled (both student and teacher)
         ],
         default='P'
