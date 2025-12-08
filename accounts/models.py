@@ -29,7 +29,6 @@ class CustomUserManager(BaseUserManager):
 
         return self.create_user(username, email, password, **extra_fields)
 
-
 # custom user model
 class User(AbstractUser):
     # default fields from BaseAbstractUser: password, last_login
@@ -107,7 +106,7 @@ class Teacher(models.Model):
     )
     experience_year = models.IntegerField(validators=[MinValueValidator(0)], default=0)
     introduction = models.TextField(blank=True, null=True, default='')
-    credentials = models.JSONField()
+    credentials = models.JSONField(default=dict)
     
     # timestamp
     created_at = models.DateTimeField(auto_now_add=True)
