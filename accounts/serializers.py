@@ -1,9 +1,14 @@
 from .models import User, Teacher, Student
+from .utils import create_otp_code, cache_register_otp, send_registration_otp_email
 
 from django.core.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import update_last_login
+from django.db.models import Q
 
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -52,17 +57,14 @@ class UserSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         if password:
             instance.set_password(password)
-        
         instance.save()
+        
         return instance
 
 class TeacherSerializer(serializers.ModelSerializer):
-    user = UserSerializer(required=False)
-
     class Meta:
         model = Teacher
         fields = [
-            'user', 
             'current_workplace', 
             'teacher_type', 
             'experience_year', 
@@ -73,6 +75,57 @@ class TeacherSerializer(serializers.ModelSerializer):
             'created_at': {'read_only': True},
             'updated_at': {'read_only': True},
         }
+
+    def validate(self, attrs):
+        required_teacher_fields = ['current_workplace', 'teacher_type', 'introduction']
+        errors = {}
+
+        # Validate teacher fields
+        for field in required_teacher_fields:
+            value = attrs.get(field)
+            if isinstance(value, str):
+                value = value.strip()
+            if not value:
+                errors[field] = 'This field is required.'
+        
+        # Validate teacher_type values
+        teacher_type = attrs.get('teacher_type')
+        if teacher_type and teacher_type not in ['S', 'C', 'F']:
+            errors['teacher_type'] = 'Must be one of: S (School Teacher), C (Center Teacher), F (Freelance Teacher).'
+        
+        # Validate experience_year
+        experience_year = attrs.get('experience_year')
+        if experience_year is None:
+            errors['experience_year'] = 'This field is required.'
+        elif isinstance(experience_year, str):
+            try:
+                attrs['experience_year'] = int(experience_year)
+            except ValueError:
+                errors['experience_year'] = 'Must be a valid integer.'
+        elif not isinstance(experience_year, int) or experience_year < 0:
+            errors['experience_year'] = 'Must be a non-negative integer.'
+        
+        # Validate credentials - at least one certificate required
+        credentials = attrs.get('credentials', {})
+        if not credentials or not isinstance(credentials, dict):
+            errors['credentials'] = 'Credentials data is required.'
+        elif not credentials.get('certificates') or len(credentials.get('certificates', [])) == 0:
+            errors['credentials'] = 'At least one certificate is required.'
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return attrs
+
+    def create(self, validated_data):
+        user = self.context.get('user')
+        
+        if not user:
+            raise serializers.ValidationError({'user': 'User context is required for teacher creation.'})
+
+        # User is already updated in view, just create teacher
+        teacher = Teacher.objects.create(user=user, **validated_data)
+        return teacher
 
     def update(self, instance, validated_data):
         user_data = validated_data.pop('user', {})
@@ -117,6 +170,96 @@ class StudentSerializer(serializers.ModelSerializer):
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-        
         instance.save()
+
         return instance
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """
+    Login serializer with status-based flows:
+    - P: re-send OTP, ask FE to verify
+    - I: ask FE to complete profile (upload certificate)
+    - W: waiting for admin approval
+    - V: issue tokens
+    - D: disabled account
+    """
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        token['role'] = user.role
+        return token
+
+    def authenticate_user(self, identifier, password):
+        try:
+            user = get_user_model().objects.get(Q(username=identifier) | Q(email=identifier))
+            if user.check_password(password):
+                return user
+        except get_user_model().DoesNotExist:
+            return None
+
+    def validate(self, attrs):
+        identifier = attrs.get('username')
+        password = attrs.get('password')
+
+        # 1) Check username/email + password
+        user = self.authenticate_user(identifier, password)
+        if not user:
+            raise serializers.ValidationError('Invalid username/email or password.')
+
+        # 2) Check is_active
+        if not user.is_active:
+            raise serializers.ValidationError({'detail': 'Account is deactivated.', 'status': 'D'})
+
+        status_code = getattr(user, 'status', None)  # P/I/W/V/D
+
+        # 3) Pending verification -> resend OTP
+        if status_code == 'P':
+            otp_code = create_otp_code()
+            cache_register_otp(user.id, otp_code, user.email)
+            send_registration_otp_email(user.email, otp_code)
+            raise serializers.ValidationError({
+                'detail': 'Account is not verified yet. OTP sent to your email.',
+                'user_id': user.id,
+                'status': status_code,
+                'require_verification': True,
+            })
+
+        # 4) Incomplete profile (teacher)
+        if status_code == 'I':
+            raise serializers.ValidationError({
+                'detail': 'Please complete your profile (upload certificates).',
+                'user_id': user.id,
+                'status': status_code,
+                'require_certificate': True,
+            })
+
+        # 5) Waiting approval
+        if status_code == 'W':
+            raise serializers.ValidationError({
+                'detail': 'Account pending approval. Please wait for admin review.',
+                'user_id': user.id,
+                'status': status_code,
+            })
+
+        # 7) Disabled
+        if status_code == 'D':
+            raise serializers.ValidationError({
+                'detail': 'Account has been disabled.',
+                'user_id': user.id,
+                'status': status_code,
+            })
+
+        # 6) Verified -> issue tokens
+        refresh = self.get_token(user)
+        access = refresh.access_token
+        update_last_login(None, user)
+
+        return {
+            'refresh': str(refresh),
+            'access': str(access),
+            'user_id': user.id,
+            'status': status_code,
+            'username': user.username,
+            'avatar': user.avatar.url if getattr(user, 'avatar', None) else None,
+            'role': user.role,
+        }

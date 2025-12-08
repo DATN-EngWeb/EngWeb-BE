@@ -94,8 +94,8 @@ class User(AbstractUser):
 # teacher model
 class Teacher(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True)
-    
-    current_workplace = models.CharField(max_length=255, blank=True, null=True)
+
+    current_workplace = models.CharField(max_length=255)
     teacher_type = models.CharField(
         max_length=1,
         choices=[
@@ -105,10 +105,10 @@ class Teacher(models.Model):
         ],
         default='F'
     )
-    experience_year = models.IntegerField(validators=[MinValueValidator(0)], default=0)
-    introduction = models.TextField(blank=True, null=True, default='')
+    experience_year = models.IntegerField(validators=[MinValueValidator(0)])
+    introduction = models.TextField()
     credentials = models.JSONField(default=dict)
-    
+
     # timestamp
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

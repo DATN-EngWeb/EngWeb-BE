@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 import json
 import time
 from email.mime.image import MIMEImage
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
 
 # create otp code
 def create_otp_code():
@@ -243,3 +245,78 @@ def resend_registration_otp_email(user_id):
     
     # Resend email
     send_registration_otp_email(email, new_otp_code)
+
+# Process and save credential files
+def process_credential_files(request_files, user_id):
+    """
+    Process multiple credential files from request and save them to media folder.
+    Returns a JSON structure with file metadata.
+    
+    Args:
+        request_files: QueryDict from request.FILES containing 'credentials' files
+        user_id: User ID for creating folder structure
+    
+    Returns:
+        dict: JSON structure with credentials metadata
+        {
+            "certificates": [
+                {
+                    "url": "media/credentials/user_1/cert_0.pdf",
+                    "name": "certificate.pdf",
+                    "type": "application/pdf",
+                    "size": 12345
+                },
+                ...
+            ]
+        }
+    """
+    credentials_data = {"certificates": []}
+    
+    if not request_files:
+        return credentials_data
+    
+    # Get all files with key 'credentials'
+    credential_files = request_files.getlist('credentials')
+    
+    if not credential_files:
+        return credentials_data
+    
+    # Create directory for user's credentials
+    credentials_dir = os.path.join(settings.MEDIA_ROOT, 'credentials', f'user_{user_id}')
+    os.makedirs(credentials_dir, exist_ok=True)
+    
+    for index, file_obj in enumerate(credential_files):
+        if not file_obj:
+            continue
+            
+        # Validate file type
+        valid_types = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
+        if file_obj.content_type not in valid_types:
+            continue
+        
+        # Validate file size (5MB max)
+        if file_obj.size > 5 * 1024 * 1024:
+            continue
+        
+        # Generate filename
+        file_extension = os.path.splitext(file_obj.name)[1] or '.pdf'
+        filename = f'cert_{index}{file_extension}'
+        file_path = os.path.join(credentials_dir, filename)
+        
+        # Save file
+        with open(file_path, 'wb') as f:
+            for chunk in file_obj.chunks():
+                f.write(chunk)
+        
+        # Create relative URL for database storage
+        relative_url = f'credentials/user_{user_id}/{filename}'
+        
+        # Add to credentials data
+        credentials_data["certificates"].append({
+            "url": relative_url,
+            "name": file_obj.name,
+            "type": file_obj.content_type,
+            "size": file_obj.size
+        })
+    
+    return credentials_data

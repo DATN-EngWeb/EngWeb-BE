@@ -2,15 +2,41 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 
 from .models import User, Student
-from .serializers import UserSerializer, StudentSerializer
+from .serializers import (
+    UserSerializer,
+    StudentSerializer,
+    TeacherSerializer,
+    CustomTokenObtainPairSerializer,
+)
 from .utils import (
     create_otp_code, 
     cache_register_otp, 
     send_registration_otp_email, 
     resend_registration_otp_email,
     verify_registration_otp,
-    delete_registration_otp_cache
+    delete_registration_otp_cache,
+    process_credential_files
 )
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.tokens import RefreshToken
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+
+class LogoutAPIView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        refresh_token = request.data.get('refresh')
+        if not refresh_token:
+            return Response({"detail": "refresh token is required"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except Exception:
+            return Response({"detail": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
 
 class UserRegistrationAPIView(generics.GenericAPIView):
     """Create User model and send OTP email. Status is set to 'P' (Pending Verification)"""
@@ -50,7 +76,6 @@ class UserRegistrationAPIView(generics.GenericAPIView):
         }
         
         return Response(response, status=status.HTTP_201_CREATED)
-
 
 class VerifyRegistrationOTPAPIView(generics.GenericAPIView):
     """Verify OTP code for registration. Updates user status: 
@@ -141,3 +166,115 @@ class ResendRegistrationOTPAPIView(generics.GenericAPIView):
             {"message": "OTP code has been resent to your email."},
             status=status.HTTP_200_OK
         )
+
+class TeacherAPIView(generics.GenericAPIView):
+    """
+    Complete teacher profile after OTP verification (status I -> W)
+    
+    Expected FormData format:
+    - user_id: integer (required)
+    - user.full_name: string (required)
+    - user.date_of_birth: date string YYYY-MM-DD (required)
+    - user.avatar: image file (required)
+    - current_workplace: string (required)
+    - teacher_type: string 'S'|'C'|'F' (required)
+    - experience_year: integer (required)
+    - introduction: string (required)
+    - credentials: file (optional, can send multiple with same key)
+    """
+    serializer_class = TeacherSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        # Get user_id from form data
+        user_id = request.data.get('user_id')
+        if not user_id:
+            return Response(
+                {"detail": "user_id is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            user_id = int(user_id)
+        except (ValueError, TypeError):
+            return Response(
+                {"detail": "user_id must be a valid integer"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Get and validate user
+        try:
+            user = User.objects.get(id=user_id, role='T')
+        except User.DoesNotExist:
+            return Response(
+                {"detail": "Teacher not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Only allow when status is Incomplete profile
+        if user.status != 'I':
+            return Response(
+                {"detail": "Profile already completed or not allowed."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate and update User fields directly
+        user_errors = {}
+        full_name = request.data.get('user.full_name', '').strip()
+        date_of_birth = request.data.get('user.date_of_birth')
+        avatar_file = request.FILES.get('user.avatar')
+
+        if not full_name:
+            user_errors['full_name'] = 'This field is required.'
+        if not date_of_birth:
+            user_errors['date_of_birth'] = 'This field is required.'
+        if not avatar_file:
+            user_errors['avatar'] = 'This field is required.'
+
+        if user_errors:
+            return Response(
+                {'user': user_errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Update User fields
+        user.full_name = full_name
+        user.date_of_birth = date_of_birth
+        if avatar_file:
+            user.avatar = avatar_file
+
+        # Process credential files
+        credentials_data = process_credential_files(request.FILES, user_id)
+        
+        # Validate at least one certificate is required
+        if not credentials_data.get('certificates') or len(credentials_data.get('certificates', [])) == 0:
+            return Response(
+                {'credentials': 'At least one certificate is required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Prepare data for serializer (only Teacher fields, no nested user)
+        serializer_data = {
+            'current_workplace': request.data.get('current_workplace', '').strip(),
+            'teacher_type': request.data.get('teacher_type'),
+            'experience_year': request.data.get('experience_year'),
+            'introduction': request.data.get('introduction', '').strip(),
+            'credentials': credentials_data,
+        }
+
+        serializer = self.get_serializer(data=serializer_data, context={'user': user})
+        serializer.is_valid(raise_exception=True)
+        
+        # Save user first, then create teacher
+        user.status = 'W'  # move to waiting approval after profile completion
+        user.save()
+        
+        teacher = serializer.save()
+
+        response = {
+            "message": "Teacher profile submitted successfully. Awaiting approval.",
+            "user_id": user.id,
+            "status": user.status,
+            "teacher_id": teacher.user_id,
+        }
+        return Response(response, status=status.HTTP_201_CREATED)
