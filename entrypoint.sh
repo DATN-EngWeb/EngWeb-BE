@@ -8,7 +8,12 @@ until nc -z db 5432; do
 done
 echo "Postgres is up."
 
+# Create migrations for all apps (development only)
+echo "Creating migrations..."
+python manage.py makemigrations --noinput
+
 # Apply migrations
+echo "Applying migrations..."
 python manage.py migrate --noinput
 
 # Create superuser using mandatory env vars (no defaults)
