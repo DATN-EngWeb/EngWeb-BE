@@ -6,6 +6,7 @@ from django.core.mail import EmailMessage
 from django.conf import settings
 from datetime import datetime, timedelta
 import json
+import time
 
 # create otp code
 def create_otp_code():
@@ -30,7 +31,19 @@ def cache_register_otp(user_id, otp_code, email):
         'last_sent': datetime.now().isoformat()
     }
     
-    cache.set(cache_key, json.dumps(cache_data), timeout=300)
+    cache.set(cache_key, json.dumps(cache_data))
+    
+    time.sleep(3)
+    ttl = cache.ttl(cache_key)
+    print(f"TTL: {ttl}")
+    test = cache.get(cache_key)
+    print(f"Test cache: {cache_key}: {test}, {datetime.now().isoformat()}")
+    
+    time.sleep(3)
+    ttl = cache.ttl(cache_key)
+    print(f"TTL: {ttl}")
+    test = cache.get(cache_key)
+    print(f"Test cache: {cache_key}: {test}, {datetime.now().isoformat()}")
 
 # get logo as base64 for email embedding
 def get_logo_base64():
@@ -210,7 +223,7 @@ def resend_registration_otp_email(user_id):
     Args:
         user_id: Primary key of User (int)
     """
-    cache_key = f"register_{user_id}"
+    cache_key = f":1:register_{user_id}"
     cache_data = cache.get(cache_key)
     
     if not cache_data:
@@ -230,7 +243,7 @@ def resend_registration_otp_email(user_id):
     # Update cache
     cache_data['otp_code'] = new_otp_code
     cache_data['last_sent'] = datetime.now().isoformat()
-    cache.set(cache_key, json.dumps(cache_data), timeout=300)
+    cache.set(cache_key, json.dumps(cache_data))
     
     # Resend email
     send_registration_otp_email(email, new_otp_code)

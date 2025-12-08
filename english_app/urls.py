@@ -45,14 +45,3 @@ urlpatterns = [
     # ReDoc
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
 ]
-
-
-@api_view(["GET"])
-@permission_classes([AllowAny])
-def health(request):
-    return Response({"status": "ok"})
-
-
-urlpatterns += [
-    path("api/health/", health, name="health"),
-]

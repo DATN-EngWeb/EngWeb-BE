@@ -21,7 +21,7 @@ services:
       - db_data:/var/lib/postgresql/data
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:8.4
     container_name: english_app_cache
     env_file:
       - .env
