@@ -18,7 +18,6 @@ DEBUG = env.bool("DEBUG", default=True)
 # Allowed hosts
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])  # comma-separated in .env
 
-
 # Application definition
 INSTALLED_APPS = [
     # default django apps
@@ -39,6 +38,9 @@ INSTALLED_APPS = [
     # authentication apps
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
+
+    # custom apps
+    'accounts',
 ]
 
 # Middleware
@@ -136,6 +138,14 @@ STATIC_ROOT = BASE_DIR / 'static'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# email settings
+EMAIL_HOST = env('EMAIL_HOST')
+EMAIL_HOST_USER = env('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
+EMAIL_PORT = env.int('EMAIL_PORT')
+EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS')
+EMAIL_BACKEND = env('EMAIL_BACKEND')
+
 # CORS
 CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=True)
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
@@ -180,3 +190,6 @@ SPECTACULAR_SETTINGS = {
 }
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Custom User Model
+AUTH_USER_MODEL = 'accounts.User'

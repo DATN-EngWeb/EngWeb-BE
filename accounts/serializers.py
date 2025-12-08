@@ -37,6 +37,14 @@ class UserSerializer(serializers.ModelSerializer):
         
         return attrs
     
+    def create(self, validated_data):
+        role = self.initial_data.get('role', '').upper()
+        validated_data['role'] = role
+        validated_data['status'] = 'P'
+        user = User.objects.create_user(**validated_data)
+        
+        return user
+    
     def update(self, instance, validated_data):
         password = validated_data.pop('password', None)
         
@@ -49,7 +57,7 @@ class UserSerializer(serializers.ModelSerializer):
         return instance
 
 class TeacherSerializer(serializers.ModelSerializer):
-    user = UserSerializer()
+    user = UserSerializer(required=False)
 
     class Meta:
         model = Teacher
@@ -66,16 +74,6 @@ class TeacherSerializer(serializers.ModelSerializer):
             'updated_at': {'read_only': True},
         }
 
-    def create(self, validated_data):
-        user_data = validated_data.pop('user')
-
-        user_data['role'] = 'T'
-        user_data['status'] = 'P'
-        
-        user = User.objects.create_user(**user_data)
-        teacher = Teacher.objects.create(user=user, **validated_data)
-        return teacher
-
     def update(self, instance, validated_data):
         user_data = validated_data.pop('user', {})
         user = instance.user
@@ -91,19 +89,21 @@ class TeacherSerializer(serializers.ModelSerializer):
         return instance
 
 class StudentSerializer(serializers.ModelSerializer):
-    user = UserSerializer()
+    user = UserSerializer(required=False)
 
     class Meta:
         model = Student
         fields = ['user'] # other fields are updated by code logic not by api data 
 
     def create(self, validated_data):
-        user_data = validated_data.pop('user')
+        user = self.context.get('user')
+        
+        if not user:
+            raise serializers.ValidationError({'user': 'User is required in context'})
 
-        user_data['role'] = 'S'
-        user_data['status'] = 'P'
-
-        user = User.objects.create_user(**user_data)
+        if Student.objects.filter(user=user).exists():
+            return Student.objects.get(user=user)
+        
         student = Student.objects.create(user=user)
         return student
 
