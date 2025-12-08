@@ -223,7 +223,7 @@ def resend_registration_otp_email(user_id):
     Args:
         user_id: Primary key of User (int)
     """
-    cache_key = f":1:register_{user_id}"
+    cache_key = f"register_{user_id}"
     cache_data = cache.get(cache_key)
     
     if not cache_data:
