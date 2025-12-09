@@ -10,7 +10,7 @@ import requests
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
-from .models import User, Student
+from .models import User, Student, Teacher
 from .serializers import (
     UserSerializer,
     StudentSerializer,
@@ -628,21 +628,94 @@ class GoogleLoginAPIView(generics.GenericAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Get role from request (can be passed via state parameter in OAuth URL)
+        # Default to Student if not specified
+        role = request.data.get("role", "S").upper()
+        if role not in ['S', 'T']:
+            role = 'S'  # Default to Student if invalid role
+        
         # Check if user exists by email
         try:
             user = User.objects.get(email=email)
-            created = False
             
-            # User exists, check status
-            if user.status == 'D':
+            # Branch by role for existing user
+            if user.role == 'A':
+                # TODO: implement admin Google login flow
                 return Response(
-                    {"error": "Account has been disabled"},
+                    {"error": "Admin Google login is not implemented yet."},
+                    status=status.HTTP_501_NOT_IMPLEMENTED
+                )
+
+            if user.role == 'S':
+                # Student flow
+                if user.status == 'D':
+                    return Response(
+                        {"error": "Account has been disabled"},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                if user.status == 'P':
+                    user.status = 'V'
+                    user.save()
+                # status V -> return tokens
+                refresh = RefreshToken.for_user(user)
+                refresh["role"] = user.role
+                response_data = {
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
+                    "status": user.status,
+                    "username": user.username,
+                    "avatar": user.avatar.url if user.avatar else None,
+                }
+                return Response(response_data, status=status.HTTP_200_OK)
+            
+            elif user.role == 'T':
+                # Teacher flow
+                if user.status == 'D':
+                    return Response(
+                        {"error": "Account has been disabled"},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                if user.status == 'W':
+                    return Response(
+                        {"error": "Your account is waiting for admin approval. Please wait."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                if user.status == 'P':
+                    # move to incomplete profile
+                    user.status = 'I'
+                    user.save()
+                # status I -> require profile completion, no tokens
+                if user.status == 'I':
+                    return Response(
+                        {
+                            "user_id": user.id,
+                            "username": user.username,
+                            "role": user.role,
+                            "status": user.status,
+                            "require_profile": True
+                        },
+                        status=status.HTTP_200_OK
+                    )
+                if user.status == 'V':
+                    refresh = RefreshToken.for_user(user)
+                    refresh["role"] = user.role
+                    response_data = {
+                        "access": str(refresh.access_token),
+                        "refresh": str(refresh),
+                        "status": user.status,
+                        "username": user.username,
+                        "avatar": user.avatar.url if user.avatar else None,
+                    }
+                    return Response(response_data, status=status.HTTP_200_OK)
+                
+                # any other unexpected status
+                return Response(
+                    {"error": "Account is not in a valid state. Please contact support."},
                     status=status.HTTP_403_FORBIDDEN
                 )
             
         except User.DoesNotExist:
             # Create a new user
-            # Default to Student role for OAuth users
             base_username = email.split("@")[0]
             unique_username = generate_unique_username(base_username)
             
@@ -653,37 +726,235 @@ class GoogleLoginAPIView(generics.GenericAPIView):
                 password=None  # Social login users don't need a password
             )
             
-            # Set status based on role
-            # For OAuth, default to Student with status 'V' (Verified)
-            user.role = 'S'
-            user.status = 'V'
-            user.set_unusable_password()
-            
-            # Download and save avatar
-            if avatar_url:
-                avatar_path = download_and_save_avatar(avatar_url, email)
-                if avatar_path:
-                    user.avatar = avatar_path
-            
-            user.save()
-            
-            # Create Student instance
-            Student.objects.create(user=user)
-            created = True
+            # Set role and status based on user type
+            user.role = role
+            if role == 'S':
+                # Student: Verified status, can login immediately
+                user.status = 'V'
+                user.set_unusable_password()
+                
+                # Download and save avatar
+                if avatar_url:
+                    avatar_path = download_and_save_avatar(avatar_url, user.id)
+                    if avatar_path:
+                        user.avatar = avatar_path
+                
+                user.save()
+                
+                # Create Student instance
+                Student.objects.create(user=user)
+                
+                # Generate JWT tokens for verified student
+                refresh = RefreshToken.for_user(user)
+                refresh["role"] = user.role
+                
+                response_data = {
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
+                    "status": user.status,
+                    "username": user.username,
+                    "avatar": user.avatar.url if user.avatar else None,
+                }
+                
+                return Response(response_data, status=status.HTTP_200_OK)
 
-        # Generate JWT tokens
-        refresh = RefreshToken.for_user(user)
-        refresh["role"] = user.role
-        refresh["username"] = user.username
 
-        response_data = {
-            "access": str(refresh.access_token),
-            "refresh": str(refresh),
-            "user_id": user.id,
-            "username": user.username,
-            "role": user.role,
-            "status": user.status,
-            "avatar": user.avatar.url if user.avatar else None,
+class FacebookLoginAPIView(generics.GenericAPIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        # One-time code from Facebook OAuth
+        code = request.data.get("code")
+        if not code:
+            return Response({"error": "No code provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Exchange code for access token
+        token_url = "https://graph.facebook.com/v17.0/oauth/access_token"
+        params = {
+            "client_id": settings.OAUTH2_FACEBOOK_KEY,
+            "redirect_uri": settings.OAUTH2_FACEBOOK_REDIRECT_URI,
+            "client_secret": settings.OAUTH2_FACEBOOK_SECRET,
+            "code": code,
         }
+        try:
+            token_response = requests.get(token_url, params=params, timeout=10)
+        except requests.RequestException:
+            return Response(
+                {"error": "Failed to connect to Facebook"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-        return Response(response_data, status=status.HTTP_200_OK)
+        if token_response.status_code != 200:
+            return Response(
+                {"error": "Failed to exchange code for token"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        access_token = token_response.json().get("access_token")
+        if not access_token:
+            return Response(
+                {"error": "No access token received from Facebook"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Fetch user info
+        user_info_url = "https://graph.facebook.com/me"
+        user_params = {"fields": "id,name,email,picture", "access_token": access_token}
+        try:
+            user_response = requests.get(user_info_url, params=user_params, timeout=10)
+        except requests.RequestException:
+            return Response(
+                {"error": "Failed to fetch user info from Facebook"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        if user_response.status_code != 200:
+            return Response(
+                {"error": "Failed to get user information"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        fb_data = user_response.json()
+        email = fb_data.get("email")
+        full_name = fb_data.get("name")
+        picture_data = fb_data.get("picture", {}).get("data", {})
+        avatar_url = picture_data.get("url")
+
+        if not email:
+            return Response(
+                {"error": "Email is required from Facebook account"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        role = request.data.get("role", "S").upper()
+        if role not in ['S', 'T']:
+            role = 'S'
+
+        try:
+            user = User.objects.get(email=email)
+
+            if user.role == 'A':
+                # TODO: implement admin Facebook login flow
+                return Response(
+                    {"error": "Admin Facebook login is not implemented yet."},
+                    status=status.HTTP_501_NOT_IMPLEMENTED
+                )
+
+            if user.role == 'S':
+                if user.status == 'D':
+                    return Response(
+                        {"error": "Account has been disabled"},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                if user.status == 'P':
+                    user.status = 'V'
+                    user.save()
+
+                refresh = RefreshToken.for_user(user)
+                refresh["role"] = user.role
+                response_data = {
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
+                    "status": user.status,
+                    "username": user.username,
+                    "avatar": user.avatar.url if user.avatar else None,
+                }
+                return Response(response_data, status=status.HTTP_200_OK)
+
+            elif user.role == 'T':
+                if user.status == 'D':
+                    return Response(
+                        {"error": "Account has been disabled"},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                if user.status == 'W':
+                    return Response(
+                        {"error": "Your account is waiting for admin approval. Please wait."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                if user.status == 'P':
+                    user.status = 'I'
+                    user.save()
+                if user.status == 'I':
+                    return Response(
+                        {
+                            "user_id": user.id,
+                            "username": user.username,
+                            "role": user.role,
+                            "status": user.status,
+                            "require_profile": True
+                        },
+                        status=status.HTTP_200_OK
+                    )
+                if user.status == 'V':
+                    refresh = RefreshToken.for_user(user)
+                    refresh["role"] = user.role
+                    response_data = {
+                        "access": str(refresh.access_token),
+                        "refresh": str(refresh),
+                        "status": user.status,
+                        "username": user.username,
+                        "avatar": user.avatar.url if user.avatar else None,
+                    }
+                    return Response(response_data, status=status.HTTP_200_OK)
+
+                return Response(
+                    {"error": "Account is not in a valid state. Please contact support."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        except User.DoesNotExist:
+            base_username = email.split("@")[0]
+            unique_username = generate_unique_username(base_username)
+
+            user = User.objects.create_user(
+                username=unique_username,
+                email=email,
+                full_name=full_name or "",
+                password=None
+            )
+            user.role = role
+
+            if role == 'S':
+                user.status = 'V'
+                user.set_unusable_password()
+
+                if avatar_url:
+                    avatar_path = download_and_save_avatar(avatar_url, user.id)
+                    if avatar_path:
+                        user.avatar = avatar_path
+                user.save()
+                Student.objects.create(user=user)
+
+                refresh = RefreshToken.for_user(user)
+                refresh["role"] = user.role
+                response_data = {
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
+                    "status": user.status,
+                    "username": user.username,
+                    "avatar": user.avatar.url if user.avatar else None,
+                }
+                return Response(response_data, status=status.HTTP_200_OK)
+
+            elif role == 'T':
+                user.status = 'I'
+                user.set_unusable_password()
+
+                if avatar_url:
+                    avatar_path = download_and_save_avatar(avatar_url, user.id)
+                    if avatar_path:
+                        user.avatar = avatar_path
+                user.save()
+
+                response_data = {
+                    "user_id": user.id,
+                    "username": user.username,
+                    "role": user.role,
+                    "status": user.status,
+                    "avatar": user.avatar.url if user.avatar else None,
+                    "require_profile": True
+                }
+                return Response(response_data, status=status.HTTP_200_OK)
+
+        return Response({"error": "Unhandled flow"}, status=status.HTTP_400_BAD_REQUEST)

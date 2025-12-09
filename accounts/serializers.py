@@ -210,6 +210,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         if not user.is_active:
             raise serializers.ValidationError({'detail': 'Account is deactivated.', 'status': 'D'})
 
+        # Placeholder for admin login flow
+        if user.role == 'A':
+            # TODO: implement admin-specific login handling
+            pass
+
         status_code = getattr(user, 'status', None)  # P/I/W/V/D
 
         # 3) Pending verification -> resend OTP
@@ -257,9 +262,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return {
             'refresh': str(refresh),
             'access': str(access),
-            'user_id': user.id,
             'status': status_code,
             'username': user.username,
             'avatar': user.avatar.url if getattr(user, 'avatar', None) else None,
-            'role': user.role,
         }

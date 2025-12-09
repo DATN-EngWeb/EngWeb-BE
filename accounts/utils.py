@@ -490,16 +490,15 @@ def resend_forgot_password_otp_email(username):
         raise ValueError("User not found.")
 
 # download and save avatar from social account when user hasn't existed in database
-def download_and_save_avatar(avatar_url, email):
+def download_and_save_avatar(avatar_url, user_id):
     """
-    Download avatar image from URL and save to media/avatars/
+    Download avatar image from URL and save to media/avatars/user_{user_id}/user_{user_id}.{ext}
     Returns relative path to saved file or None if failed
     """
     try:
         response = requests.get(avatar_url, stream=True, timeout=10)
 
         if response.status_code == 200:
-            # check if picture does not have filename extension
             content_type = response.headers.get('Content-Type', '')
             if 'image/jpeg' in content_type:
                 file_extension = 'jpg'
@@ -508,11 +507,10 @@ def download_and_save_avatar(avatar_url, email):
             else:
                 return None
 
-            # generate unique filename and save avatar to media folder
-            filename = f"{uuid.uuid4().hex}_{email.split('@')[0]}.{file_extension}"
-            
-            # use "/" directly
-            file_path = f"avatars/{filename}"
+            # Directory and filename pattern similar to credentials: avatars/user_{id}/user_{id}.ext
+            filename = f"user_{user_id}.{file_extension}"
+            folder_path = f"avatars/user_{user_id}"
+            file_path = f"{folder_path}/{filename}"
 
             image_content = ContentFile(response.content)
             default_storage.save(file_path, image_content)
@@ -520,7 +518,7 @@ def download_and_save_avatar(avatar_url, email):
             return file_path
         else:
             return None
-    except Exception as e:
+    except Exception:
         return None
 
 def generate_unique_username(base_username):
