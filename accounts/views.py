@@ -10,7 +10,7 @@ import requests
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
-from .models import User, Student, Teacher
+from .models import User, Student
 from .serializers import (
     UserSerializer,
     StudentSerializer,
@@ -513,12 +513,12 @@ class ResetPasswordAPIView(generics.GenericAPIView):
 
         except (TokenError, jwt.PyJWTError) as e:
             return Response(
-                {"detail": f"Invalid or expired token: {str(e)}"},
+                {"detail": "Invalid or expired token."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
             return Response(
-                {"detail": f"Error resetting password: {str(e)}"},
+                {"detail": "Error resetting password."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -557,6 +557,7 @@ class GoogleLoginAPIView(generics.GenericAPIView):
     def post(self, request, *args, **kwargs):
         # one-time code from Google when user clicks "Sign in with Google"
         code = request.data.get("code")
+        print(code)
 
         if not code:
             return Response(
@@ -573,9 +574,10 @@ class GoogleLoginAPIView(generics.GenericAPIView):
             "client_id": settings.OAUTH2_GOOGLE_KEY,
             "client_secret": settings.OAUTH2_GOOGLE_SECRET,
         }
-
+        print(params)
         try:
             token_response = requests.post(google_token_url, data=params, timeout=10)
+            print(token_response.json())
         except requests.RequestException:
             return Response(
                 {"error": "Failed to connect to Google"},
@@ -731,7 +733,6 @@ class GoogleLoginAPIView(generics.GenericAPIView):
             if role == 'S':
                 # Student: Verified status, can login immediately
                 user.status = 'V'
-                user.set_unusable_password()
                 
                 # Download and save avatar
                 if avatar_url:
@@ -917,7 +918,6 @@ class FacebookLoginAPIView(generics.GenericAPIView):
 
             if role == 'S':
                 user.status = 'V'
-                user.set_unusable_password()
 
                 if avatar_url:
                     avatar_path = download_and_save_avatar(avatar_url, user.id)
@@ -939,7 +939,6 @@ class FacebookLoginAPIView(generics.GenericAPIView):
 
             elif role == 'T':
                 user.status = 'I'
-                user.set_unusable_password()
 
                 if avatar_url:
                     avatar_path = download_and_save_avatar(avatar_url, user.id)

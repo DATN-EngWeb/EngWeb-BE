@@ -35,7 +35,7 @@ def cache_register_otp(user_id, otp_code, email):
         'last_sent': datetime.now().isoformat()
     }
     
-    cache.set(cache_key, json.dumps(cache_data))
+    cache.set(cache_key, json.dumps(cache_data), timeout=300)
 
 # get logo bytes for email embedding (attached image)
 def get_logo_bytes():
@@ -243,7 +243,7 @@ def resend_registration_otp_email(user_id):
     # Update cache
     cache_data['otp_code'] = new_otp_code
     cache_data['last_sent'] = datetime.now().isoformat()
-    cache.set(cache_key, json.dumps(cache_data))
+    cache.set(cache_key, json.dumps(cache_data), timeout=300)
     
     # Resend email
     send_registration_otp_email(email, new_otp_code)

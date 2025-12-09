@@ -25,7 +25,7 @@ class CustomUserManager(BaseUserManager):
     def create_superuser(self, username, email, password=None, **extra_fields):
         extra_fields.setdefault('role', 'A')
         extra_fields.setdefault('is_active', True)
-        extra_fields.setdefault('avatar', 'avatars/admin-avatar.jpg')
+        extra_fields.setdefault('avatar', 'avatars/admin-avatar.png')
 
         return self.create_user(username, email, password, **extra_fields)
 
@@ -77,7 +77,7 @@ class User(AbstractUser):
     # properties for admin panel compatibility
     @property
     def is_staff(self):
-        return self.role in ['A', 'T']
+        return self.role == 'A'
     @property
     def is_superuser(self):
         return self.role == 'A'
