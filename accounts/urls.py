@@ -8,6 +8,10 @@ from .views import (
     CustomTokenObtainPairView,
     LogoutAPIView,
     TeacherAPIView,
+    ForgotPasswordAPIView,
+    ForgotPasswordVerifyOTPAPIView,
+    ResetPasswordAPIView,
+    ResendForgotPasswordOTPAPIView,
 )
 
 urlpatterns = [
@@ -18,4 +22,8 @@ urlpatterns = [
     path('token', CustomTokenObtainPairView.as_view(), name='token-obtain-pair'),
     path('token/refresh', TokenRefreshView.as_view(), name='token-refresh'),
     path('logout', LogoutAPIView.as_view(), name='token-logout'),
+    path('forgot-password', ForgotPasswordAPIView.as_view(), name='forgot-password'),
+    path('verify-otp/forgot-password', ForgotPasswordVerifyOTPAPIView.as_view(), name='verify-otp-forgot-password'),
+    path('resend-otp/forgot-password', ResendForgotPasswordOTPAPIView.as_view(), name='resend-otp-forgot-password'),
+    path('reset-password', ResetPasswordAPIView.as_view(), name='reset-password'),
 ]

@@ -320,3 +320,169 @@ def process_credential_files(request_files, user_id):
         })
     
     return credentials_data
+
+def cache_forgot_password_otp(username, otp_code):
+    cache_key = f"forgot_password_{username}"
+    cache_data = {
+        'otp_code': otp_code,
+        'last_sent': datetime.now().isoformat()
+    }
+    
+    cache.set(cache_key, json.dumps(cache_data), timeout=300)  # 5 minutes
+
+def send_forgot_password_otp_email(username, email, otp_code):
+    logo_data = get_logo_bytes()
+    
+    subject = "Password Reset OTP - NENS"
+    html_body = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                background-color: #f4f4f4;
+                margin: 0;
+                padding: 0;
+            }}
+            .container {{
+                max-width: 600px;
+                margin: 0 auto;
+                background-color: #ffffff;
+                padding: 30px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }}
+            .header {{
+                text-align: center;
+                margin-bottom: 30px;
+            }}
+            .logo {{
+                max-width: 120px;
+                height: auto;
+            }}
+            h1 {{
+                color: #333;
+                font-size: 24px;
+                margin-bottom: 20px;
+            }}
+            p {{
+                color: #666;
+                font-size: 16px;
+                line-height: 1.6;
+                margin-bottom: 15px;
+            }}
+            .otp-container {{
+                background-color: #f8f9fa;
+                border: 2px dashed #007bff;
+                border-radius: 8px;
+                padding: 20px;
+                text-align: center;
+                margin: 30px 0;
+            }}
+            .otp-code {{
+                font-size: 32px;
+                font-weight: bold;
+                color: #007bff;
+                letter-spacing: 8px;
+                font-family: 'Courier New', monospace;
+            }}
+            .warning {{
+                background-color: #fff3cd;
+                border-left: 4px solid #ffc107;
+                padding: 15px;
+                margin: 20px 0;
+                border-radius: 4px;
+            }}
+            .footer {{
+                margin-top: 30px;
+                padding-top: 20px;
+                border-top: 1px solid #eee;
+                text-align: center;
+                color: #999;
+                font-size: 14px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                {'<img src="cid:logo" alt="NENS Logo" class="logo">' if logo_data else ''}
+            </div>
+            <h1>Password Reset Request</h1>
+            <p>Hello {username},</p>
+            <p>We received a request to reset your password. Please use the OTP code below to verify your identity:</p>
+            
+            <div class="otp-container">
+                <p style="margin: 0 0 10px 0; color: #333; font-weight: 600;">Your OTP Code:</p>
+                <div class="otp-code">{otp_code}</div>
+            </div>
+            
+            <div class="warning">
+                <strong>⚠️ Important:</strong> This OTP code will expire in 5 minutes. If you didn't request a password reset, please ignore this email.
+            </div>
+            
+            <p>After verifying the OTP, you'll be able to set a new password for your account.</p>
+            
+            <div class="footer">
+                <p>Best regards,<br>The NENS Team</p>
+                <p style="font-size: 12px; color: #999;">This is an automated email. Please do not reply.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    from_email = settings.EMAIL_HOST_USER
+    email_message = EmailMessage(
+        subject=subject,
+        body=html_body,
+        from_email=from_email,
+        to=[email]
+    )
+    email_message.content_subtype = "html"
+    
+    # Attach logo if available
+    if logo_data:
+        logo_image = MIMEImage(logo_data)
+        logo_image.add_header('Content-ID', '<logo>')
+        logo_image.add_header('Content-Disposition', 'inline', filename='logo.png')
+        email_message.attach(logo_image)
+    
+    email_message.send(fail_silently=False)
+
+def resend_forgot_password_otp_email(username):
+    cache_key = f"forgot_password_{username}"
+    cache_data = cache.get(cache_key)
+    
+    if not cache_data:
+        raise ValueError(
+            "Account not found or verification process has expired (over 5 minutes). "
+            "Please return to the login page and select 'Forgot Password' again."
+        )
+    
+    cache_data = json.loads(cache_data)
+    last_sent = datetime.fromisoformat(cache_data['last_sent'])
+    
+    # Rate limit: 1 minute between resends
+    if datetime.now() - last_sent < timedelta(minutes=1):
+        raise ValueError("Please wait 1 minute before requesting a new OTP code.")
+    
+    # Delete old cache and create new OTP
+    cache.delete(cache_key)
+    
+    new_otp_code = create_otp_code()
+    
+    cache_data['otp_code'] = new_otp_code
+    cache_data['last_sent'] = datetime.now().isoformat()
+    
+    cache.set(cache_key, json.dumps(cache_data), timeout=300)
+    
+    # Get user email
+    from .models import User
+    try:
+        user = User.objects.get(username=username)
+        send_forgot_password_otp_email(username, user.email, new_otp_code)
+    except User.DoesNotExist:
+        raise ValueError("User not found.")
