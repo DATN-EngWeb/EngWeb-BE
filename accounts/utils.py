@@ -1,5 +1,7 @@
 import random
 import os
+import uuid
+import requests
 from django.core.cache import cache
 from django.core.mail import EmailMessage
 from django.conf import settings
@@ -486,3 +488,66 @@ def resend_forgot_password_otp_email(username):
         send_forgot_password_otp_email(username, user.email, new_otp_code)
     except User.DoesNotExist:
         raise ValueError("User not found.")
+
+# download and save avatar from social account when user hasn't existed in database
+def download_and_save_avatar(avatar_url, email):
+    """
+    Download avatar image from URL and save to media/avatars/
+    Returns relative path to saved file or None if failed
+    """
+    try:
+        response = requests.get(avatar_url, stream=True, timeout=10)
+
+        if response.status_code == 200:
+            # check if picture does not have filename extension
+            content_type = response.headers.get('Content-Type', '')
+            if 'image/jpeg' in content_type:
+                file_extension = 'jpg'
+            elif 'image/png' in content_type:
+                file_extension = 'png'
+            else:
+                return None
+
+            # generate unique filename and save avatar to media folder
+            filename = f"{uuid.uuid4().hex}_{email.split('@')[0]}.{file_extension}"
+            
+            # use "/" directly
+            file_path = f"avatars/{filename}"
+
+            image_content = ContentFile(response.content)
+            default_storage.save(file_path, image_content)
+
+            return file_path
+        else:
+            return None
+    except Exception as e:
+        return None
+
+def generate_unique_username(base_username):
+    """
+    Create a unique username by using UUID and timestamp
+    - base_username: base username (usually the part before @ of email)
+    - if username already exists, add an underscore and a string of UUID + timestamp to ensure uniqueness
+    """
+    from .models import User
+    
+    # check if base username already exists
+    if not User.objects.filter(username=base_username).exists():
+        return base_username
+    
+    # generate unique suffix
+    timestamp = int(time.time())
+    random_uuid = str(uuid.uuid4()).replace('-', '')[:8]  # shorten UUID to avoid being too long
+    
+    unique_suffix = f"{timestamp}_{random_uuid}"
+    new_username = f"{base_username}_{unique_suffix}"
+    
+    # ensure username is not too long
+    max_length = 50
+    if len(new_username) > max_length:
+        # cut base_username if needed
+        available_length = max_length - len(unique_suffix) - 1  # -1 for underscore
+        base_username = base_username[:available_length]
+        new_username = f"{base_username}_{unique_suffix}"
+    
+    return new_username

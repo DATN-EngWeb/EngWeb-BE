@@ -6,6 +6,7 @@ from django.core.cache import cache
 from datetime import datetime, timedelta
 import json
 import jwt
+import requests
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
@@ -27,6 +28,8 @@ from .utils import (
     cache_forgot_password_otp,
     send_forgot_password_otp_email,
     resend_forgot_password_otp_email,
+    download_and_save_avatar,
+    generate_unique_username,
 )
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -547,3 +550,140 @@ class ResendForgotPasswordOTPAPIView(generics.GenericAPIView):
                 {"detail": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+class GoogleLoginAPIView(generics.GenericAPIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        # one-time code from Google when user clicks "Sign in with Google"
+        code = request.data.get("code")
+
+        if not code:
+            return Response(
+                {"error": "No code provided"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # send code to Google to get access token
+        google_token_url = "https://oauth2.googleapis.com/token"
+        params = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": settings.OAUTH2_GOOGLE_REDIRECT_URI,
+            "client_id": settings.OAUTH2_GOOGLE_KEY,
+            "client_secret": settings.OAUTH2_GOOGLE_SECRET,
+        }
+
+        try:
+            token_response = requests.post(google_token_url, data=params, timeout=10)
+        except requests.RequestException:
+            return Response(
+                {"error": "Failed to connect to Google"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        if token_response.status_code != 200:
+            return Response(
+                {"error": "Failed to exchange code for token"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        google_access_token = token_response.json().get("access_token")
+
+        if not google_access_token:
+            return Response(
+                {"error": "No access token received from Google"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # get user info from Google
+        google_user_url = "https://www.googleapis.com/oauth2/v2/userinfo"
+        try:
+            user_response = requests.get(
+                google_user_url,
+                headers={"Authorization": f"Bearer {google_access_token}"},
+                timeout=10
+            )
+        except requests.RequestException:
+            return Response(
+                {"error": "Failed to fetch user info from Google"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        if user_response.status_code != 200:
+            return Response(
+                {"error": "Failed to get user information"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        google_data = user_response.json()
+
+        email = google_data.get("email")
+        full_name = google_data.get("name")
+        avatar_url = google_data.get("picture")
+
+        if not email:
+            return Response(
+                {"error": "Email is required from Google account"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check if user exists by email
+        try:
+            user = User.objects.get(email=email)
+            created = False
+            
+            # User exists, check status
+            if user.status == 'D':
+                return Response(
+                    {"error": "Account has been disabled"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+        except User.DoesNotExist:
+            # Create a new user
+            # Default to Student role for OAuth users
+            base_username = email.split("@")[0]
+            unique_username = generate_unique_username(base_username)
+            
+            user = User.objects.create_user(
+                username=unique_username,
+                email=email,
+                full_name=full_name or "",
+                password=None  # Social login users don't need a password
+            )
+            
+            # Set status based on role
+            # For OAuth, default to Student with status 'V' (Verified)
+            user.role = 'S'
+            user.status = 'V'
+            user.set_unusable_password()
+            
+            # Download and save avatar
+            if avatar_url:
+                avatar_path = download_and_save_avatar(avatar_url, email)
+                if avatar_path:
+                    user.avatar = avatar_path
+            
+            user.save()
+            
+            # Create Student instance
+            Student.objects.create(user=user)
+            created = True
+
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        refresh["role"] = user.role
+        refresh["username"] = user.username
+
+        response_data = {
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user_id": user.id,
+            "username": user.username,
+            "role": user.role,
+            "status": user.status,
+            "avatar": user.avatar.url if user.avatar else None,
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
