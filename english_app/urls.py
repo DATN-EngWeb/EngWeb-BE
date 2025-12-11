@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 
 # For testing Swagger UI. This will be removed in the future.
 from rest_framework.decorators import api_view, permission_classes
@@ -32,6 +32,8 @@ from drf_spectacular.views import (
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # Accounts API
+    path("api/accounts/", include("accounts.urls")),
     # OpenAPI schema
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     # Swagger UI
@@ -42,15 +44,4 @@ urlpatterns = [
     ),
     # ReDoc
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
-]
-
-
-@api_view(["GET"])
-@permission_classes([AllowAny])
-def health(request):
-    return Response({"status": "ok"})
-
-
-urlpatterns += [
-    path("api/health/", health, name="health"),
 ]

@@ -18,7 +18,6 @@ DEBUG = env.bool("DEBUG", default=True)
 # Allowed hosts
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])  # comma-separated in .env
 
-
 # Application definition
 INSTALLED_APPS = [
     # default django apps
@@ -39,6 +38,9 @@ INSTALLED_APPS = [
     # authentication apps
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
+
+    # custom apps
+    'accounts',
 ]
 
 # Middleware
@@ -94,6 +96,7 @@ CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
         'LOCATION': f"redis://{env('REDIS_HOST')}:{env('REDIS_PORT')}/{env('REDIS_DB')}",
+        'TIMEOUT': 30000,
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         }
@@ -121,7 +124,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Ho_Chi_Minh'
 
 USE_I18N = True
 
@@ -135,6 +138,14 @@ STATIC_ROOT = BASE_DIR / 'static'
 # Media files (Images, Videos, etc.)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# email settings
+EMAIL_HOST = env('EMAIL_HOST')
+EMAIL_HOST_USER = env('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
+EMAIL_PORT = env.int('EMAIL_PORT')
+EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS')
+EMAIL_BACKEND = env('EMAIL_BACKEND')
 
 # CORS
 CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=True)
@@ -180,3 +191,17 @@ SPECTACULAR_SETTINGS = {
 }
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Custom User Model
+AUTH_USER_MODEL = 'accounts.User'
+
+# OAuth2 Settings
+OAUTH2_GOOGLE_KEY = env('OAUTH2_GOOGLE_KEY', default='')
+OAUTH2_GOOGLE_SECRET = env('OAUTH2_GOOGLE_SECRET', default='')
+OAUTH2_GOOGLE_REDIRECT_URI = env('OAUTH2_GOOGLE_REDIRECT_URI', default='')
+OAUTH2_GOOGLE_SCOPE = env('OAUTH2_GOOGLE_SCOPE', default='')
+
+OAUTH2_FACEBOOK_KEY = env('OAUTH2_FACEBOOK_KEY', default='')
+OAUTH2_FACEBOOK_SECRET = env('OAUTH2_FACEBOOK_SECRET', default='')
+OAUTH2_FACEBOOK_REDIRECT_URI = env('OAUTH2_FACEBOOK_REDIRECT_URI', default='')
+OAUTH2_FACEBOOK_SCOPE = env('OAUTH2_FACEBOOK_SCOPE', default='')
