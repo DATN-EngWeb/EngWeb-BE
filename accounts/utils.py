@@ -12,12 +12,14 @@ from email.mime.image import MIMEImage
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 
+
 # create otp code
 def create_otp_code():
     digits = "0123456789"
-    otp = ''.join(random.choice(digits) for i in range(6))
+    otp = "".join(random.choice(digits) for i in range(6))
 
     return otp
+
 
 # cache for 5 minutes
 def cache_register_otp(user_id, otp_code, email):
@@ -30,33 +32,35 @@ def cache_register_otp(user_id, otp_code, email):
     """
     cache_key = f"register_{user_id}"
     cache_data = {
-        'otp_code': otp_code,
-        'email': email,
-        'last_sent': datetime.now().isoformat()
+        "otp_code": otp_code,
+        "email": email,
+        "last_sent": datetime.now().isoformat(),
     }
-    
+
     cache.set(cache_key, json.dumps(cache_data), timeout=300)
+
 
 # get logo bytes for email embedding (attached image)
 def get_logo_bytes():
     """Read logo file and return raw bytes for inline attachment"""
-    logo_path = os.path.join(settings.BASE_DIR, 'static', 'logo.png')
+    logo_path = os.path.join(settings.BASE_DIR, "static", "logo.png")
     try:
-        with open(logo_path, 'rb') as logo_file:
+        with open(logo_path, "rb") as logo_file:
             return logo_file.read()
     except FileNotFoundError:
         return None
 
+
 # send otp code to email
 def send_registration_otp_email(email, otp_code):
     logo_data = get_logo_bytes()
-    logo_cid = 'nens-logo'
+    logo_cid = "nens-logo"
     logo_html = (
         f'<img src="cid:{logo_cid}" alt="NENS Logo" style="max-width: 120px; height: auto; margin-bottom: 20px;" />'
         if logo_data
-        else ''
+        else ""
     )
-    
+
     subject = "Your NENS verification code"
     html_body = f"""
     <!DOCTYPE html>
@@ -177,44 +181,44 @@ def send_registration_otp_email(email, otp_code):
     """
     from_email = settings.EMAIL_HOST_USER
     email_message = EmailMessage(
-        subject=subject,
-        body=html_body,
-        from_email=from_email,
-        to=[email]
+        subject=subject, body=html_body, from_email=from_email, to=[email]
     )
     email_message.content_subtype = "html"
     if logo_data:
         image = MIMEImage(logo_data)
-        image.add_header('Content-ID', f'<{logo_cid}>')
-        image.add_header('Content-Disposition', 'inline', filename='logo.png')
+        image.add_header("Content-ID", f"<{logo_cid}>")
+        image.add_header("Content-Disposition", "inline", filename="logo.png")
         email_message.attach(image)
     email_message.send(fail_silently=False)
+
 
 # verify registration otp
 def verify_registration_otp(user_id, otp_code):
     # Validate input
     if not user_id or not otp_code:
         raise ValueError("user_id and otp_code are required.")
-    
+
     # Get OTP from cache
     cache_key = f"register_{user_id}"
     cache_data = cache.get(cache_key)
-    
+
     if not cache_data:
         raise ValueError("OTP code has expired or is invalid.")
-    
+
     cache_data = json.loads(cache_data)
-    
+
     # Verify OTP code
-    if cache_data['otp_code'] != otp_code:
+    if cache_data["otp_code"] != otp_code:
         raise ValueError("Invalid OTP code.")
-    
+
     return cache_data
+
 
 # delete registration otp from cache
 def delete_registration_otp_cache(user_id):
     cache_key = f"register_{user_id}"
     cache.delete(cache_key)
+
 
 # resend registration otp
 def resend_registration_otp_email(user_id):
@@ -225,39 +229,84 @@ def resend_registration_otp_email(user_id):
     """
     cache_key = f"register_{user_id}"
     cache_data = cache.get(cache_key)
-    
+
     if not cache_data:
-        raise ValueError("Account does not exist or the verification process has expired (over 5 minutes).")
-    
+        raise ValueError(
+            "Account does not exist or the verification process has expired (over 5 minutes)."
+        )
+
     cache_data = json.loads(cache_data)
-    last_sent = datetime.fromisoformat(cache_data['last_sent'])
-    
+    last_sent = datetime.fromisoformat(cache_data["last_sent"])
+
     # Check if 1 minute has passed
     if datetime.now() - last_sent < timedelta(minutes=1):
-        raise ValueError("Please wait at least 1 minute before requesting a new OTP code.")
-    
+        raise ValueError(
+            "Please wait at least 1 minute before requesting a new OTP code."
+        )
+
     # Generate new OTP
     new_otp_code = create_otp_code()
-    email = cache_data['email']
-    
+    email = cache_data["email"]
+
     # Update cache
-    cache_data['otp_code'] = new_otp_code
-    cache_data['last_sent'] = datetime.now().isoformat()
+    cache_data["otp_code"] = new_otp_code
+    cache_data["last_sent"] = datetime.now().isoformat()
     cache.set(cache_key, json.dumps(cache_data), timeout=300)
-    
+
     # Resend email
     send_registration_otp_email(email, new_otp_code)
+
+
+# Validate file signature/magic numbers to prevent spoofed uploads
+def validate_file_signature(file_obj_or_bytes):
+    """
+    Validate file by checking its magic number (file signature).
+    Prevents malicious users from uploading executables disguised as PDFs/images.
+
+    Args:
+        file_obj_or_bytes: Django UploadedFile object or bytes content
+
+    Returns:
+        str: File type if valid ('pdf', 'jpeg', 'png'), None if invalid
+    """
+    # Handle both file objects and bytes
+    if isinstance(file_obj_or_bytes, bytes):
+        header = file_obj_or_bytes[:12]
+    else:
+        # Django UploadedFile object
+        file_obj_or_bytes.seek(0)
+        header = file_obj_or_bytes.read(12)
+        file_obj_or_bytes.seek(0)
+
+    if not header:
+        return None
+
+    # Magic number validation (file signatures)
+    # PDF: %PDF (0x25 0x50 0x44 0x46)
+    if header.startswith(b"%PDF"):
+        return "pdf"
+
+    # JPEG: FF D8 FF (all JPEG variants)
+    if header[:3] == b"\xff\xd8\xff":
+        return "jpeg"
+
+    # PNG: 89 50 4E 47
+    if header[:4] == b"\x89PNG":
+        return "png"
+
+    return None
+
 
 # Process and save credential files
 def process_credential_files(request_files, user_id):
     """
     Process multiple credential files from request and save them to media folder.
     Returns a JSON structure with file metadata.
-    
+
     Args:
         request_files: QueryDict from request.FILES containing 'credentials' files
         user_id: User ID for creating folder structure
-    
+
     Returns:
         dict: JSON structure with credentials metadata
         {
@@ -273,68 +322,79 @@ def process_credential_files(request_files, user_id):
         }
     """
     credentials_data = {"certificates": []}
-    
+
     if not request_files:
         return credentials_data
-    
+
     # Get all files with key 'credentials'
-    credential_files = request_files.getlist('credentials')
-    
+    credential_files = request_files.getlist("credentials")
+
     if not credential_files:
         return credentials_data
-    
+
     # Create directory for user's credentials
-    credentials_dir = os.path.join(settings.MEDIA_ROOT, 'credentials', f'user_{user_id}')
+    credentials_dir = os.path.join(
+        settings.MEDIA_ROOT, "credentials", f"user_{user_id}"
+    )
     os.makedirs(credentials_dir, exist_ok=True)
-    
+
     for index, file_obj in enumerate(credential_files):
         if not file_obj:
             continue
-            
-        # Validate file type
-        valid_types = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
-        if file_obj.content_type not in valid_types:
-            continue
-        
-        # Validate file size (5MB max)
+
+        # Validate file size first (5MB max)
         if file_obj.size > 5 * 1024 * 1024:
             continue
-        
+
+        # Validate content type (header check - can be spoofed)
+        valid_content_types = ["application/pdf", "image/jpeg", "image/png"]
+        if file_obj.content_type not in valid_content_types:
+            continue
+
+        # Validate file signature (magic numbers - cannot be spoofed)
+        file_type = validate_file_signature(file_obj)
+        if file_type not in ["pdf", "jpeg", "png"]:
+            # File signature doesn't match claimed content type
+            continue
+
         # Generate filename
-        file_extension = os.path.splitext(file_obj.name)[1] or '.pdf'
-        filename = f'cert_{index}{file_extension}'
+        extension_map = {"pdf": ".pdf", "jpeg": ".jpg", "png": ".png"}
+
+        file_extension = extension_map[file_type]
+        filename = f"cert_{index}{file_extension}"
         file_path = os.path.join(credentials_dir, filename)
-        
+
         # Save file
-        with open(file_path, 'wb') as f:
+        with open(file_path, "wb") as f:
             for chunk in file_obj.chunks():
                 f.write(chunk)
-        
+
         # Create relative URL for database storage
-        relative_url = f'credentials/user_{user_id}/{filename}'
-        
+        relative_url = f"credentials/user_{user_id}/{filename}"
+
         # Add to credentials data
-        credentials_data["certificates"].append({
-            "url": relative_url,
-            "name": file_obj.name,
-            "type": file_obj.content_type,
-            "size": file_obj.size
-        })
-    
+        credentials_data["certificates"].append(
+            {
+                "url": relative_url,
+                "name": file_obj.name,
+                "type": file_obj.content_type,
+                "size": file_obj.size,
+            }
+        )
+
     return credentials_data
+
 
 def cache_forgot_password_otp(username, otp_code):
     cache_key = f"forgot_password_{username}"
-    cache_data = {
-        'otp_code': otp_code,
-        'last_sent': datetime.now().isoformat()
-    }
-    
+    cache_data = {"otp_code": otp_code, "last_sent": datetime.now().isoformat()}
+
     cache.set(cache_key, json.dumps(cache_data), timeout=300)  # 5 minutes
+
 
 def send_forgot_password_otp_email(username, email, otp_code):
     logo_data = get_logo_bytes()
-    
+
     subject = "Password Reset OTP - NENS"
     html_body = f"""
     <!DOCTYPE html>
@@ -435,59 +495,59 @@ def send_forgot_password_otp_email(username, email, otp_code):
     </body>
     </html>
     """
-    
+
     from_email = settings.EMAIL_HOST_USER
     email_message = EmailMessage(
-        subject=subject,
-        body=html_body,
-        from_email=from_email,
-        to=[email]
+        subject=subject, body=html_body, from_email=from_email, to=[email]
     )
     email_message.content_subtype = "html"
-    
+
     # Attach logo if available
     if logo_data:
         logo_image = MIMEImage(logo_data)
-        logo_image.add_header('Content-ID', '<logo>')
-        logo_image.add_header('Content-Disposition', 'inline', filename='logo.png')
+        logo_image.add_header("Content-ID", "<logo>")
+        logo_image.add_header("Content-Disposition", "inline", filename="logo.png")
         email_message.attach(logo_image)
-    
+
     email_message.send(fail_silently=False)
+
 
 def resend_forgot_password_otp_email(username):
     cache_key = f"forgot_password_{username}"
     cache_data = cache.get(cache_key)
-    
+
     if not cache_data:
         raise ValueError(
             "Account not found or verification process has expired (over 5 minutes). "
             "Please return to the login page and select 'Forgot Password' again."
         )
-    
+
     cache_data = json.loads(cache_data)
-    last_sent = datetime.fromisoformat(cache_data['last_sent'])
-    
+    last_sent = datetime.fromisoformat(cache_data["last_sent"])
+
     # Rate limit: 1 minute between resends
     if datetime.now() - last_sent < timedelta(minutes=1):
         raise ValueError("Please wait 1 minute before requesting a new OTP code.")
-    
+
     # Delete old cache and create new OTP
     cache.delete(cache_key)
-    
+
     new_otp_code = create_otp_code()
-    
-    cache_data['otp_code'] = new_otp_code
-    cache_data['last_sent'] = datetime.now().isoformat()
-    
+
+    cache_data["otp_code"] = new_otp_code
+    cache_data["last_sent"] = datetime.now().isoformat()
+
     cache.set(cache_key, json.dumps(cache_data), timeout=300)
-    
+
     # Get user email
     from .models import User
+
     try:
         user = User.objects.get(username=username)
         send_forgot_password_otp_email(username, user.email, new_otp_code)
     except User.DoesNotExist:
         raise ValueError("User not found.")
+
 
 # download and save avatar from social account when user hasn't existed in database
 def download_and_save_avatar(avatar_url, user_id):
@@ -499,13 +559,19 @@ def download_and_save_avatar(avatar_url, user_id):
         response = requests.get(avatar_url, stream=True, timeout=10)
 
         if response.status_code == 200:
-            content_type = response.headers.get('Content-Type', '')
-            if 'image/jpeg' in content_type:
-                file_extension = 'jpg'
-            elif 'image/png' in content_type:
-                file_extension = 'png'
-            else:
+            content_type = response.headers.get("Content-Type", "")
+
+            # Validate content type header (can be spoofed)
+            if "image/jpeg" not in content_type and "image/png" not in content_type:
                 return None
+
+            # Validate image signature (magic numbers - cannot be spoofed)
+            image_type = validate_file_signature(response.content)
+            if image_type not in ["jpeg", "png"]:
+                return None
+
+            # Map validated type to file extension
+            file_extension = "jpg" if image_type == "jpeg" else "png"
 
             # Directory and filename pattern similar to credentials: avatars/user_{id}/user_{id}.ext
             filename = f"user_{user_id}.{file_extension}"
@@ -521,6 +587,7 @@ def download_and_save_avatar(avatar_url, user_id):
     except Exception:
         return None
 
+
 def generate_unique_username(base_username):
     """
     Create a unique username by using UUID and timestamp
@@ -528,18 +595,20 @@ def generate_unique_username(base_username):
     - if username already exists, add an underscore and a string of UUID + timestamp to ensure uniqueness
     """
     from .models import User
-    
+
     # check if base username already exists
     if not User.objects.filter(username=base_username).exists():
         return base_username
-    
+
     # generate unique suffix
     timestamp = int(time.time())
-    random_uuid = str(uuid.uuid4()).replace('-', '')[:8]  # shorten UUID to avoid being too long
-    
+    random_uuid = str(uuid.uuid4()).replace("-", "")[
+        :8
+    ]  # shorten UUID to avoid being too long
+
     unique_suffix = f"{timestamp}_{random_uuid}"
     new_username = f"{base_username}_{unique_suffix}"
-    
+
     # ensure username is not too long
     max_length = 50
     if len(new_username) > max_length:
@@ -547,5 +616,5 @@ def generate_unique_username(base_username):
         available_length = max_length - len(unique_suffix) - 1  # -1 for underscore
         base_username = base_username[:available_length]
         new_username = f"{base_username}_{unique_suffix}"
-    
+
     return new_username
