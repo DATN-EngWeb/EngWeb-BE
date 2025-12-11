@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.validators import MinValueValidator
 from django.utils import timezone
+import uuid
 
 # custom user manager
 class CustomUserManager(BaseUserManager):
@@ -36,6 +37,7 @@ class User(AbstractUser):
     email = models.EmailField(unique=True) # Override email to make it unique
     
     # additional fields
+    file_storage_uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
     full_name = models.CharField(max_length=100, blank=True, null=True)
     date_of_birth = models.DateField(null=True, blank=True)
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True, default='avatars/default-avatar.jpg')

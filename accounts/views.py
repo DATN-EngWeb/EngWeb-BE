@@ -258,7 +258,7 @@ class TeacherAPIView(generics.GenericAPIView):
             user.avatar = avatar_file
 
         # Process credential files
-        credentials_data = process_credential_files(request.FILES, user_id)
+        credentials_data = process_credential_files(request.FILES, user)
         
         # Validate at least one certificate is required
         if not credentials_data.get('certificates') or len(credentials_data.get('certificates', [])) == 0:
@@ -735,7 +735,7 @@ class GoogleLoginAPIView(generics.GenericAPIView):
                 
                 # Download and save avatar
                 if avatar_url:
-                    avatar_path = download_and_save_avatar(avatar_url, user.id)
+                    avatar_path = download_and_save_avatar(avatar_url, user)
                     if avatar_path:
                         user.avatar = avatar_path
                 
@@ -919,7 +919,7 @@ class FacebookLoginAPIView(generics.GenericAPIView):
                 user.status = 'V'
 
                 if avatar_url:
-                    avatar_path = download_and_save_avatar(avatar_url, user.id)
+                    avatar_path = download_and_save_avatar(avatar_url, user)
                     if avatar_path:
                         user.avatar = avatar_path
                 user.save()
@@ -940,7 +940,7 @@ class FacebookLoginAPIView(generics.GenericAPIView):
                 user.status = 'I'
 
                 if avatar_url:
-                    avatar_path = download_and_save_avatar(avatar_url, user.id)
+                    avatar_path = download_and_save_avatar(avatar_url, user)
                     if avatar_path:
                         user.avatar = avatar_path
                 user.save()

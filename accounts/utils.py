@@ -13,6 +13,24 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 
 
+# get or create file storage uuid for user
+def get_or_create_file_storage_uuid(user):
+    """
+    Get the file storage UUID for a user. UUID is auto-generated and stored in User model.
+    This UUID is used for organizing file storage (avatars, credentials).
+    
+    Args:
+        user: User instance
+    
+    Returns:
+        uuid.UUID: The file storage UUID
+    """
+    if not user.file_storage_uuid:
+        user.file_storage_uuid = uuid.uuid4()
+        user.save(update_fields=['file_storage_uuid'])
+    return user.file_storage_uuid
+
+
 # create otp code
 def create_otp_code():
     digits = "0123456789"
@@ -298,21 +316,21 @@ def validate_file_signature(file_obj_or_bytes):
 
 
 # Process and save credential files
-def process_credential_files(request_files, user_id):
+def process_credential_files(request_files, user):
     """
     Process multiple credential files from request and save them to media folder.
     Returns a JSON structure with file metadata.
 
     Args:
         request_files: QueryDict from request.FILES containing 'credentials' files
-        user_id: User ID for creating folder structure
+        user: User instance for getting file storage UUID
 
     Returns:
         dict: JSON structure with credentials metadata
         {
             "certificates": [
                 {
-                    "url": "media/credentials/user_1/cert_0.pdf",
+                    "url": "credentials/{file_storage_uuid}/cert_0.pdf",
                     "name": "certificate.pdf",
                     "type": "application/pdf",
                     "size": 12345
@@ -332,9 +350,12 @@ def process_credential_files(request_files, user_id):
     if not credential_files:
         return credentials_data
 
+    # Get or create file storage UUID for user
+    file_storage_uuid = get_or_create_file_storage_uuid(user)
+
     # Create directory for user's credentials
     credentials_dir = os.path.join(
-        settings.MEDIA_ROOT, "credentials", f"user_{user_id}"
+        settings.MEDIA_ROOT, "credentials", str(file_storage_uuid)
     )
     os.makedirs(credentials_dir, exist_ok=True)
 
@@ -370,7 +391,7 @@ def process_credential_files(request_files, user_id):
                 f.write(chunk)
 
         # Create relative URL for database storage
-        relative_url = f"credentials/user_{user_id}/{filename}"
+        relative_url = f"credentials/{file_storage_uuid}/{filename}"
 
         # Add to credentials data
         credentials_data["certificates"].append(
@@ -550,10 +571,17 @@ def resend_forgot_password_otp_email(username):
 
 
 # download and save avatar from social account when user hasn't existed in database
-def download_and_save_avatar(avatar_url, user_id):
+def download_and_save_avatar(avatar_url, user):
     """
-    Download avatar image from URL and save to media/avatars/user_{user_id}/user_{user_id}.{ext}
+    Download avatar image from URL and save to media/avatars/{file_storage_uuid}/{file_storage_uuid}.{ext}
     Returns relative path to saved file or None if failed
+    
+    Args:
+        avatar_url: URL of avatar image
+        user: User instance for getting file storage UUID
+    
+    Returns:
+        str: Relative path to saved file or None if failed
     """
     try:
         response = requests.get(avatar_url, stream=True, timeout=10)
@@ -573,9 +601,12 @@ def download_and_save_avatar(avatar_url, user_id):
             # Map validated type to file extension
             file_extension = "jpg" if image_type == "jpeg" else "png"
 
-            # Directory and filename pattern similar to credentials: avatars/user_{id}/user_{id}.ext
-            filename = f"user_{user_id}.{file_extension}"
-            folder_path = f"avatars/user_{user_id}"
+            # Get or create file storage UUID for user
+            file_storage_uuid = get_or_create_file_storage_uuid(user)
+
+            # Directory and filename pattern: avatars/{file_storage_uuid}/{file_storage_uuid}.ext
+            filename = f"{file_storage_uuid}.{file_extension}"
+            folder_path = f"avatars/{file_storage_uuid}"
             file_path = f"{folder_path}/{filename}"
 
             image_content = ContentFile(response.content)
