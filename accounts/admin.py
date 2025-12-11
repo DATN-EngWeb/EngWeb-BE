@@ -1,4 +1,4 @@
-from .models import *
+from .models import User, Teacher, Student
 from django.contrib import admin
 
 # custom display for User in admin panel

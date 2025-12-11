@@ -557,7 +557,6 @@ class GoogleLoginAPIView(generics.GenericAPIView):
     def post(self, request, *args, **kwargs):
         # one-time code from Google when user clicks "Sign in with Google"
         code = request.data.get("code")
-        print(code)
 
         if not code:
             return Response(
