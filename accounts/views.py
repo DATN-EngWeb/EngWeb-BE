@@ -127,7 +127,7 @@ class LogoutAPIView(generics.GenericAPIView):
         description=(
             "Đăng xuất người dùng bằng cách blacklist refresh token.\n\n"
             "**Yêu cầu:**\n"
-            "- Phải được xác thực (có access token hợp lệ)\n"
+            "- Phải được xác thực (có refresh token hợp lệ)\n"
             "- Gửi refresh token để blacklist\n\n"
             "**Tham số đầu vào:**\n"
             "- `refresh`: Refresh token cần blacklist (bắt buộc)"
@@ -1150,8 +1150,16 @@ class GoogleLoginAPIView(generics.GenericAPIView):
             "2. Server trao đổi code với Google để lấy access token\n"
             "3. Lấy thông tin user từ Google (email, name, avatar)\n"
             "4. Tạo hoặc cập nhật tài khoản trong hệ thống\n\n"
-            "**Student:** Trạng thái V (Verified) - Cấp JWT tokens ngay\n\n"
-            "**Teacher:** Trạng thái I (Incomplete Profile) - Yêu cầu hoàn thành hồ sơ\n\n"
+            "**Response 200 - Student:**\n"
+            "- Status V (Verified): Trả về JWT tokens, redirect về home\n"
+            "- Status P → V: Tự động chuyển sang Verified và trả về tokens\n\n"
+            "**Response 200 - Teacher:**\n"
+            "- Status V (Verified): Trả về JWT tokens\n"
+            "- Status P → I: Tự động chuyển sang Incomplete, trả về user_id và require_profile=true\n"
+            "- Status I: Trả về user_id và require_profile=true, redirect đến upload-profile\n\n"
+            "**Response 403:**\n"
+            "- Status D: Account disabled\n"
+            "- Status W: Waiting for admin approval\n\n"
             "**Tham số đầu vào:**\n"
             "- `code`: Authorization code từ Google (bắt buộc)\n"
             "- `role`: S (Student) hoặc T (Teacher) - mặc định là S (tùy chọn)"
@@ -1170,7 +1178,7 @@ class GoogleLoginAPIView(generics.GenericAPIView):
         ),
         responses={
             200: OpenApiResponse(
-                description="Login successful - Student verified or Teacher incomplete profile",
+                description="Login successful - Returns tokens or requires profile completion",
                 response={
                     "type": "object",
                     "properties": {
@@ -1207,6 +1215,18 @@ class GoogleLoginAPIView(generics.GenericAPIView):
                     },
                 },
             ),
+            403: OpenApiResponse(
+                description="Account disabled or waiting approval",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "error": {
+                            "type": "string",
+                            "example": "Account has been disabled",
+                        },
+                    },
+                },
+            ),
         },
     )
     def post(self, request, *args, **kwargs):
@@ -1227,7 +1247,7 @@ class GoogleLoginAPIView(generics.GenericAPIView):
             "client_id": settings.OAUTH2_GOOGLE_KEY,
             "client_secret": settings.OAUTH2_GOOGLE_SECRET,
         }
-        print(params)
+
         try:
             token_response = requests.post(google_token_url, data=params, timeout=10)
             print(token_response.json())
@@ -1341,6 +1361,16 @@ class GoogleLoginAPIView(generics.GenericAPIView):
                     # move to incomplete profile
                     user.status = "I"
                     user.save()
+                    return Response(
+                        {
+                            "user_id": user.id,
+                            "username": user.username,
+                            "role": user.role,
+                            "status": user.status,
+                            "require_profile": True,
+                        },
+                        status=status.HTTP_200_OK,
+                    )
                 # status I -> require profile completion, no tokens
                 if user.status == "I":
                     return Response(
@@ -1429,8 +1459,16 @@ class FacebookLoginAPIView(generics.GenericAPIView):
             "2. Server trao đổi code với Facebook để lấy access token\n"
             "3. Lấy thông tin user từ Facebook (email, name, avatar)\n"
             "4. Tạo hoặc cập nhật tài khoản trong hệ thống\n\n"
-            "**Student:** Trạng thái V (Verified) - Cấp JWT tokens ngay\n\n"
-            "**Teacher:** Trạng thái I (Incomplete Profile) - Yêu cầu hoàn thành hồ sơ\n\n"
+            "**Response 200 - Student:**\n"
+            "- Status V (Verified): Trả về JWT tokens, redirect về home\n"
+            "- Status P → V: Tự động chuyển sang Verified và trả về tokens\n\n"
+            "**Response 200 - Teacher:**\n"
+            "- Status V (Verified): Trả về JWT tokens\n"
+            "- Status P → I: Tự động chuyển sang Incomplete, trả về user_id và require_profile=true\n"
+            "- Status I: Trả về user_id và require_profile=true, redirect đến upload-profile\n\n"
+            "**Response 403:**\n"
+            "- Status D: Account disabled\n"
+            "- Status W: Waiting for admin approval\n\n"
             "**Tham số đầu vào:**\n"
             "- `code`: Authorization code từ Facebook (bắt buộc)\n"
             "- `role`: S (Student) hoặc T (Teacher) - mặc định là S (tùy chọn)"
@@ -1449,7 +1487,7 @@ class FacebookLoginAPIView(generics.GenericAPIView):
         ),
         responses={
             200: OpenApiResponse(
-                description="Login successful - Student verified or Teacher incomplete profile",
+                description="Login successful - Returns tokens or requires profile completion",
                 response={
                     "type": "object",
                     "properties": {
@@ -1482,6 +1520,18 @@ class FacebookLoginAPIView(generics.GenericAPIView):
                         "error": {
                             "type": "string",
                             "example": "Failed to exchange code for token",
+                        },
+                    },
+                },
+            ),
+            403: OpenApiResponse(
+                description="Account disabled or waiting approval",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "error": {
+                            "type": "string",
+                            "example": "Account has been disabled",
                         },
                     },
                 },
@@ -1605,6 +1655,16 @@ class FacebookLoginAPIView(generics.GenericAPIView):
                 if user.status == "P":
                     user.status = "I"
                     user.save()
+                    return Response(
+                        {
+                            "user_id": user.id,
+                            "username": user.username,
+                            "role": user.role,
+                            "status": user.status,
+                            "require_profile": True,
+                        },
+                        status=status.HTTP_200_OK,
+                    )
                 if user.status == "I":
                     return Response(
                         {
