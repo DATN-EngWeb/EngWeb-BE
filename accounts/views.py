@@ -8,7 +8,10 @@ import json
 import jwt
 import requests
 from rest_framework_simplejwt.exceptions import TokenError
-from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
+from rest_framework_simplejwt.token_blacklist.models import (
+    BlacklistedToken,
+    OutstandingToken,
+)
 
 from .models import User, Student
 from .serializers import (
@@ -18,9 +21,9 @@ from .serializers import (
     CustomTokenObtainPairSerializer,
 )
 from .utils import (
-    create_otp_code, 
-    cache_register_otp, 
-    send_registration_otp_email, 
+    create_otp_code,
+    cache_register_otp,
+    send_registration_otp_email,
     resend_registration_otp_email,
     verify_registration_otp,
     delete_registration_otp_cache,
@@ -34,157 +37,439 @@ from .utils import (
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from drf_spectacular.utils import (
+    extend_schema,
+    OpenApiResponse,
+    inline_serializer,
+)
+from rest_framework import serializers
+
+
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+
+    @extend_schema(
+        summary="Đăng nhập tài khoản",
+        description=(
+            "Xác thực người dùng và cấp JWT tokens.\n\n"
+            "**Luồng xử lý dựa trên trạng thái tài khoản:**\n\n"
+            "- **P (Pending Verification)**: Gửi OTP xác thực email, yêu cầu verify\n"
+            "- **I (Incomplete Profile)**: Teacher chưa hoàn thành hồ sơ, yêu cầu upload certificate\n"
+            "- **W (Waiting Approval)**: Chờ admin phê duyệt, không cấp tokens\n"
+            "- **V (Verified)**: Cấp access token và refresh token\n"
+            "- **D (Disabled)**: Tài khoản bị vô hiệu hóa, không cho phép đăng nhập\n\n"
+            "**Tham số đầu vào:**\n"
+            "- `username`: username hoặc email\n"
+            "- `password`: mật khẩu"
+        ),
+        tags=["accounts"],
+        request=CustomTokenObtainPairSerializer,
+        responses={
+            200: OpenApiResponse(
+                description="Login successful - Student verified or Teacher waiting approval",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "access": {
+                            "type": "string",
+                            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        },
+                        "refresh": {
+                            "type": "string",
+                            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        },
+                        "status": {
+                            "type": "string",
+                            "enum": ["V", "I"],
+                            "example": "V",
+                        },
+                        "username": {"type": "string", "example": "john_doe"},
+                        "avatar": {
+                            "type": "string",
+                            "nullable": True,
+                            "example": "https://example.com/avatars/user.jpg",
+                        },
+                    },
+                    "required": ["access", "refresh", "status", "username"],
+                },
+            ),
+            400: OpenApiResponse(
+                description="Authentication failed or account not in valid state",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "detail": {
+                            "type": "string",
+                            "example": "'Account is not verified yet. OTP sent to your email.'",
+                        },
+                        "user_id": {"type": "integer", "nullable": True},
+                        "status": {
+                            "type": "string",
+                            "enum": ["P", "I", "W", "D"],
+                            "nullable": True,
+                        },
+                        "require_verification": {"type": "boolean", "nullable": True},
+                        "require_certificate": {"type": "boolean", "nullable": True},
+                    },
+                },
+            ),
+        },
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
 
 class LogoutAPIView(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        summary="Đăng xuất tài khoản",
+        description=(
+            "Đăng xuất người dùng bằng cách blacklist refresh token.\n\n"
+            "**Yêu cầu:**\n"
+            "- Phải được xác thực (có refresh token hợp lệ)\n"
+            "- Gửi refresh token để blacklist\n\n"
+            "**Tham số đầu vào:**\n"
+            "- `refresh`: Refresh token cần blacklist (bắt buộc)"
+        ),
+        tags=["accounts"],
+        request=inline_serializer(
+            name="LogoutRequest",
+            fields={
+                "refresh": serializers.CharField(
+                    required=True,
+                ),
+            },
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="Logout successful",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "example": "Logged out successfully",
+                        },
+                    },
+                    "required": ["message"],
+                },
+            ),
+            400: OpenApiResponse(
+                description="Invalid or missing refresh token",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "detail": {
+                            "type": "string",
+                            "example": "refresh token is required",
+                        },
+                    },
+                },
+            ),
+            401: OpenApiResponse(
+                description="Unauthorized - Access token is invalid or expired",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "detail": {
+                            "type": "string",
+                            "example": "Authentication credentials were not provided.",
+                        },
+                    },
+                },
+            ),
+        },
+    )
     def post(self, request):
-        refresh_token = request.data.get('refresh')
+        refresh_token = request.data.get("refresh")
         if not refresh_token:
-            return Response({"detail": "refresh token is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "refresh token is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
             token = RefreshToken(refresh_token)
             token.blacklist()
         except Exception:
-            return Response({"detail": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
-        return Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
+        return Response(
+            {"message": "Logged out successfully"}, status=status.HTTP_200_OK
+        )
+
 
 class UserRegistrationAPIView(generics.GenericAPIView):
     """Create User model and send OTP email. Status is set to 'P' (Pending Verification)"""
+
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        summary="Đăng ký tài khoản",
+        description=(
+            "Tạo user mới và gửi OTP xác thực email.\n\n"
+            "- Role = `S`: Student\n"
+            "- Role = `T`: Teacher\n"
+            "- User được tạo với trạng thái `P` (Pending Verification)"
+        ),
+        tags=["accounts"],
+        request=UserSerializer,
+        responses={
+            201: OpenApiResponse(
+                description="User registered successfully",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "example": "Student account registered successfully. Please check your email to verify your account.",
+                        },
+                        "user_id": {"type": "integer", "example": 12},
+                    },
+                    "required": ["message", "user_id"],
+                },
+            ),
+            400: OpenApiResponse(
+                description="Invalid input data",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "detail": {
+                            "type": "string",
+                            "example": "Invalid role. Must be 'S' (Student) or 'T' (Teacher).",
+                        }
+                    },
+                },
+            ),
+        },
+    )
     def post(self, request):
-        role = request.data.get('role', '').upper()
-        
+        role = request.data.get("role", "").upper()
+
         # Validate role
-        if role not in ['S', 'T']:
+        if role not in ["S", "T"]:
             return Response(
                 {"detail": "Invalid role. Must be 'S' (Student) or 'T' (Teacher)."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Validate user data using UserSerializer
         user_serializer = UserSerializer(data=request.data)
-        
+
         if not user_serializer.is_valid():
             return Response(user_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # Create user
         user = user_serializer.save()
-        
+
         # Generate OTP and cache it
         otp_code = create_otp_code()
         cache_register_otp(user.id, otp_code, user.email)
-        
+
         # Send OTP email
         send_registration_otp_email(user.email, otp_code)
-        
+
         # Response message based on role
-        role_name = 'Student' if role == 'S' else 'Teacher'
+        role_name = "Student" if role == "S" else "Teacher"
         response = {
             "message": f"{role_name} account registered successfully. Please check your email to verify your account.",
-            "user_id": user.id
+            "user_id": user.id,
         }
-        
+
         return Response(response, status=status.HTTP_201_CREATED)
 
+
 class VerifyRegistrationOTPAPIView(generics.GenericAPIView):
-    """Verify OTP code for registration. Updates user status: 
-        + Student: P → V (Verified)
-        + Teacher: P → I (Incomplete Profile)
+    """Verify OTP code for registration. Updates user status:
+    + Student: P → V (Verified)
+    + Teacher: P → I (Incomplete Profile)
     """
+
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        summary="Xác thực OTP đăng ký tài khoản",
+        description=(
+            "Xác minh mã OTP và cập nhật trạng thái người dùng sau khi đăng ký.\n\n"
+            "**Luồng xử lý theo vai trò:**\n\n"
+            "- **Student (S)**: P (Pending) → V (Verified) - Có thể đăng nhập ngay\n"
+            "- **Teacher (T)**: P (Pending) → I (Incomplete Profile) - Cần hoàn thành hồ sơ\n\n"
+            "**Tham số đầu vào:**\n"
+            "- `user_id`: ID của người dùng (bắt buộc)\n"
+            "- `otp_code`: Mã OTP gửi đến email (bắt buộc)"
+        ),
+        tags=["accounts"],
+        request=inline_serializer(
+            name="VerifyRegistrationOTPRequest",
+            fields={
+                "user_id": serializers.IntegerField(required=True),
+                "otp_code": serializers.CharField(
+                    required=True, help_text="Mã OTP gửi đến email"
+                ),
+            },
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="OTP verified successfully",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "example": "Student account verified successfully.",
+                        },
+                        "user_id": {"type": "integer", "example": 12},
+                        "status": {
+                            "type": "string",
+                            "enum": ["V", "I"],
+                            "example": "V",
+                        },
+                    },
+                    "required": ["message", "user_id", "status"],
+                },
+            ),
+            400: OpenApiResponse(
+                description="Invalid OTP, expired OTP, or user not found",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "detail": {
+                            "type": "string",
+                            "example": "Invalid OTP code or OTP has expired.",
+                        },
+                    },
+                },
+            ),
+        },
+    )
     def post(self, request):
-        user_id = request.data.get('user_id')
-        otp_code = request.data.get('otp_code')
-        
+        user_id = request.data.get("user_id")
+        otp_code = request.data.get("otp_code")
+
         # Verify OTP
         try:
             cache_data = verify_registration_otp(user_id, otp_code)
         except ValueError as e:
-            return Response(
-                {"detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
         # Get user and verify status is Pending
         try:
-            user = User.objects.get(id=user_id, status='P')
+            user = User.objects.get(id=user_id, status="P")
         except User.DoesNotExist:
             return Response(
                 {"detail": "User not found or already verified."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Update status based on role
-        if user.role == 'S':
-            user.status = 'V'
-        elif user.role == 'T':
-            user.status = 'I'
+        if user.role == "S":
+            user.status = "V"
+        elif user.role == "T":
+            user.status = "I"
         else:
             return Response(
-                {"detail": "Invalid user role."},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Invalid user role."}, status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         user.save()
-        
+
         # Delete OTP from cache
         delete_registration_otp_cache(user_id)
-        
+
         # Response message based on role
-        role_name = 'Student' if user.role == 'S' else 'Teacher'
-        
+        role_name = "Student" if user.role == "S" else "Teacher"
+
         # Create Student record if role is Student. Teacher record will be created later when they submit profile
-        if user.role == 'S':
-            student_serializer = StudentSerializer(data={}, context={'user': user})
+        if user.role == "S":
+            student_serializer = StudentSerializer(data={}, context={"user": user})
             student_serializer.is_valid()
             student_serializer.save()
-        
+
         response = {
             "message": f"{role_name} account verified successfully.",
             "user_id": user.id,
-            "status": user.status
+            "status": user.status,
         }
-        
+
         return Response(response, status=status.HTTP_200_OK)
+
 
 class ResendRegistrationOTPAPIView(generics.GenericAPIView):
     """Resend OTP code for registration"""
+
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        summary="Gửi lại mã OTP đăng ký",
+        description=(
+            "Gửi lại mã OTP xác thực email cho người dùng.\n\n"
+            "- Sử dụng khi người dùng không nhận được OTP hoặc OTP hết hạn\n"
+            "- Mã OTP mới sẽ được gửi đến email đã đăng ký\n\n"
+            "**Tham số đầu vào:**\n"
+            "- `user_id`: ID của người dùng (bắt buộc)"
+        ),
+        tags=["accounts"],
+        request=inline_serializer(
+            name="ResendRegistrationOTPRequest",
+            fields={
+                "user_id": serializers.IntegerField(required=True),
+            },
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="OTP resent successfully",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "example": "OTP code has been resent to your email.",
+                        },
+                    },
+                    "required": ["message"],
+                },
+            ),
+            400: OpenApiResponse(
+                description="Invalid user_id or user not found",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "detail": {
+                            "type": "string",
+                            "example": "User not found or account already verified.",
+                        },
+                    },
+                },
+            ),
+        },
+    )
     def post(self, request):
-        user_id = request.data.get('user_id')
-        
+        user_id = request.data.get("user_id")
+
         # Validate input
         if not user_id:
             return Response(
-                {"detail": "user_id is required."},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": "user_id is required."}, status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # Resend OTP
         try:
             resend_registration_otp_email(user_id)
         except ValueError as e:
-            return Response(
-                {"detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
         return Response(
             {"message": "OTP code has been resent to your email."},
-            status=status.HTTP_200_OK
+            status=status.HTTP_200_OK,
         )
+
 
 class TeacherAPIView(generics.GenericAPIView):
     """
     Complete teacher profile after OTP verification (status I -> W)
-    
+
     Expected FormData format:
     - user_id: integer (required)
     - user.full_name: string (required)
@@ -196,60 +481,154 @@ class TeacherAPIView(generics.GenericAPIView):
     - introduction: string (required)
     - credentials: file (optional, can send multiple with same key)
     """
+
     serializer_class = TeacherSerializer
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        summary="Hoàn thành hồ sơ giáo viên",
+        description=(
+            "Hoàn thành hồ sơ giáo viên sau khi xác thực email (chuyển từ trạng thái I → W).\n\n"
+            "**Yêu cầu:**\n"
+            "- User phải ở trạng thái I (Incomplete Profile)\n"
+            "- Phải upload ít nhất 1 chứng chỉ (certificate)\n\n"
+            "**Luồng xử lý:**\n"
+            "- Cập nhật thông tin người dùng (full_name, date_of_birth, avatar)\n"
+            "- Lưu thông tin giáo viên (nơi làm việc, loại giáo viên, kinh nghiệm, giới thiệu)\n"
+            "- Tải lên chứng chỉ\n"
+            "- Chuyển trạng thái từ I → W (Waiting Approval)\n\n"
+            "**Tham số đầu vào (FormData):**\n"
+            "- `user_id`: ID người dùng (bắt buộc)\n"
+            "- `user.full_name`: Họ và tên (bắt buộc)\n"
+            "- `user.date_of_birth`: Ngày sinh (YYYY-MM-DD, bắt buộc)\n"
+            "- `user.avatar`: Ảnh đại diện (bắt buộc)\n"
+            "- `current_workplace`: Nơi làm việc hiện tại (bắt buộc)\n"
+            "- `teacher_type`: Loại giáo viên - S (School), C (Center), F (Freelance) (bắt buộc)\n"
+            "- `experience_year`: Năm kinh nghiệm (bắt buộc)\n"
+            "- `introduction`: Giới thiệu bản thân (bắt buộc)\n"
+            "- `credentials`: Chứng chỉ/bằng cấp (có thể upload nhiều file, bắt buộc ít nhất 1)"
+        ),
+        tags=["accounts"],
+        request=inline_serializer(
+            name="TeacherProfileRequest",
+            fields={
+                "user_id": serializers.IntegerField(required=True),
+                "user": inline_serializer(
+                    name="UserDataRequest",
+                    fields={
+                        "full_name": serializers.CharField(required=True),
+                        "date_of_birth": serializers.DateField(required=True),
+                        "avatar": serializers.FileField(required=True),
+                    },
+                ),
+                "current_workplace": serializers.CharField(required=True),
+                "teacher_type": serializers.ChoiceField(
+                    choices=["S", "C", "F"], required=True
+                ),
+                "experience_year": serializers.IntegerField(required=True),
+                "introduction": serializers.CharField(required=True),
+                "credentials": serializers.ListField(
+                    child=serializers.FileField(), required=True
+                ),
+            },
+        ),
+        responses={
+            201: OpenApiResponse(
+                description="Teacher profile submitted successfully",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "example": "Teacher profile submitted successfully. Awaiting approval.",
+                        },
+                        "user_id": {"type": "integer", "example": 12},
+                        "status": {"type": "string", "enum": ["W"], "example": "W"},
+                        "teacher_id": {"type": "integer", "example": 12},
+                    },
+                    "required": ["message", "user_id", "status", "teacher_id"],
+                },
+            ),
+            400: OpenApiResponse(
+                description="Invalid input data or validation failed",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "detail": {
+                            "type": "string",
+                            "example": "Profile already completed or not allowed.",
+                        },
+                        "user": {
+                            "type": "object",
+                            "example": {"full_name": "This field is required."},
+                        },
+                        "credentials": {
+                            "type": "string",
+                            "example": "At least one certificate is required.",
+                        },
+                    },
+                },
+            ),
+            404: OpenApiResponse(
+                description="Teacher not found",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "detail": {
+                            "type": "string",
+                            "example": "Teacher not found.",
+                        },
+                    },
+                },
+            ),
+        },
+    )
     def post(self, request):
         # Get user_id from form data
-        user_id = request.data.get('user_id')
+        user_id = request.data.get("user_id")
         if not user_id:
             return Response(
-                {"detail": "user_id is required"},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": "user_id is required"}, status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         try:
             user_id = int(user_id)
         except (ValueError, TypeError):
             return Response(
                 {"detail": "user_id must be a valid integer"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Get and validate user
         try:
-            user = User.objects.get(id=user_id, role='T')
+            user = User.objects.get(id=user_id, role="T")
         except User.DoesNotExist:
             return Response(
-                {"detail": "Teacher not found."},
-                status=status.HTTP_404_NOT_FOUND
+                {"detail": "Teacher not found."}, status=status.HTTP_404_NOT_FOUND
             )
 
         # Only allow when status is Incomplete profile
-        if user.status != 'I':
+        if user.status != "I":
             return Response(
                 {"detail": "Profile already completed or not allowed."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Validate and update User fields directly
         user_errors = {}
-        full_name = request.data.get('user.full_name', '').strip()
-        date_of_birth = request.data.get('user.date_of_birth')
-        avatar_file = request.FILES.get('user.avatar')
+        full_name = request.data.get("user.full_name", "").strip()
+        date_of_birth = request.data.get("user.date_of_birth")
+        avatar_file = request.FILES.get("user.avatar")
 
         if not full_name:
-            user_errors['full_name'] = 'This field is required.'
+            user_errors["full_name"] = "This field is required."
         if not date_of_birth:
-            user_errors['date_of_birth'] = 'This field is required.'
+            user_errors["date_of_birth"] = "This field is required."
         if not avatar_file:
-            user_errors['avatar'] = 'This field is required.'
+            user_errors["avatar"] = "This field is required."
 
         if user_errors:
-            return Response(
-                {'user': user_errors},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"user": user_errors}, status=status.HTTP_400_BAD_REQUEST)
 
         # Update User fields
         user.full_name = full_name
@@ -259,30 +638,33 @@ class TeacherAPIView(generics.GenericAPIView):
 
         # Process credential files
         credentials_data = process_credential_files(request.FILES, user)
-        
+
         # Validate at least one certificate is required
-        if not credentials_data.get('certificates') or len(credentials_data.get('certificates', [])) == 0:
+        if (
+            not credentials_data.get("certificates")
+            or len(credentials_data.get("certificates", [])) == 0
+        ):
             return Response(
-                {'credentials': 'At least one certificate is required.'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"credentials": "At least one certificate is required."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Prepare data for serializer (only Teacher fields, no nested user)
         serializer_data = {
-            'current_workplace': request.data.get('current_workplace', '').strip(),
-            'teacher_type': request.data.get('teacher_type'),
-            'experience_year': request.data.get('experience_year'),
-            'introduction': request.data.get('introduction', '').strip(),
-            'credentials': credentials_data,
+            "current_workplace": request.data.get("current_workplace", "").strip(),
+            "teacher_type": request.data.get("teacher_type"),
+            "experience_year": request.data.get("experience_year"),
+            "introduction": request.data.get("introduction", "").strip(),
+            "credentials": credentials_data,
         }
 
-        serializer = self.get_serializer(data=serializer_data, context={'user': user})
+        serializer = self.get_serializer(data=serializer_data, context={"user": user})
         serializer.is_valid(raise_exception=True)
-        
+
         # Save user first, then create teacher
-        user.status = 'W'  # move to waiting approval after profile completion
+        user.status = "W"  # move to waiting approval after profile completion
         user.save()
-        
+
         teacher = serializer.save()
 
         response = {
@@ -293,38 +675,99 @@ class TeacherAPIView(generics.GenericAPIView):
         }
         return Response(response, status=status.HTTP_201_CREATED)
 
+
 class ForgotPasswordAPIView(generics.GenericAPIView):
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        summary="Yêu cầu đặt lại mật khẩu",
+        description=(
+            "Gửi mã OTP xác thực cho tài khoản để đặt lại mật khẩu.\n\n"
+            "**Yêu cầu:**\n"
+            "- Tài khoản phải ở trạng thái V (Verified)\n\n"
+            "**Luồng xử lý:**\n"
+            "- P (Pending): Gửi OTP xác thực email\n"
+            "- I (Incomplete): Yêu cầu hoàn thành hồ sơ\n"
+            "- W (Waiting): Chờ phê duyệt từ admin\n"
+            "- D (Disabled): Tài khoản bị vô hiệu hóa\n"
+            "- V (Verified): Gửi OTP để đặt lại mật khẩu\n\n"
+            "**Tham số đầu vào:**\n"
+            "- `username_or_email`: Username hoặc email (bắt buộc)"
+        ),
+        tags=["accounts"],
+        request=inline_serializer(
+            name="ForgotPasswordRequest",
+            fields={
+                "username_or_email": serializers.CharField(
+                    required=True, help_text="Username hoặc email"
+                ),
+            },
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="OTP sent successfully",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "example": "OTP code has been sent to your email.",
+                        },
+                        "username": {
+                            "type": "string",
+                            "example": "john_doe",
+                        },
+                    },
+                    "required": ["message", "username"],
+                },
+            ),
+            400: OpenApiResponse(
+                description="Account not verified or invalid status",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "detail": {
+                            "type": "string",
+                            "example": "Account is not verified yet. OTP sent to your email.",
+                        },
+                        "status": {"type": "string", "nullable": True},
+                        "user_id": {"type": "integer", "nullable": True},
+                        "require_verification": {"type": "boolean", "nullable": True},
+                    },
+                },
+            ),
+        },
+    )
     def post(self, request):
-        username_or_email = request.data.get('username_or_email')
+        username_or_email = request.data.get("username_or_email")
 
         if not username_or_email:
             return Response(
                 {"detail": "Username or email is required."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Find user by username or email
         try:
-            user = User.objects.get(Q(username=username_or_email) | Q(email=username_or_email))
+            user = User.objects.get(
+                Q(username=username_or_email) | Q(email=username_or_email)
+            )
         except User.DoesNotExist:
             return Response(
-                {"detail": "Account not found."},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Account not found."}, status=status.HTTP_400_BAD_REQUEST
             )
 
         # Check is_active
         if not user.is_active:
             return Response(
                 {"detail": "Account is deactivated."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Check status - only verified accounts can reset password
-        status_code = getattr(user, 'status', None)
+        status_code = getattr(user, "status", None)
 
-        if status_code == 'P':
+        if status_code == "P":
             # Resend OTP for registration verification
             otp_code = create_otp_code()
             cache_register_otp(user.id, otp_code, user.email)
@@ -337,10 +780,10 @@ class ForgotPasswordAPIView(generics.GenericAPIView):
                     "require_verification": True,
                     "redirect_to": f"/verify-otp?user_id={user.id}",
                 },
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if status_code == 'I':
+        if status_code == "I":
             return Response(
                 {
                     "detail": "Please complete your profile first before resetting password.",
@@ -349,32 +792,32 @@ class ForgotPasswordAPIView(generics.GenericAPIView):
                     "require_certificate": True,
                     "redirect_to": f"/upload-profile?user_id={user.id}",
                 },
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if status_code == 'W':
+        if status_code == "W":
             return Response(
                 {
                     "detail": "Account is pending approval. Please wait for admin review.",
                     "status": status_code,
                 },
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if status_code == 'D':
+        if status_code == "D":
             return Response(
                 {
                     "detail": "Account has been disabled.",
                     "status": status_code,
                 },
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Only status 'V' (Verified) can proceed
-        if status_code != 'V':
+        if status_code != "V":
             return Response(
                 {"detail": "Account status does not allow password reset."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Generate OTP code
@@ -388,22 +831,78 @@ class ForgotPasswordAPIView(generics.GenericAPIView):
 
         response = {
             "message": "OTP code has been sent to your email.",
-            "username": user.username
+            "username": user.username,
         }
 
         return Response(response, status=status.HTTP_200_OK)
 
+
 class ForgotPasswordVerifyOTPAPIView(generics.GenericAPIView):
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        summary="Xác thực OTP đặt lại mật khẩu",
+        description=(
+            "Xác minh mã OTP và cấp token để đặt lại mật khẩu.\n\n"
+            "**Tham số đầu vào:**\n"
+            "- `username`: Username (bắt buộc)\n"
+            "- `otp_code`: Mã OTP gửi đến email (bắt buộc)"
+        ),
+        tags=["accounts"],
+        request=inline_serializer(
+            name="ForgotPasswordVerifyOTPRequest",
+            fields={
+                "username": serializers.CharField(required=True),
+                "otp_code": serializers.CharField(
+                    required=True, help_text="Mã OTP gửi đến email"
+                ),
+            },
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="OTP verified successfully",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "example": "OTP verified successfully.",
+                        },
+                        "reset_token": {
+                            "type": "string",
+                            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        },
+                        "expires_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "example": "2024-12-15T10:30:00",
+                        },
+                    },
+                    "required": ["message", "reset_token", "expires_at"],
+                },
+            ),
+            400: OpenApiResponse(
+                description="Invalid OTP or expired",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "detail": {
+                            "type": "string",
+                            "example": "Invalid OTP code.",
+                        },
+                    },
+                },
+            ),
+        },
+    )
     def post(self, request):
-        username = request.data.get('username')
-        otp_code = request.data.get('otp_code')
+        username = request.data.get("username")
+        otp_code = request.data.get("otp_code")
 
         if not username or not otp_code:
             return Response(
                 {"detail": "Username and OTP code are required."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Get OTP from cache
@@ -413,16 +912,15 @@ class ForgotPasswordVerifyOTPAPIView(generics.GenericAPIView):
         if not cache_data:
             return Response(
                 {"detail": "OTP code has expired or is invalid."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         cache_data = json.loads(cache_data)
 
         # Verify OTP
-        if cache_data['otp_code'] != otp_code:
+        if cache_data["otp_code"] != otp_code:
             return Response(
-                {"detail": "Invalid OTP code."},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Invalid OTP code."}, status=status.HTTP_400_BAD_REQUEST
             )
 
         # OTP verified, delete cache
@@ -433,38 +931,89 @@ class ForgotPasswordVerifyOTPAPIView(generics.GenericAPIView):
             user = User.objects.get(username=username)
         except User.DoesNotExist:
             return Response(
-                {"detail": "User not found."},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": "User not found."}, status=status.HTTP_400_BAD_REQUEST
             )
 
         # Generate reset token (JWT RefreshToken)
         reset_token = RefreshToken.for_user(user)
-        
+
         # Mark token as password reset token
-        reset_token['token_type'] = 'password_reset'
-        
+        reset_token["token_type"] = "password_reset"
+
         # Set expiry time (30 minutes)
         expiry_time = datetime.now() + timedelta(minutes=30)
 
         response = {
             "message": "OTP verified successfully.",
             "reset_token": str(reset_token),
-            "expires_at": expiry_time.isoformat()
+            "expires_at": expiry_time.isoformat(),
         }
 
         return Response(response, status=status.HTTP_200_OK)
 
+
 class ResetPasswordAPIView(generics.GenericAPIView):
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        summary="Đặt lại mật khẩu",
+        description=(
+            "Đặt lại mật khẩu mới sau khi xác minh OTP thành công.\n\n"
+            "**Yêu cầu:**\n"
+            "- Phải cấp reset_token hợp lệ từ `/forgot-password/verify-otp/`\n"
+            "- Token hết hạn sau 30 phút\n\n"
+            "**Tham số đầu vào:**\n"
+            "- `reset_token`: Token nhận từ xác thực OTP (bắt buộc)\n"
+            "- `new_password`: Mật khẩu mới (bắt buộc)"
+        ),
+        tags=["accounts"],
+        request=inline_serializer(
+            name="ResetPasswordRequest",
+            fields={
+                "reset_token": serializers.CharField(
+                    required=True, help_text="Token từ xác thực OTP"
+                ),
+                "new_password": serializers.CharField(
+                    required=True, write_only=True, help_text="Mật khẩu mới"
+                ),
+            },
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="Password reset successfully",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "example": "Password reset successfully. Please login with your new password.",
+                        },
+                    },
+                    "required": ["message"],
+                },
+            ),
+            400: OpenApiResponse(
+                description="Invalid token or reset failed",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "detail": {
+                            "type": "string",
+                            "example": "Invalid or expired token.",
+                        },
+                    },
+                },
+            ),
+        },
+    )
     def post(self, request):
-        reset_token = request.data.get('reset_token')
-        new_password = request.data.get('new_password')
+        reset_token = request.data.get("reset_token")
+        new_password = request.data.get("new_password")
 
         if not reset_token or not new_password:
             return Response(
                 {"detail": "Reset token and new password are required."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
@@ -473,26 +1022,25 @@ class ResetPasswordAPIView(generics.GenericAPIView):
                 reset_token,
                 settings.SECRET_KEY,
                 algorithms=["HS256"],
-                options={"verify_signature": True}
+                options={"verify_signature": True},
             )
 
             # Check token type
-            if decoded_token.get('token_type') != 'password_reset':
+            if decoded_token.get("token_type") != "password_reset":
                 return Response(
                     {"detail": "Invalid token type for password reset."},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             # Get user_id from token
-            user_id = decoded_token.get('user_id')
+            user_id = decoded_token.get("user_id")
 
             # Find user
             try:
                 user = User.objects.get(id=user_id)
             except User.DoesNotExist:
                 return Response(
-                    {"detail": "User not found."},
-                    status=status.HTTP_400_BAD_REQUEST
+                    {"detail": "User not found."}, status=status.HTTP_400_BAD_REQUEST
                 )
 
             # Set new password
@@ -507,61 +1055,187 @@ class ResetPasswordAPIView(generics.GenericAPIView):
                 pass  # Token might not exist in DB if it's a new token
 
             return Response(
-                {"message": "Password reset successfully. Please login with your new password."},
-                status=status.HTTP_200_OK
+                {
+                    "message": "Password reset successfully. Please login with your new password."
+                },
+                status=status.HTTP_200_OK,
             )
 
         except (TokenError, jwt.PyJWTError) as e:
             return Response(
                 {"detail": "Invalid or expired token."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
         except Exception as e:
             return Response(
                 {"detail": "Error resetting password."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
 
 class ResendForgotPasswordOTPAPIView(generics.GenericAPIView):
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        summary="Gửi lại OTP đặt lại mật khẩu",
+        description=(
+            "Gửi lại mã OTP khi người dùng không nhận được hoặc OTP hết hạn.\n\n"
+            "**Tham số đầu vào:**\n"
+            "- `username`: Username (bắt buộc)"
+        ),
+        tags=["accounts"],
+        request=inline_serializer(
+            name="ResendForgotPasswordOTPRequest",
+            fields={
+                "username": serializers.CharField(required=True),
+            },
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="OTP resent successfully",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "detail": {
+                            "type": "string",
+                            "example": "OTP code has been resent to your email.",
+                        },
+                    },
+                    "required": ["detail"],
+                },
+            ),
+            400: OpenApiResponse(
+                description="User not found or error resending",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "detail": {
+                            "type": "string",
+                            "example": "User not found.",
+                        },
+                    },
+                },
+            ),
+        },
+    )
     def post(self, request):
-        username = request.data.get('username')
+        username = request.data.get("username")
 
         if not username:
             return Response(
-                {"detail": "Username is required."},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Username is required."}, status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
             resend_forgot_password_otp_email(username)
             return Response(
                 {"detail": "OTP code has been resent to your email."},
-                status=status.HTTP_200_OK
+                status=status.HTTP_200_OK,
             )
         except ValueError as e:
-            return Response(
-                {"detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response(
-                {"detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class GoogleLoginAPIView(generics.GenericAPIView):
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        summary="Đăng nhập bằng Google",
+        description=(
+            "Xác thực người dùng thông qua Google OAuth 2.0.\n\n"
+            "**Luồng xử lý:**\n"
+            "1. Client gửi authorization code từ Google\n"
+            "2. Server trao đổi code với Google để lấy access token\n"
+            "3. Lấy thông tin user từ Google (email, name, avatar)\n"
+            "4. Tạo hoặc cập nhật tài khoản trong hệ thống\n\n"
+            "**Response 200 - Student:**\n"
+            "- Status V (Verified): Trả về JWT tokens, redirect về home\n"
+            "- Status P → V: Tự động chuyển sang Verified và trả về tokens\n\n"
+            "**Response 200 - Teacher:**\n"
+            "- Status V (Verified): Trả về JWT tokens\n"
+            "- Status P → I: Tự động chuyển sang Incomplete, trả về user_id và require_profile=true\n"
+            "- Status I: Trả về user_id và require_profile=true, redirect đến upload-profile\n\n"
+            "**Response 403:**\n"
+            "- Status D: Account disabled\n"
+            "- Status W: Waiting for admin approval\n\n"
+            "**Tham số đầu vào:**\n"
+            "- `code`: Authorization code từ Google (bắt buộc)\n"
+            "- `role`: S (Student) hoặc T (Teacher) - mặc định là S (tùy chọn)"
+        ),
+        tags=["accounts"],
+        request=inline_serializer(
+            name="GoogleLoginRequest",
+            fields={
+                "code": serializers.CharField(
+                    required=True, help_text="Authorization code từ Google"
+                ),
+                "role": serializers.ChoiceField(
+                    choices=["S", "T"], required=False, help_text="S=Student, T=Teacher"
+                ),
+            },
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="Login successful - Returns tokens or requires profile completion",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "access": {
+                            "type": "string",
+                            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        },
+                        "refresh": {
+                            "type": "string",
+                            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        },
+                        "status": {
+                            "type": "string",
+                            "enum": ["V", "I"],
+                            "example": "V",
+                        },
+                        "username": {"type": "string"},
+                        "avatar": {"type": "string", "nullable": True},
+                        "user_id": {"type": "integer", "nullable": True},
+                        "role": {"type": "string"},
+                        "require_profile": {"type": "boolean", "nullable": True},
+                    },
+                },
+            ),
+            400: OpenApiResponse(
+                description="Invalid code or authentication failed",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "error": {
+                            "type": "string",
+                            "example": "Failed to exchange code for token",
+                        },
+                    },
+                },
+            ),
+            403: OpenApiResponse(
+                description="Account disabled or waiting approval",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "error": {
+                            "type": "string",
+                            "example": "Account has been disabled",
+                        },
+                    },
+                },
+            ),
+        },
+    )
     def post(self, request, *args, **kwargs):
         # one-time code from Google when user clicks "Sign in with Google"
         code = request.data.get("code")
 
         if not code:
             return Response(
-                {"error": "No code provided"},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "No code provided"}, status=status.HTTP_400_BAD_REQUEST
             )
 
         # send code to Google to get access token
@@ -573,20 +1247,20 @@ class GoogleLoginAPIView(generics.GenericAPIView):
             "client_id": settings.OAUTH2_GOOGLE_KEY,
             "client_secret": settings.OAUTH2_GOOGLE_SECRET,
         }
-        print(params)
+
         try:
             token_response = requests.post(google_token_url, data=params, timeout=10)
             print(token_response.json())
         except requests.RequestException:
             return Response(
                 {"error": "Failed to connect to Google"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         if token_response.status_code != 200:
             return Response(
                 {"error": "Failed to exchange code for token"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         google_access_token = token_response.json().get("access_token")
@@ -594,7 +1268,7 @@ class GoogleLoginAPIView(generics.GenericAPIView):
         if not google_access_token:
             return Response(
                 {"error": "No access token received from Google"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # get user info from Google
@@ -603,18 +1277,18 @@ class GoogleLoginAPIView(generics.GenericAPIView):
             user_response = requests.get(
                 google_user_url,
                 headers={"Authorization": f"Bearer {google_access_token}"},
-                timeout=10
+                timeout=10,
             )
         except requests.RequestException:
             return Response(
                 {"error": "Failed to fetch user info from Google"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         if user_response.status_code != 200:
             return Response(
                 {"error": "Failed to get user information"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         google_data = user_response.json()
@@ -626,36 +1300,36 @@ class GoogleLoginAPIView(generics.GenericAPIView):
         if not email:
             return Response(
                 {"error": "Email is required from Google account"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Get role from request (can be passed via state parameter in OAuth URL)
         # Default to Student if not specified
         role = request.data.get("role", "S").upper()
-        if role not in ['S', 'T']:
-            role = 'S'  # Default to Student if invalid role
-        
+        if role not in ["S", "T"]:
+            role = "S"  # Default to Student if invalid role
+
         # Check if user exists by email
         try:
             user = User.objects.get(email=email)
-            
+
             # Branch by role for existing user
-            if user.role == 'A':
+            if user.role == "A":
                 # TODO: implement admin Google login flow
                 return Response(
                     {"error": "Admin Google login is not implemented yet."},
-                    status=status.HTTP_501_NOT_IMPLEMENTED
+                    status=status.HTTP_501_NOT_IMPLEMENTED,
                 )
 
-            if user.role == 'S':
+            if user.role == "S":
                 # Student flow
-                if user.status == 'D':
+                if user.status == "D":
                     return Response(
                         {"error": "Account has been disabled"},
-                        status=status.HTTP_403_FORBIDDEN
+                        status=status.HTTP_403_FORBIDDEN,
                     )
-                if user.status == 'P':
-                    user.status = 'V'
+                if user.status == "P":
+                    user.status = "V"
                     user.save()
                 # status V -> return tokens
                 refresh = RefreshToken.for_user(user)
@@ -668,36 +1342,48 @@ class GoogleLoginAPIView(generics.GenericAPIView):
                     "avatar": user.avatar.url if user.avatar else None,
                 }
                 return Response(response_data, status=status.HTTP_200_OK)
-            
-            elif user.role == 'T':
+
+            elif user.role == "T":
                 # Teacher flow
-                if user.status == 'D':
+                if user.status == "D":
                     return Response(
                         {"error": "Account has been disabled"},
-                        status=status.HTTP_403_FORBIDDEN
+                        status=status.HTTP_403_FORBIDDEN,
                     )
-                if user.status == 'W':
+                if user.status == "W":
                     return Response(
-                        {"error": "Your account is waiting for admin approval. Please wait."},
-                        status=status.HTTP_403_FORBIDDEN
+                        {
+                            "error": "Your account is waiting for admin approval. Please wait."
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
                     )
-                if user.status == 'P':
+                if user.status == "P":
                     # move to incomplete profile
-                    user.status = 'I'
+                    user.status = "I"
                     user.save()
-                # status I -> require profile completion, no tokens
-                if user.status == 'I':
                     return Response(
                         {
                             "user_id": user.id,
                             "username": user.username,
                             "role": user.role,
                             "status": user.status,
-                            "require_profile": True
+                            "require_profile": True,
                         },
-                        status=status.HTTP_200_OK
+                        status=status.HTTP_200_OK,
                     )
-                if user.status == 'V':
+                # status I -> require profile completion, no tokens
+                if user.status == "I":
+                    return Response(
+                        {
+                            "user_id": user.id,
+                            "username": user.username,
+                            "role": user.role,
+                            "status": user.status,
+                            "require_profile": True,
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                if user.status == "V":
                     refresh = RefreshToken.for_user(user)
                     refresh["role"] = user.role
                     response_data = {
@@ -708,46 +1394,48 @@ class GoogleLoginAPIView(generics.GenericAPIView):
                         "avatar": user.avatar.url if user.avatar else None,
                     }
                     return Response(response_data, status=status.HTTP_200_OK)
-                
+
                 # any other unexpected status
                 return Response(
-                    {"error": "Account is not in a valid state. Please contact support."},
-                    status=status.HTTP_403_FORBIDDEN
+                    {
+                        "error": "Account is not in a valid state. Please contact support."
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
                 )
-            
+
         except User.DoesNotExist:
             # Create a new user
             base_username = email.split("@")[0]
             unique_username = generate_unique_username(base_username)
-            
+
             user = User.objects.create_user(
                 username=unique_username,
                 email=email,
                 full_name=full_name or "",
-                password=None  # Social login users don't need a password
+                password=None,  # Social login users don't need a password
             )
-            
+
             # Set role and status based on user type
             user.role = role
-            if role == 'S':
+            if role == "S":
                 # Student: Verified status, can login immediately
-                user.status = 'V'
-                
+                user.status = "V"
+
                 # Download and save avatar
                 if avatar_url:
                     avatar_path = download_and_save_avatar(avatar_url, user)
                     if avatar_path:
                         user.avatar = avatar_path
-                
+
                 user.save()
-                
+
                 # Create Student instance
                 Student.objects.create(user=user)
-                
+
                 # Generate JWT tokens for verified student
                 refresh = RefreshToken.for_user(user)
                 refresh["role"] = user.role
-                
+
                 response_data = {
                     "access": str(refresh.access_token),
                     "refresh": str(refresh),
@@ -755,18 +1443,108 @@ class GoogleLoginAPIView(generics.GenericAPIView):
                     "username": user.username,
                     "avatar": user.avatar.url if user.avatar else None,
                 }
-                
+
                 return Response(response_data, status=status.HTTP_200_OK)
 
 
 class FacebookLoginAPIView(generics.GenericAPIView):
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        summary="Đăng nhập bằng Facebook",
+        description=(
+            "Xác thực người dùng thông qua Facebook OAuth 2.0.\n\n"
+            "**Luồng xử lý:**\n"
+            "1. Client gửi authorization code từ Facebook\n"
+            "2. Server trao đổi code với Facebook để lấy access token\n"
+            "3. Lấy thông tin user từ Facebook (email, name, avatar)\n"
+            "4. Tạo hoặc cập nhật tài khoản trong hệ thống\n\n"
+            "**Response 200 - Student:**\n"
+            "- Status V (Verified): Trả về JWT tokens, redirect về home\n"
+            "- Status P → V: Tự động chuyển sang Verified và trả về tokens\n\n"
+            "**Response 200 - Teacher:**\n"
+            "- Status V (Verified): Trả về JWT tokens\n"
+            "- Status P → I: Tự động chuyển sang Incomplete, trả về user_id và require_profile=true\n"
+            "- Status I: Trả về user_id và require_profile=true, redirect đến upload-profile\n\n"
+            "**Response 403:**\n"
+            "- Status D: Account disabled\n"
+            "- Status W: Waiting for admin approval\n\n"
+            "**Tham số đầu vào:**\n"
+            "- `code`: Authorization code từ Facebook (bắt buộc)\n"
+            "- `role`: S (Student) hoặc T (Teacher) - mặc định là S (tùy chọn)"
+        ),
+        tags=["accounts"],
+        request=inline_serializer(
+            name="FacebookLoginRequest",
+            fields={
+                "code": serializers.CharField(
+                    required=True, help_text="Authorization code từ Facebook"
+                ),
+                "role": serializers.ChoiceField(
+                    choices=["S", "T"], required=False, help_text="S=Student, T=Teacher"
+                ),
+            },
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="Login successful - Returns tokens or requires profile completion",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "access": {
+                            "type": "string",
+                            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        },
+                        "refresh": {
+                            "type": "string",
+                            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        },
+                        "status": {
+                            "type": "string",
+                            "enum": ["V", "I"],
+                            "example": "V",
+                        },
+                        "username": {"type": "string"},
+                        "avatar": {"type": "string", "nullable": True},
+                        "user_id": {"type": "integer", "nullable": True},
+                        "role": {"type": "string"},
+                        "require_profile": {"type": "boolean", "nullable": True},
+                    },
+                },
+            ),
+            400: OpenApiResponse(
+                description="Invalid code or authentication failed",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "error": {
+                            "type": "string",
+                            "example": "Failed to exchange code for token",
+                        },
+                    },
+                },
+            ),
+            403: OpenApiResponse(
+                description="Account disabled or waiting approval",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "error": {
+                            "type": "string",
+                            "example": "Account has been disabled",
+                        },
+                    },
+                },
+            ),
+        },
+    )
     def post(self, request, *args, **kwargs):
         # One-time code from Facebook OAuth
         code = request.data.get("code")
         if not code:
-            return Response({"error": "No code provided"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "No code provided"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         # Exchange code for access token
         token_url = "https://graph.facebook.com/v17.0/oauth/access_token"
@@ -781,20 +1559,20 @@ class FacebookLoginAPIView(generics.GenericAPIView):
         except requests.RequestException:
             return Response(
                 {"error": "Failed to connect to Facebook"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         if token_response.status_code != 200:
             return Response(
                 {"error": "Failed to exchange code for token"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         access_token = token_response.json().get("access_token")
         if not access_token:
             return Response(
                 {"error": "No access token received from Facebook"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Fetch user info
@@ -805,13 +1583,13 @@ class FacebookLoginAPIView(generics.GenericAPIView):
         except requests.RequestException:
             return Response(
                 {"error": "Failed to fetch user info from Facebook"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         if user_response.status_code != 200:
             return Response(
                 {"error": "Failed to get user information"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         fb_data = user_response.json()
@@ -823,31 +1601,31 @@ class FacebookLoginAPIView(generics.GenericAPIView):
         if not email:
             return Response(
                 {"error": "Email is required from Facebook account"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         role = request.data.get("role", "S").upper()
-        if role not in ['S', 'T']:
-            role = 'S'
+        if role not in ["S", "T"]:
+            role = "S"
 
         try:
             user = User.objects.get(email=email)
 
-            if user.role == 'A':
+            if user.role == "A":
                 # TODO: implement admin Facebook login flow
                 return Response(
                     {"error": "Admin Facebook login is not implemented yet."},
-                    status=status.HTTP_501_NOT_IMPLEMENTED
+                    status=status.HTTP_501_NOT_IMPLEMENTED,
                 )
 
-            if user.role == 'S':
-                if user.status == 'D':
+            if user.role == "S":
+                if user.status == "D":
                     return Response(
                         {"error": "Account has been disabled"},
-                        status=status.HTTP_403_FORBIDDEN
+                        status=status.HTTP_403_FORBIDDEN,
                     )
-                if user.status == 'P':
-                    user.status = 'V'
+                if user.status == "P":
+                    user.status = "V"
                     user.save()
 
                 refresh = RefreshToken.for_user(user)
@@ -861,32 +1639,44 @@ class FacebookLoginAPIView(generics.GenericAPIView):
                 }
                 return Response(response_data, status=status.HTTP_200_OK)
 
-            elif user.role == 'T':
-                if user.status == 'D':
+            elif user.role == "T":
+                if user.status == "D":
                     return Response(
                         {"error": "Account has been disabled"},
-                        status=status.HTTP_403_FORBIDDEN
+                        status=status.HTTP_403_FORBIDDEN,
                     )
-                if user.status == 'W':
+                if user.status == "W":
                     return Response(
-                        {"error": "Your account is waiting for admin approval. Please wait."},
-                        status=status.HTTP_403_FORBIDDEN
+                        {
+                            "error": "Your account is waiting for admin approval. Please wait."
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
                     )
-                if user.status == 'P':
-                    user.status = 'I'
+                if user.status == "P":
+                    user.status = "I"
                     user.save()
-                if user.status == 'I':
                     return Response(
                         {
                             "user_id": user.id,
                             "username": user.username,
                             "role": user.role,
                             "status": user.status,
-                            "require_profile": True
+                            "require_profile": True,
                         },
-                        status=status.HTTP_200_OK
+                        status=status.HTTP_200_OK,
                     )
-                if user.status == 'V':
+                if user.status == "I":
+                    return Response(
+                        {
+                            "user_id": user.id,
+                            "username": user.username,
+                            "role": user.role,
+                            "status": user.status,
+                            "require_profile": True,
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                if user.status == "V":
                     refresh = RefreshToken.for_user(user)
                     refresh["role"] = user.role
                     response_data = {
@@ -899,8 +1689,10 @@ class FacebookLoginAPIView(generics.GenericAPIView):
                     return Response(response_data, status=status.HTTP_200_OK)
 
                 return Response(
-                    {"error": "Account is not in a valid state. Please contact support."},
-                    status=status.HTTP_403_FORBIDDEN
+                    {
+                        "error": "Account is not in a valid state. Please contact support."
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
                 )
 
         except User.DoesNotExist:
@@ -911,12 +1703,12 @@ class FacebookLoginAPIView(generics.GenericAPIView):
                 username=unique_username,
                 email=email,
                 full_name=full_name or "",
-                password=None
+                password=None,
             )
             user.role = role
 
-            if role == 'S':
-                user.status = 'V'
+            if role == "S":
+                user.status = "V"
 
                 if avatar_url:
                     avatar_path = download_and_save_avatar(avatar_url, user)
@@ -936,8 +1728,8 @@ class FacebookLoginAPIView(generics.GenericAPIView):
                 }
                 return Response(response_data, status=status.HTTP_200_OK)
 
-            elif role == 'T':
-                user.status = 'I'
+            elif role == "T":
+                user.status = "I"
 
                 if avatar_url:
                     avatar_path = download_and_save_avatar(avatar_url, user)
@@ -951,7 +1743,7 @@ class FacebookLoginAPIView(generics.GenericAPIView):
                     "role": user.role,
                     "status": user.status,
                     "avatar": user.avatar.url if user.avatar else None,
-                    "require_profile": True
+                    "require_profile": True,
                 }
                 return Response(response_data, status=status.HTTP_200_OK)
 
