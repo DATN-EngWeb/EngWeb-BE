@@ -13,13 +13,12 @@ from rest_framework_simplejwt.token_blacklist.models import (
     OutstandingToken,
 )
 
-from .models import User, Student
+from .models import User, Student, Teacher
 from .serializers import (
     UserSerializer,
     StudentSerializer,
     TeacherSerializer,
     CustomTokenObtainPairSerializer,
-    AdminUserSerializer,
 )
 from .filters import AdminUserFilter
 from .permissions import IsAdmin
@@ -1589,105 +1588,22 @@ class AdminUsersManagementAPIView(generics.GenericAPIView):
     """
     permission_classes = [IsAdmin]
     queryset = User.objects.all()
-    serializer_class = AdminUserSerializer
+    serializer_class = UserSerializer
     filter_backends = [django_filters.rest_framework.DjangoFilterBackend]
     filterset_class = AdminUserFilter
     pagination_class = AdminUserPagination
+    lookup_field = 'pk'
+    lookup_url_kwarg = 'pk'
 
-    @extend_schema(
-        summary="Admin - Users Management",
-        description=(
-            "Get list of users with filtering and pagination.\n\n"
-            "**Query Parameters:**\n"
-            "- `role`: Filter by role - S (Student), T (Teacher), A (Admin)\n"
-            "- `status`: Filter by status - P (Pending), I (Incomplete), W (Waiting), V (Verified), D (Disabled)\n"
-            "- `search`: Search by username or email (case-insensitive)\n"
-            "- `page`: Page number (default: 1)\n"
-            "- `page_size`: Number of items per page (default: 10, max: 100)\n\n"
-            "**Example Request:**\n"
-            "```\n"
-            "GET /api/accounts/admin/users?role=T&status=W&search=teacher&page=1&page_size=8\n"
-            "```\n\n"
-            "**Example Response:**\n"
-            "```json\n"
-            "{\n"
-            '    "count": 3,\n'
-            '    "next": null,\n'
-            '    "previous": null,\n'
-            '    "results": [\n'
-            "        {\n"
-            '            "id": 1023,\n'
-            '            "username": "teacher9",\n'
-            '            "email": "teacher9@example.com",\n'
-            '            "avatar_url": "http://localhost:8000/media/avatars/default-avatar.jpg",\n'
-            '            "role": "T",\n'
-            '            "role_display": "Teacher",\n'
-            '            "date_joined": "2024-01-24T17:00:00+07:00",\n'
-            '            "status": "W",\n'
-            '            "status_display": "Waiting Approval"\n'
-            "        },\n"
-            "        {\n"
-            '            "id": 1022,\n'
-            '            "username": "teacher8",\n'
-            '            "email": "teacher8@example.com",\n'
-            '            "avatar_url": "http://localhost:8000/media/avatars/default-avatar.jpg",\n'
-            '            "role": "T",\n'
-            '            "role_display": "Teacher",\n'
-            '            "date_joined": "2024-01-23T17:00:00+07:00",\n'
-            '            "status": "W",\n'
-            '            "status_display": "Waiting Approval"\n'
-            "        },\n"
-            "        {\n"
-            '            "id": 1021,\n'
-            '            "username": "teacher7",\n'
-            '            "email": "teacher7@example.com",\n'
-            '            "avatar_url": "http://localhost:8000/media/avatars/default-avatar.jpg",\n'
-            '            "role": "T",\n'
-            '            "role_display": "Teacher",\n'
-            '            "date_joined": "2024-01-22T17:00:00+07:00",\n'
-            '            "status": "W",\n'
-            '            "status_display": "Waiting Approval"\n'
-            "        }\n"
-            "    ]\n"
-            "}\n"
-            "```\n"
-        ),
-        tags=["admin"],
-        responses={
-            200: OpenApiResponse(
-                description="List of users with pagination",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "count": {"type": "integer", "example": 24},
-                        "next": {"type": "string", "nullable": True, "example": "http://api/admin/users?page=2"},
-                        "previous": {"type": "string", "nullable": True, "example": None},
-                        "results": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "id": {"type": "integer", "example": 1},
-                                    "username": {"type": "string", "example": "john_doe"},
-                                    "email": {"type": "string", "example": "john@example.com"},
-                                    "avatar_url": {"type": "string", "nullable": True},
-                                    "role": {"type": "string", "enum": ["S", "T", "A"], "example": "S"},
-                                    "role_display": {"type": "string", "example": "Student"},
-                                    "date_joined": {"type": "string", "format": "date-time"},
-                                    "status": {"type": "string", "enum": ["P", "I", "W", "V", "D"], "example": "V"},
-                                    "status_display": {"type": "string", "example": "Verified"},
-                                },
-                            },
-                        },
-                    },
-                },
-            ),
-        },
-    )
-    def get(self, request):
+    def get(self, request, *args, **kwargs):
         """
-        GET method - List users with filtering and pagination
+        GET method - Route to list or retrieve based on URL pattern
         """
+        # If pk is in kwargs, this is a retrieve request
+        if 'pk' in kwargs:
+            return self.retrieve(request, pk=kwargs.get('pk'))
+        
+        # Otherwise, this is a list request
         # Get filtered queryset
         queryset = self.filter_queryset(self.get_queryset())
         
@@ -1698,11 +1614,44 @@ class AdminUsersManagementAPIView(generics.GenericAPIView):
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
+            # Add additional fields for admin list view
+            data = self._add_admin_list_fields(serializer.data)
+            return self.get_paginated_response(data)
         
         # If no pagination, return all (shouldn't happen with pagination_class set)
         serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        data = self._add_admin_list_fields(serializer.data)
+        return Response(data, status=status.HTTP_200_OK)
+
+    def _add_admin_list_fields(self, data_list):
+        """
+        Add role_display, status_display, avatar_url to each user in list
+        """
+        request = self.request
+        for item in data_list:
+            # Add role_display
+            role = item.get('role', '')
+            role_display_map = {'S': 'Student', 'T': 'Teacher', 'A': 'Admin'}
+            item['role_display'] = role_display_map.get(role, '')
+            
+            # Add status_display
+            status = item.get('status', '')
+            status_display_map = {
+                'P': 'Pending Verification',
+                'I': 'Incomplete Profile',
+                'W': 'Waiting Approval',
+                'V': 'Verified',
+                'D': 'Disabled'
+            }
+            item['status_display'] = status_display_map.get(status, '')
+            
+            # Add avatar_url (convert avatar field to avatar_url with absolute URL)
+            avatar = item.get('avatar')
+            item['avatar_url'] = get_absolute_media_url(avatar, request)
+            # Remove avatar field if exists (keep only avatar_url)
+            item.pop('avatar', None)
+        
+        return data_list
 
     def get_queryset(self):
         """
@@ -1717,3 +1666,69 @@ class AdminUsersManagementAPIView(generics.GenericAPIView):
         context = super().get_serializer_context()
         context['request'] = self.request
         return context
+
+    def retrieve(self, request, pk=None):
+        """
+        Retrieve detailed information of a teacher user
+        Only teachers (role='T') can be viewed
+        """
+        try:
+            user = self.get_object()
+        except User.DoesNotExist:
+            return Response(
+                {"error": "User not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Check if user is a teacher
+        if user.role != 'T':
+            return Response(
+                {"error": "You can only view teacher information"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Get user data
+        user_serializer = UserSerializer(user, context={'request': request})
+        user_data = user_serializer.data
+        
+        # Get teacher data
+        try:
+            teacher = user.teacher
+            teacher_serializer = TeacherSerializer(teacher, context={'request': request})
+            teacher_data = teacher_serializer.data
+            
+            # Process credentials to absolute URLs
+            credentials = teacher_data.get('credentials', {})
+            if credentials and 'certificates' in credentials:
+                certificates = credentials['certificates']
+                processed_certificates = []
+                for cert in certificates:
+                    cert_url = cert.get('url', '')
+                    if cert_url:
+                        absolute_url = get_absolute_media_url(cert_url, request)
+                        processed_cert = cert.copy()
+                        processed_cert['url'] = absolute_url
+                        processed_certificates.append(processed_cert)
+                    else:
+                        processed_certificates.append(cert)
+                credentials['certificates'] = processed_certificates
+                teacher_data['credentials'] = credentials
+        except Teacher.DoesNotExist:
+            teacher_data = {}
+
+        # Combine user and teacher data
+        response_data = user_data.copy()
+        response_data.update(teacher_data)
+        
+        # Add display fields
+        response_data['role_display'] = user.get_role_display()
+        response_data['status_display'] = user.get_status_display()
+        if hasattr(user, 'teacher'):
+            response_data['teacher_type_display'] = user.teacher.get_teacher_type_display()
+        
+        # Convert avatar to avatar_url using helper function
+        avatar = response_data.get('avatar')
+        response_data['avatar_url'] = get_absolute_media_url(avatar, request)
+        response_data.pop('avatar', None)
+        
+        return Response(response_data, status=status.HTTP_200_OK)
