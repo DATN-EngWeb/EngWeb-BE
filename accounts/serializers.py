@@ -1,5 +1,10 @@
 from .models import User, Teacher, Student
-from .utils import create_otp_code, cache_register_otp, send_registration_otp_email
+from .utils import (
+    create_otp_code,
+    cache_register_otp,
+    send_registration_otp_email,
+    get_absolute_media_url,
+)
 
 from django.core.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
@@ -210,12 +215,29 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         if not user.is_active:
             raise serializers.ValidationError({'detail': 'Account is deactivated.', 'status': 'D'})
 
-        # Placeholder for admin login flow
-        if user.role == 'A':
-            # TODO: implement admin-specific login handling
-            pass
+        status_code = getattr(user, 'status', None)
 
-        status_code = getattr(user, 'status', None)  # P/I/W/V/D
+        # Admin login flow - only allow status V
+        if user.role == 'A':
+            if status_code != 'V':
+                raise serializers.ValidationError({
+                    'detail': 'Please contact the development team for assistance.',
+                    'status': status_code,
+                })
+            # Admin with status V -> issue tokens
+            refresh = self.get_token(user)
+            access = refresh.access_token
+            update_last_login(None, user)
+
+            # Get request from context if available (for building absolute URL)
+            request = self.context.get('request') if hasattr(self, 'context') else None
+            return {
+                'refresh': str(refresh),
+                'access': str(access),
+                'status': status_code,
+                'username': user.username,
+                'avatar': get_absolute_media_url(user.avatar, request),
+            }
 
         # 3) Pending verification -> resend OTP
         if status_code == 'P':
@@ -259,10 +281,51 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         access = refresh.access_token
         update_last_login(None, user)
 
+        # Get request from context if available (for building absolute URL)
+        request = self.context.get('request') if hasattr(self, 'context') else None
         return {
             'refresh': str(refresh),
             'access': str(access),
             'status': status_code,
             'username': user.username,
-            'avatar': user.avatar.url if getattr(user, 'avatar', None) else None,
+            'avatar': get_absolute_media_url(user.avatar, request),
         }
+
+
+class AdminUserSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Admin Dashboard - List Users
+    Returns: id, username, email, avatar_url, role, role_display, date_joined, status, status_display
+    """
+    role_display = serializers.CharField(source='get_role_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    avatar_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'username',
+            'email',
+            'avatar_url',
+            'role',
+            'role_display',
+            'date_joined',
+            'status',
+            'status_display',
+        ]
+        # Use read_only_fields for simplicity since we only need read_only=True
+        # All these fields should not be modified through this serializer
+        read_only_fields = ['id', 'username', 'email', 'role', 'date_joined', 'status']
+
+    def get_avatar_url(self, obj):
+        """
+        Build absolute URL for avatar image using helper function.
+        
+        Why build_absolute_uri?
+        - obj.avatar.url returns relative path: /media/avatars/user.jpg
+        - Frontend needs full URL: http://localhost:8000/media/avatars/user.jpg
+        - build_absolute_uri() creates complete URL from request
+        """
+        request = self.context.get('request')
+        return get_absolute_media_url(obj.avatar, request)

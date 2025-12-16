@@ -49,7 +49,7 @@ class User(AbstractUser):
             ('P', 'Pending Verification'), # has not been verified OTP yet(both student and teacher)
             ('I', 'Incomplete Profile'), # verified OTP but profile information is incomplete (only teacher)
             ('W', 'Waiting Approval'), # verified OTP, profile complete, waiting for admin approval (only teacher)
-            ('V', 'Verified'), # verified OTP (both student and teacher)
+            ('V', 'Verified'), # verified OTP for student and profile for teacher)
             ('D', 'Disabled'), # disabled (both student and teacher)
         ],
         default='P'

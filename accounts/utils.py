@@ -649,3 +649,34 @@ def generate_unique_username(base_username):
         new_username = f"{base_username}_{unique_suffix}"
 
     return new_username
+
+
+def get_absolute_media_url(media_field, request=None):
+    """
+    Build absolute URL for any media file field (ImageField, FileField, etc.).
+    
+    This function can be used for:
+    - Avatar images
+    - Credential files (PDFs, images)
+    - Any other media files
+    
+    Args:
+        media_field: ImageField or FileField instance (e.g., user.avatar, teacher.credentials)
+        request: HttpRequest object (optional, for building absolute URL)
+    
+    Returns:
+        str: Absolute URL if media field exists, None otherwise
+    """
+    if not media_field:
+        return None
+    
+    # Try to build absolute URL from request first
+    if request:
+        try:
+            return request.build_absolute_uri(media_field.url)
+        except Exception:
+            pass
+    
+    # Fallback: return relative path from field
+    # Frontend can handle it if needed
+    return media_field.url if media_field else None

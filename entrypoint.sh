@@ -30,10 +30,20 @@ password = os.environ['DJANGO_SUPERUSER_PASSWORD']
 
 User = get_user_model()
 if not User.objects.filter(username=username).exists():
-    User.objects.create_superuser(username=username, email=email, password=password)
+    user = User.objects.create_superuser(username=username, email=email, password=password)
+    # Set status to 'V' (Verified) for admin
+    user.status = 'V'
+    user.save()
     print(f"Created superuser: {username} / {email}")
 else:
-    print(f"Superuser '{username}' already exists. Skipping creation.")
+    # Update existing superuser to ensure status is 'V'
+    user = User.objects.get(username=username)
+    if user.status != 'V':
+        user.status = 'V'
+        user.save()
+        print(f"Updated superuser '{username}' status to V")
+    else:
+        print(f"Superuser '{username}' already exists with status=V. Skipping creation.")
 PY
 
 exec python manage.py runserver 0.0.0.0:8000

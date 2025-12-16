@@ -14,6 +14,7 @@ from .views import (
     ResendForgotPasswordOTPAPIView,
     GoogleLoginAPIView,
     FacebookLoginAPIView,
+    AdminUsersManagementAPIView,
 )
 
 urlpatterns = [
@@ -30,4 +31,5 @@ urlpatterns = [
     path('reset-password', ResetPasswordAPIView.as_view(), name='reset-password'),
     path('auth/google/login', GoogleLoginAPIView.as_view(), name='google-login'),
     path('auth/facebook/login', FacebookLoginAPIView.as_view(), name='facebook-login'),
+    path('admin/users', AdminUsersManagementAPIView.as_view(), name='admin-users-management'),
 ]

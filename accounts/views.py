@@ -19,7 +19,10 @@ from .serializers import (
     StudentSerializer,
     TeacherSerializer,
     CustomTokenObtainPairSerializer,
+    AdminUserSerializer,
 )
+from .filters import AdminUserFilter
+from .permissions import IsAdmin
 from .utils import (
     create_otp_code,
     cache_register_otp,
@@ -33,6 +36,7 @@ from .utils import (
     resend_forgot_password_otp_email,
     download_and_save_avatar,
     generate_unique_username,
+    get_absolute_media_url,
 )
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -43,6 +47,8 @@ from drf_spectacular.utils import (
     inline_serializer,
 )
 from rest_framework import serializers
+from rest_framework.pagination import PageNumberPagination
+import django_filters
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -93,26 +99,6 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                     "required": ["access", "refresh", "status", "username"],
                 },
             ),
-            400: OpenApiResponse(
-                description="Authentication failed or account not in valid state",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "detail": {
-                            "type": "string",
-                            "example": "'Account is not verified yet. OTP sent to your email.'",
-                        },
-                        "user_id": {"type": "integer", "nullable": True},
-                        "status": {
-                            "type": "string",
-                            "enum": ["P", "I", "W", "D"],
-                            "nullable": True,
-                        },
-                        "require_verification": {"type": "boolean", "nullable": True},
-                        "require_certificate": {"type": "boolean", "nullable": True},
-                    },
-                },
-            ),
         },
     )
     def post(self, request, *args, **kwargs):
@@ -153,30 +139,6 @@ class LogoutAPIView(generics.GenericAPIView):
                         },
                     },
                     "required": ["message"],
-                },
-            ),
-            400: OpenApiResponse(
-                description="Invalid or missing refresh token",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "detail": {
-                            "type": "string",
-                            "example": "refresh token is required",
-                        },
-                    },
-                },
-            ),
-            401: OpenApiResponse(
-                description="Unauthorized - Access token is invalid or expired",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "detail": {
-                            "type": "string",
-                            "example": "Authentication credentials were not provided.",
-                        },
-                    },
                 },
             ),
         },
@@ -229,18 +191,6 @@ class UserRegistrationAPIView(generics.GenericAPIView):
                         "user_id": {"type": "integer", "example": 12},
                     },
                     "required": ["message", "user_id"],
-                },
-            ),
-            400: OpenApiResponse(
-                description="Invalid input data",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "detail": {
-                            "type": "string",
-                            "example": "Invalid role. Must be 'S' (Student) or 'T' (Teacher).",
-                        }
-                    },
                 },
             ),
         },
@@ -330,18 +280,6 @@ class VerifyRegistrationOTPAPIView(generics.GenericAPIView):
                     "required": ["message", "user_id", "status"],
                 },
             ),
-            400: OpenApiResponse(
-                description="Invalid OTP, expired OTP, or user not found",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "detail": {
-                            "type": "string",
-                            "example": "Invalid OTP code or OTP has expired.",
-                        },
-                    },
-                },
-            ),
         },
     )
     def post(self, request):
@@ -429,18 +367,6 @@ class ResendRegistrationOTPAPIView(generics.GenericAPIView):
                         },
                     },
                     "required": ["message"],
-                },
-            ),
-            400: OpenApiResponse(
-                description="Invalid user_id or user not found",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "detail": {
-                            "type": "string",
-                            "example": "User not found or account already verified.",
-                        },
-                    },
                 },
             ),
         },
@@ -549,38 +475,6 @@ class TeacherAPIView(generics.GenericAPIView):
                     "required": ["message", "user_id", "status", "teacher_id"],
                 },
             ),
-            400: OpenApiResponse(
-                description="Invalid input data or validation failed",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "detail": {
-                            "type": "string",
-                            "example": "Profile already completed or not allowed.",
-                        },
-                        "user": {
-                            "type": "object",
-                            "example": {"full_name": "This field is required."},
-                        },
-                        "credentials": {
-                            "type": "string",
-                            "example": "At least one certificate is required.",
-                        },
-                    },
-                },
-            ),
-            404: OpenApiResponse(
-                description="Teacher not found",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "detail": {
-                            "type": "string",
-                            "example": "Teacher not found.",
-                        },
-                    },
-                },
-            ),
         },
     )
     def post(self, request):
@@ -673,6 +567,7 @@ class TeacherAPIView(generics.GenericAPIView):
             "status": user.status,
             "teacher_id": teacher.user_id,
         }
+        
         return Response(response, status=status.HTTP_201_CREATED)
 
 
@@ -719,21 +614,6 @@ class ForgotPasswordAPIView(generics.GenericAPIView):
                         },
                     },
                     "required": ["message", "username"],
-                },
-            ),
-            400: OpenApiResponse(
-                description="Account not verified or invalid status",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "detail": {
-                            "type": "string",
-                            "example": "Account is not verified yet. OTP sent to your email.",
-                        },
-                        "status": {"type": "string", "nullable": True},
-                        "user_id": {"type": "integer", "nullable": True},
-                        "require_verification": {"type": "boolean", "nullable": True},
-                    },
                 },
             ),
         },
@@ -881,18 +761,6 @@ class ForgotPasswordVerifyOTPAPIView(generics.GenericAPIView):
                     "required": ["message", "reset_token", "expires_at"],
                 },
             ),
-            400: OpenApiResponse(
-                description="Invalid OTP or expired",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "detail": {
-                            "type": "string",
-                            "example": "Invalid OTP code.",
-                        },
-                    },
-                },
-            ),
         },
     )
     def post(self, request):
@@ -990,18 +858,6 @@ class ResetPasswordAPIView(generics.GenericAPIView):
                         },
                     },
                     "required": ["message"],
-                },
-            ),
-            400: OpenApiResponse(
-                description="Invalid token or reset failed",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "detail": {
-                            "type": "string",
-                            "example": "Invalid or expired token.",
-                        },
-                    },
                 },
             ),
         },
@@ -1104,18 +960,6 @@ class ResendForgotPasswordOTPAPIView(generics.GenericAPIView):
                     "required": ["detail"],
                 },
             ),
-            400: OpenApiResponse(
-                description="User not found or error resending",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "detail": {
-                            "type": "string",
-                            "example": "User not found.",
-                        },
-                    },
-                },
-            ),
         },
     )
     def post(self, request):
@@ -1200,30 +1044,6 @@ class GoogleLoginAPIView(generics.GenericAPIView):
                         "user_id": {"type": "integer", "nullable": True},
                         "role": {"type": "string"},
                         "require_profile": {"type": "boolean", "nullable": True},
-                    },
-                },
-            ),
-            400: OpenApiResponse(
-                description="Invalid code or authentication failed",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "error": {
-                            "type": "string",
-                            "example": "Failed to exchange code for token",
-                        },
-                    },
-                },
-            ),
-            403: OpenApiResponse(
-                description="Account disabled or waiting approval",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "error": {
-                            "type": "string",
-                            "example": "Account has been disabled",
-                        },
                     },
                 },
             ),
@@ -1315,11 +1135,23 @@ class GoogleLoginAPIView(generics.GenericAPIView):
 
             # Branch by role for existing user
             if user.role == "A":
-                # TODO: implement admin Google login flow
-                return Response(
-                    {"error": "Admin Google login is not implemented yet."},
-                    status=status.HTTP_501_NOT_IMPLEMENTED,
-                )
+                # Admin login flow - only allow status V
+                if user.status != "V":
+                    return Response(
+                        {"error": "Please contact the development team for assistance."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                # Admin with status V -> return tokens
+                refresh = RefreshToken.for_user(user)
+                refresh["role"] = user.role
+                response_data = {
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
+                    "status": user.status,
+                    "username": user.username,
+                    "avatar": get_absolute_media_url(user.avatar, request),
+                }
+                return Response(response_data, status=status.HTTP_200_OK)
 
             if user.role == "S":
                 # Student flow
@@ -1339,7 +1171,7 @@ class GoogleLoginAPIView(generics.GenericAPIView):
                     "refresh": str(refresh),
                     "status": user.status,
                     "username": user.username,
-                    "avatar": user.avatar.url if user.avatar else None,
+                    "avatar": get_absolute_media_url(user.avatar, request),
                 }
                 return Response(response_data, status=status.HTTP_200_OK)
 
@@ -1391,7 +1223,7 @@ class GoogleLoginAPIView(generics.GenericAPIView):
                         "refresh": str(refresh),
                         "status": user.status,
                         "username": user.username,
-                        "avatar": user.avatar.url if user.avatar else None,
+                        "avatar": get_absolute_media_url(user.avatar, request),
                     }
                     return Response(response_data, status=status.HTTP_200_OK)
 
@@ -1441,7 +1273,7 @@ class GoogleLoginAPIView(generics.GenericAPIView):
                     "refresh": str(refresh),
                     "status": user.status,
                     "username": user.username,
-                    "avatar": user.avatar.url if user.avatar else None,
+                    "avatar": get_absolute_media_url(user.avatar, request),
                 }
 
                 return Response(response_data, status=status.HTTP_200_OK)
@@ -1509,30 +1341,6 @@ class FacebookLoginAPIView(generics.GenericAPIView):
                         "user_id": {"type": "integer", "nullable": True},
                         "role": {"type": "string"},
                         "require_profile": {"type": "boolean", "nullable": True},
-                    },
-                },
-            ),
-            400: OpenApiResponse(
-                description="Invalid code or authentication failed",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "error": {
-                            "type": "string",
-                            "example": "Failed to exchange code for token",
-                        },
-                    },
-                },
-            ),
-            403: OpenApiResponse(
-                description="Account disabled or waiting approval",
-                response={
-                    "type": "object",
-                    "properties": {
-                        "error": {
-                            "type": "string",
-                            "example": "Account has been disabled",
-                        },
                     },
                 },
             ),
@@ -1612,11 +1420,23 @@ class FacebookLoginAPIView(generics.GenericAPIView):
             user = User.objects.get(email=email)
 
             if user.role == "A":
-                # TODO: implement admin Facebook login flow
-                return Response(
-                    {"error": "Admin Facebook login is not implemented yet."},
-                    status=status.HTTP_501_NOT_IMPLEMENTED,
-                )
+                # Admin login flow - only allow status V
+                if user.status != "V":
+                    return Response(
+                        {"error": "Please contact the development team for assistance."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                # Admin with status V -> return tokens
+                refresh = RefreshToken.for_user(user)
+                refresh["role"] = user.role
+                response_data = {
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
+                    "status": user.status,
+                    "username": user.username,
+                    "avatar": get_absolute_media_url(user.avatar, request),
+                }
+                return Response(response_data, status=status.HTTP_200_OK)
 
             if user.role == "S":
                 if user.status == "D":
@@ -1635,7 +1455,7 @@ class FacebookLoginAPIView(generics.GenericAPIView):
                     "refresh": str(refresh),
                     "status": user.status,
                     "username": user.username,
-                    "avatar": user.avatar.url if user.avatar else None,
+                    "avatar": get_absolute_media_url(user.avatar, request),
                 }
                 return Response(response_data, status=status.HTTP_200_OK)
 
@@ -1684,7 +1504,7 @@ class FacebookLoginAPIView(generics.GenericAPIView):
                         "refresh": str(refresh),
                         "status": user.status,
                         "username": user.username,
-                        "avatar": user.avatar.url if user.avatar else None,
+                        "avatar": get_absolute_media_url(user.avatar, request),
                     }
                     return Response(response_data, status=status.HTTP_200_OK)
 
@@ -1724,7 +1544,7 @@ class FacebookLoginAPIView(generics.GenericAPIView):
                     "refresh": str(refresh),
                     "status": user.status,
                     "username": user.username,
-                    "avatar": user.avatar.url if user.avatar else None,
+                    "avatar": get_absolute_media_url(user.avatar, request),
                 }
                 return Response(response_data, status=status.HTTP_200_OK)
 
@@ -1742,9 +1562,158 @@ class FacebookLoginAPIView(generics.GenericAPIView):
                     "username": user.username,
                     "role": user.role,
                     "status": user.status,
-                    "avatar": user.avatar.url if user.avatar else None,
+                    "avatar": get_absolute_media_url(user.avatar, request),
                     "require_profile": True,
                 }
                 return Response(response_data, status=status.HTTP_200_OK)
 
         return Response({"error": "Unhandled flow"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AdminUserPagination(PageNumberPagination):
+    """
+    Pagination class for Admin Users API
+    """
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class AdminUsersManagementAPIView(generics.GenericAPIView):
+    """
+    Admin Users Management API - Manage users and pending approvals
+    
+    Supports multiple HTTP methods:
+    - GET: List users with filtering and pagination
+    - Future methods will be added here (PATCH, DELETE, etc.)
+    """
+    permission_classes = [IsAdmin]
+    queryset = User.objects.all()
+    serializer_class = AdminUserSerializer
+    filter_backends = [django_filters.rest_framework.DjangoFilterBackend]
+    filterset_class = AdminUserFilter
+    pagination_class = AdminUserPagination
+
+    @extend_schema(
+        summary="Admin - Users Management",
+        description=(
+            "Get list of users with filtering and pagination.\n\n"
+            "**Query Parameters:**\n"
+            "- `role`: Filter by role - S (Student), T (Teacher), A (Admin)\n"
+            "- `status`: Filter by status - P (Pending), I (Incomplete), W (Waiting), V (Verified), D (Disabled)\n"
+            "- `search`: Search by username or email (case-insensitive)\n"
+            "- `page`: Page number (default: 1)\n"
+            "- `page_size`: Number of items per page (default: 10, max: 100)\n\n"
+            "**Example Request:**\n"
+            "```\n"
+            "GET /api/accounts/admin/users?role=T&status=W&search=teacher&page=1&page_size=8\n"
+            "```\n\n"
+            "**Example Response:**\n"
+            "```json\n"
+            "{\n"
+            '    "count": 3,\n'
+            '    "next": null,\n'
+            '    "previous": null,\n'
+            '    "results": [\n'
+            "        {\n"
+            '            "id": 1023,\n'
+            '            "username": "teacher9",\n'
+            '            "email": "teacher9@example.com",\n'
+            '            "avatar_url": "http://localhost:8000/media/avatars/default-avatar.jpg",\n'
+            '            "role": "T",\n'
+            '            "role_display": "Teacher",\n'
+            '            "date_joined": "2024-01-24T17:00:00+07:00",\n'
+            '            "status": "W",\n'
+            '            "status_display": "Waiting Approval"\n'
+            "        },\n"
+            "        {\n"
+            '            "id": 1022,\n'
+            '            "username": "teacher8",\n'
+            '            "email": "teacher8@example.com",\n'
+            '            "avatar_url": "http://localhost:8000/media/avatars/default-avatar.jpg",\n'
+            '            "role": "T",\n'
+            '            "role_display": "Teacher",\n'
+            '            "date_joined": "2024-01-23T17:00:00+07:00",\n'
+            '            "status": "W",\n'
+            '            "status_display": "Waiting Approval"\n'
+            "        },\n"
+            "        {\n"
+            '            "id": 1021,\n'
+            '            "username": "teacher7",\n'
+            '            "email": "teacher7@example.com",\n'
+            '            "avatar_url": "http://localhost:8000/media/avatars/default-avatar.jpg",\n'
+            '            "role": "T",\n'
+            '            "role_display": "Teacher",\n'
+            '            "date_joined": "2024-01-22T17:00:00+07:00",\n'
+            '            "status": "W",\n'
+            '            "status_display": "Waiting Approval"\n'
+            "        }\n"
+            "    ]\n"
+            "}\n"
+            "```\n"
+        ),
+        tags=["admin"],
+        responses={
+            200: OpenApiResponse(
+                description="List of users with pagination",
+                response={
+                    "type": "object",
+                    "properties": {
+                        "count": {"type": "integer", "example": 24},
+                        "next": {"type": "string", "nullable": True, "example": "http://api/admin/users?page=2"},
+                        "previous": {"type": "string", "nullable": True, "example": None},
+                        "results": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {"type": "integer", "example": 1},
+                                    "username": {"type": "string", "example": "john_doe"},
+                                    "email": {"type": "string", "example": "john@example.com"},
+                                    "avatar_url": {"type": "string", "nullable": True},
+                                    "role": {"type": "string", "enum": ["S", "T", "A"], "example": "S"},
+                                    "role_display": {"type": "string", "example": "Student"},
+                                    "date_joined": {"type": "string", "format": "date-time"},
+                                    "status": {"type": "string", "enum": ["P", "I", "W", "V", "D"], "example": "V"},
+                                    "status_display": {"type": "string", "example": "Verified"},
+                                },
+                            },
+                        },
+                    },
+                },
+            ),
+        },
+    )
+    def get(self, request):
+        """
+        GET method - List users with filtering and pagination
+        """
+        # Get filtered queryset
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # Order by date_joined (newest first)
+        queryset = queryset.order_by('-date_joined')
+        
+        # Paginate
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        # If no pagination, return all (shouldn't happen with pagination_class set)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def get_queryset(self):
+        """
+        Get queryset - can be overridden for custom filtering
+        """
+        return User.objects.all()
+
+    def get_serializer_context(self):
+        """
+        Add request to serializer context for building absolute URLs
+        """
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
