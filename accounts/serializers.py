@@ -1,5 +1,10 @@
 from .models import User, Teacher, Student
-from .utils import create_otp_code, cache_register_otp, send_registration_otp_email
+from .utils import (
+    create_otp_code,
+    cache_register_otp,
+    send_registration_otp_email,
+    get_absolute_media_url,
+)
 
 from django.core.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
@@ -210,12 +215,29 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         if not user.is_active:
             raise serializers.ValidationError({'detail': 'Account is deactivated.', 'status': 'D'})
 
-        # Placeholder for admin login flow
-        if user.role == 'A':
-            # TODO: implement admin-specific login handling
-            pass
+        status_code = getattr(user, 'status', None)
 
-        status_code = getattr(user, 'status', None)  # P/I/W/V/D
+        # Admin login flow - only allow status V
+        if user.role == 'A':
+            if status_code != 'V':
+                raise serializers.ValidationError({
+                    'detail': 'Please contact the development team for assistance.',
+                    'status': status_code,
+                })
+            # Admin with status V -> issue tokens
+            refresh = self.get_token(user)
+            access = refresh.access_token
+            update_last_login(None, user)
+
+            # Get request from context if available (for building absolute URL)
+            request = self.context.get('request') if hasattr(self, 'context') else None
+            return {
+                'refresh': str(refresh),
+                'access': str(access),
+                'status': status_code,
+                'username': user.username,
+                'avatar': get_absolute_media_url(user.avatar, request),
+            }
 
         # 3) Pending verification -> resend OTP
         if status_code == 'P':
@@ -259,10 +281,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         access = refresh.access_token
         update_last_login(None, user)
 
+        # Get request from context if available (for building absolute URL)
+        request = self.context.get('request') if hasattr(self, 'context') else None
         return {
             'refresh': str(refresh),
             'access': str(access),
             'status': status_code,
             'username': user.username,
-            'avatar': user.avatar.url if getattr(user, 'avatar', None) else None,
+            'avatar': get_absolute_media_url(user.avatar, request),
         }

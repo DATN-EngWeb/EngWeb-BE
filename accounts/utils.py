@@ -649,3 +649,46 @@ def generate_unique_username(base_username):
         new_username = f"{base_username}_{unique_suffix}"
 
     return new_username
+
+
+def get_absolute_media_url(media_field, request=None):
+    """
+    Build absolute URL for any media file field (ImageField, FileField, etc.) or string path.
+    
+    This function can be used for:
+    - Avatar images
+    - Credential files (PDFs, images)
+    - Any other media files
+    - String paths (e.g., from serializer)
+    
+    Args:
+        media_field: ImageField/FileField instance OR string path (e.g., user.avatar or "avatars/default.jpg")
+        request: HttpRequest object (optional, for building absolute URL)
+    
+    Returns:
+        str: Absolute URL if media field exists, None otherwise
+    """
+    if not media_field:
+        return None
+    
+    # Handle string path (from serializer)
+    if isinstance(media_field, str):
+        # Check if already absolute URL
+        if media_field.startswith('http'):
+            return media_field
+        # Build absolute URL from relative path
+        if request:
+            return request.build_absolute_uri(f'/media/{media_field}')
+        return f'/media/{media_field}'
+    
+    # Handle ImageField/FileField object
+    # Try to build absolute URL from request first
+    if request:
+        try:
+            return request.build_absolute_uri(media_field.url)
+        except Exception:
+            pass
+    
+    # Fallback: return relative path from field
+    # Frontend can handle it if needed
+    return media_field.url if media_field else None
