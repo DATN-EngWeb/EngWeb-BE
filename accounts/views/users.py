@@ -314,6 +314,7 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
                 user_data.update(teacher_data)
                 user_data['teacher_type_display'] = teacher.get_teacher_type_display()
             except Teacher.DoesNotExist:
+                # No teacher profile attached to this user, ignore silently
                 pass
 
         # Add display fields

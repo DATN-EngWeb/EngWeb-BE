@@ -45,5 +45,5 @@ urlpatterns = [
 
     # Users endpoints
     path('users', UserListAPIView.as_view(), name='user-list'),
-    path('users/<int:pk>/', UserRetrieveUpdateDestroyAPIView.as_view(), name='user-retrieve-update-destroy'),
+    path('users/<int:pk>', UserRetrieveUpdateDestroyAPIView.as_view(), name='user-retrieve-update-destroy'),
 ]

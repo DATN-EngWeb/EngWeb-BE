@@ -2,7 +2,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 
-from ..models import User, Student
+from ..models import User
 from ..serializers import (
     UserSerializer,
     StudentSerializer,
