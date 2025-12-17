@@ -3,7 +3,7 @@ from django.db.models import Q
 from .models import User
 
 
-class AdminUserFilter(filters.FilterSet):
+class UserFilter(filters.FilterSet):
     role = filters.ChoiceFilter(
         choices=[('S', 'Student'), ('T', 'Teacher'), ('A', 'Admin')]
     )
