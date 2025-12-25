@@ -428,6 +428,28 @@ class GoogleLoginAPIView(generics.GenericAPIView):
 
                 return Response(response_data, status=status.HTTP_200_OK)
 
+            elif role == "T":
+                # Teacher: Incomplete status, require profile completion
+                user.status = "I"
+
+                # Download and save avatar
+                if avatar_url:
+                    avatar_path = download_and_save_avatar(avatar_url, user)
+                    if avatar_path:
+                        user.avatar = avatar_path
+
+                user.save()
+
+                response_data = {
+                    "user_id": user.id,
+                    "username": user.username,
+                    "role": user.role,
+                    "status": user.status,
+                    "avatar": get_absolute_media_url(user.avatar, request),
+                    "require_profile": True,
+                }
+                return Response(response_data, status=status.HTTP_200_OK)
+
 
 class FacebookLoginAPIView(generics.GenericAPIView):
     permission_classes = [permissions.AllowAny]
