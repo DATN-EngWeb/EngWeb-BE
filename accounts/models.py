@@ -95,7 +95,7 @@ class User(AbstractUser):
 
 # teacher model
 class Teacher(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True, related_name='teacher')
 
     current_workplace = models.CharField(max_length=255)
     teacher_type = models.CharField(
@@ -125,7 +125,7 @@ class Teacher(models.Model):
 
 # student model
 class Student(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True, related_name='student')
     
     # points and rewards
     cumulative_point = models.IntegerField(validators=[MinValueValidator(0)], default=0)
