@@ -26,4 +26,4 @@ class ReceptiveTestAdmin(admin.ModelAdmin):
 
 @admin.register(ProductiveTest)
 class ProductiveTestAdmin(admin.ModelAdmin):
-    list_display = ("test", "format", "question_text", "resources", "criterias")
+    list_display = ("test", "format", "question_text", "resources", "criteria")
