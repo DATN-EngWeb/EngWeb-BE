@@ -79,7 +79,7 @@ class ProductiveTest(models.Model):
     format = models.CharField(max_length=1, choices=[])  # Update choices when needed
     question_text = models.TextField()
     resources = models.JSONField(default=dict)
-    criterias = models.JSONField(default=dict)
+    criteria = models.JSONField(default=dict)
 
     def __str__(self):
         return f"Productive Test for {self.test.title}"
