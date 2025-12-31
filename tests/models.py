@@ -10,8 +10,6 @@ class Test(models.Model):
         choices=[
             ("B1", "B1"),
             ("B2", "B2"),
-            ("C1", "C1"),
-            ("C2", "C2"),
             ("A1", "A1"),
             ("A2", "A2"),
         ],
@@ -74,16 +72,17 @@ class ReceptiveTest(models.Model):
     class Meta:
         db_table = "receptive_test"
 
+
 class ProductiveTest(models.Model):
     test = models.OneToOneField(Test, on_delete=models.CASCADE, primary_key=True)
 
-    format = models.CharField(max_length=1, choices=[]) # Update choices when needed
+    format = models.CharField(max_length=1, choices=[])  # Update choices when needed
     question_text = models.TextField()
     resources = models.JSONField(default=dict)
     criterias = models.JSONField(default=dict)
 
     def __str__(self):
         return f"Productive Test for {self.test.title}"
-    
+
     class Meta:
-        db_table = 'productive_test'
+        db_table = "productive_test"
