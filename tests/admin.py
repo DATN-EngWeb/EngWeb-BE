@@ -1,0 +1,29 @@
+from django.contrib import admin
+from .models import Test, ReceptiveTest, ProductiveTest
+
+
+# Register your models here.
+@admin.register(Test)
+class TestAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "title",
+        "level",
+        "skill",
+        "time",
+        "description",
+        "completed_bonus",
+        "status",
+        "created_at",
+        "created_by",
+    )
+
+
+@admin.register(ReceptiveTest)
+class ReceptiveTestAdmin(admin.ModelAdmin):
+    list_display = ("test", "total_score", "base_qualified_bonus")
+
+
+@admin.register(ProductiveTest)
+class ProductiveTestAdmin(admin.ModelAdmin):
+    list_display = ("test", "format", "question_text", "resources", "criteria")
