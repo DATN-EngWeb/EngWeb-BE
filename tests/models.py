@@ -86,3 +86,73 @@ class ProductiveTest(models.Model):
 
     class Meta:
         db_table = "productive_test"
+
+
+class ReceptivePart(models.Model):
+    receptive_test = models.ForeignKey(
+        ReceptiveTest, on_delete=models.CASCADE, related_name="receptive_parts"
+    )
+
+    order = models.IntegerField(validators=[MinValueValidator(1)])
+    format = models.CharField(
+        max_length=1,
+        choices=[
+            ("A", "Listening - Multiple Choice images"),
+            ("B", "Listening - Multiple Choice text (one audio per question)"),
+            ("C", "Listening - Multiple Choice text (one audio for all questions)"),
+            ("D", "Listening - Fill in the blanks"),
+            ("E", "Listening - Matching"),
+            ("F", "Reading - Multiple Choice (short text)"),
+            ("G", "Reading - Multiple Choice (long text)"),
+            ("H", "Reading - Fill in the blanks (multiple choice)"),
+            ("I", "Reading - Fill in the blanks (text)"),
+            ("J", "Reading - Matching"),
+        ],
+    )
+    description = models.TextField()
+    content = models.TextField(blank=True, null=True)
+    score = models.IntegerField(
+        validators=[MinValueValidator(0)], default=0
+    )  # Score is calculated depending on the questions in the part
+    resources = models.JSONField(default=dict)
+
+    def __str__(self):
+        return f"Part {self.order} of {self.receptive_test.test.title}"
+
+    class Meta:
+        db_table = "receptive_part"
+
+
+class ReceptiveQuestion(models.Model):
+    receptive_part = models.ForeignKey(
+        ReceptivePart, on_delete=models.CASCADE, related_name="receptive_questions"
+    )
+
+    question_number = models.IntegerField(validators=[MinValueValidator(1)])
+    content = models.TextField()
+    explanation = models.TextField(blank=True, null=True)
+    score = models.IntegerField(validators=[MinValueValidator(0)], default=0)
+    resources = models.JSONField(default=dict)
+
+    def __str__(self):
+        return f"Question {self.question_number} of Part {self.receptive_part.order} in {self.receptive_part.receptive_test.test.title}"
+
+    class Meta:
+        db_table = "receptive_question"
+
+
+class ReceptiveAnswer(models.Model):
+    receptive_question = models.ForeignKey(
+        ReceptiveQuestion, on_delete=models.CASCADE, related_name="receptive_answers"
+    )
+
+    option_label = models.CharField(max_length=1)
+    answer_text = models.TextField(blank=True, null=True)
+    is_correct = models.BooleanField(default=False)
+    resources = models.JSONField(default=dict)
+
+    def __str__(self):
+        return f"Answer {self.option_label} for Question {self.receptive_question.question_number} in Part {self.receptive_question.receptive_part.order} of {self.receptive_question.receptive_part.receptive_test.test.title}"
+
+    class Meta:
+        db_table = "receptive_answer"

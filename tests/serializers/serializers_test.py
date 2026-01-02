@@ -1,4 +1,6 @@
-from .models import Test, ProductiveTest, ReceptiveTest
+from ..models import (
+    Test
+)
 
 from rest_framework import serializers
 

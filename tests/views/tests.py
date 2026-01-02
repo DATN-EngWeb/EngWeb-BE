@@ -4,7 +4,7 @@ from rest_framework.pagination import PageNumberPagination
 import django_filters
 
 from ..models import Test
-from ..serializers import TestSerializer
+from ..serializers.serializers_test import TestSerializer
 from ..permissions import IsTeacher
 from ..filters import TestFilter
 
