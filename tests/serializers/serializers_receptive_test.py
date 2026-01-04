@@ -2,9 +2,9 @@ import json
 from rest_framework import serializers
 
 from ..models import ReceptiveTest, ReceptivePart, ReceptiveQuestion, ReceptiveAnswer
-from ..utils import save_html_content, save_uploaded_image
+from ..utils.upload_file import save_html_content, save_uploaded_file
 
-# Valid format choices from ReceptivePart model
+# Valid format choices - support both Reading and Listening
 VALID_PART_FORMATS = {
     "A": "Listening - Multiple Choice images",
     "B": "Listening - Multiple Choice text (one audio per question)",
@@ -18,11 +18,22 @@ VALID_PART_FORMATS = {
     "J": "Reading - Matching",
 }
 
+# Valid resource types for receptive tests
+VALID_RESOURCE_TYPES = {"image", "audio"}
 
-class ReadingTestCreateSerializer(serializers.Serializer):
+
+class ReceptiveTestCreateSerializer(serializers.Serializer):
     """
-    Serializer for creating Reading Test with file uploads
-    Handles multipart/form-data with JSON data (including content as text) and image files
+    Serializer for creating Receptive Tests (Reading & Listening) with file uploads
+
+    Supports:
+    - Reading tests (formats F, G, H, I, J)
+    - Listening tests (formats A, B, C, D, E)
+
+    Handles multipart/form-data with:
+    - JSON data (parts, questions, answers structure)
+    - Image files (PNG, JPG, etc.)
+    - Audio files (MP3, WAV, etc.)
     """
 
     data = serializers.CharField(
@@ -102,7 +113,58 @@ class ReadingTestCreateSerializer(serializers.Serializer):
 
         return value
 
+    def _process_resources(self, resources_data, files, user_uuid, test_id, part_order):
+        """
+        Process resources for a part/question/answer
+
+        Args:
+            resources_data: Dict of {resource_type: file_name}
+                           e.g., {"image": "question_1.png", "audio": "q1_audio.mp3"}
+            files: Dict of available files from request
+            user_uuid: User's UUID for storage
+            test_id: Test ID
+            part_order: Part order number
+
+        Returns:
+            Dict of {resource_type: file_path}
+                    e.g., {"image": "media/receptive_test/uuid/test_1/part_1/...", ...}
+        """
+        processed_resources = {}
+
+        if not isinstance(resources_data, dict):
+            return processed_resources
+
+        for resource_type, file_name in resources_data.items():
+            # Validate resource type
+            if resource_type not in VALID_RESOURCE_TYPES:
+                continue  # Skip invalid types
+
+            # Check if file exists in uploaded files
+            if not file_name or file_name not in files:
+                continue
+
+            # Save the file (both image and audio supported)
+            file_obj = files[file_name]
+            file_path = save_uploaded_file(file_obj, user_uuid, test_id, part_order)
+            processed_resources[resource_type] = file_path
+
+        return processed_resources
+
     def create(self, validated_data):
+        """
+        Create receptive test with parts, questions, answers, and resources
+
+        Flow:
+        1. Parse JSON data
+        2. Create ReceptiveTest
+        3. For each part:
+           - Save part content (if any)
+           - Process part resources (image/audio)
+           - For each question:
+             - Process question resources
+             - For each answer:
+               - Process answer resources
+        """
         test_id = self.context.get("test_id")
         user_uuid = self.context.get("user_uuid")
         files = self.context.get("files", {})
@@ -122,6 +184,7 @@ class ReadingTestCreateSerializer(serializers.Serializer):
         for part_data in parts_data:
             part_order = part_data.get("order")
 
+            # Save part content (if any)
             content_path = None
             content_text = part_data.get("content")
             if content_text:
@@ -129,14 +192,19 @@ class ReadingTestCreateSerializer(serializers.Serializer):
                     content_text, user_uuid, test_id, part_order
                 )
 
-            # Create part - Reading test parts do NOT have resources
+            # Process part resources (image/audio)
+            part_resources = self._process_resources(
+                part_data.get("resources", {}), files, user_uuid, test_id, part_order
+            )
+
+            # Create part with resources
             part = ReceptivePart.objects.create(
                 receptive_test=receptive_test,
                 order=part_order,
                 format=part_data.get("format"),
                 description=part_data.get("description"),
                 content=content_path,
-                resources={},  # Reading parts don't have resources
+                resources=part_resources,
             )
 
             # Process questions
@@ -144,17 +212,14 @@ class ReadingTestCreateSerializer(serializers.Serializer):
             for question_idx, question_data in enumerate(
                 part_data.get("questions", [])
             ):
-                # Handle question resources - Reading tests only support 'image'
-                question_resources = {}
-                question_resources_data = question_data.get("resources", {})
-                for resource_type, file_name in question_resources_data.items():
-                    if resource_type != "image":
-                        continue  # Skip non-image resources for reading tests
-                    if file_name and file_name in files:
-                        image_path = save_uploaded_image(
-                            files[file_name], user_uuid, test_id, part_order
-                        )
-                        question_resources[resource_type] = image_path
+                # Process question resources (image/audio)
+                question_resources = self._process_resources(
+                    question_data.get("resources", {}),
+                    files,
+                    user_uuid,
+                    test_id,
+                    part_order,
+                )
 
                 question = ReceptiveQuestion.objects.create(
                     receptive_part=part,
@@ -171,17 +236,14 @@ class ReadingTestCreateSerializer(serializers.Serializer):
                 for answer_idx, answer_data in enumerate(
                     question_data.get("answers", [])
                 ):
-                    # Handle answer resources - Reading tests only support 'image'
-                    answer_resources = {}
-                    answer_resources_data = answer_data.get("resources", {})
-                    for resource_type, file_name in answer_resources_data.items():
-                        if resource_type != "image":
-                            continue  # Skip non-image resources for reading tests
-                        if file_name and file_name in files:
-                            image_path = save_uploaded_image(
-                                files[file_name], user_uuid, test_id, part_order
-                            )
-                            answer_resources[resource_type] = image_path
+                    # Process answer resources (image/audio)
+                    answer_resources = self._process_resources(
+                        answer_data.get("resources", {}),
+                        files,
+                        user_uuid,
+                        test_id,
+                        part_order,
+                    )
 
                     answer = ReceptiveAnswer.objects.create(
                         receptive_question=question,
