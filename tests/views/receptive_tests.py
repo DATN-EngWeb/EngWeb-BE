@@ -1,4 +1,4 @@
-from rest_framework import status
+from rest_framework import status, generics
 from rest_framework.response import Response
 from rest_framework.parsers import BaseParser
 from rest_framework.views import APIView
@@ -26,7 +26,7 @@ from drf_spectacular.utils import (
 )
 
 
-class ReceptiveTestView(APIView):
+class ReceptiveTestCreateView(generics.CreateAPIView):
     """
     Unified view for uploading Receptive Test content (Reading & Listening) - Chunked
     """

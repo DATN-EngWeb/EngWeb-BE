@@ -1,6 +1,7 @@
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.filters import OrderingFilter
 import django_filters
 
 from ..models import Test
@@ -27,31 +28,52 @@ class TestPagination(PageNumberPagination):
     max_page_size = 100
 
 
-class TestListView(generics.ListAPIView):
+class TestListCreateView(generics.ListCreateAPIView):
     """
-    List all tests with filtering and pagination
+    GET: List all tests with filtering and pagination
+    POST: Create a new test (Teacher only)
     """
 
     queryset = Test.objects.all().order_by("-created_at")
     serializer_class = TestSerializer
-    permission_classes = [permissions.AllowAny]
     pagination_class = TestPagination
-    filter_backends = [django_filters.rest_framework.DjangoFilterBackend]
+    filter_backends = [django_filters.rest_framework.DjangoFilterBackend, OrderingFilter]
     filterset_class = TestFilter
+    ordering_fields = ['created_at', 'updated_at', 'title']
+    ordering = ['-created_at']
+
+    def get_permissions(self):
+        """
+        GET: Allow any user
+        POST: Only teachers
+        """
+        if self.request.method == "POST":
+            return [IsTeacher()]
+        return [permissions.AllowAny()]
 
     @extend_schema(
         summary="Danh sách bài kiểm tra",
         description=(
-            "Lấy danh sách tất cả bài kiểm tra với hỗ trợ lọc và phân trang.\n\n"
+            "Lấy danh sách tất cả bài kiểm tra với hỗ trợ lọc, sắp xếp và phân trang.\n\n"
             "**Tham số lọc (Query Parameters):**\n"
             "- `level`: Cấp độ (A1, A2, B1, B2)\n"
             "- `skill`: Kỹ năng - R (Reading), L (Listening), S (Speaking), W (Writing)\n"
             "- `status`: Trạng thái - D (Draft), I (In Review), P (Published), R (Removed)\n"
             "- `page`: Số trang (mặc định: 1)\n"
             "- `page_size`: Số phần tử mỗi trang (mặc định: 10, tối đa: 100)\n\n"
+            "**Tham số sắp xếp (Ordering):**\n"
+            "- `ordering`: Sắp xếp kết quả\n"
+            "  - `created_at` - Ngày tạo (cũ nhất trước)\n"
+            "  - `-created_at` - Ngày tạo (mới nhất trước) [mặc định]\n"
+            "  - `updated_at` - Ngày cập nhật (cũ nhất trước)\n"
+            "  - `-updated_at` - Ngày cập nhật (mới nhất trước)\n"
+            "  - `title` - Tên (A-Z)\n"
+            "  - `-title` - Tên (Z-A)\n\n"
             "**Ví dụ:**\n"
             "- `/api/tests/?level=B1&skill=R` - Lấy bài Reading cấp B1\n"
-            "- `/api/tests/?status=P&page=2&page_size=20` - Trang 2, 20 bài/trang, chỉ Published"
+            "- `/api/tests/?status=P&page=2&page_size=20` - Trang 2, 20 bài/trang, chỉ Published\n"
+            "- `/api/tests/?ordering=title` - Sắp xếp theo tên A-Z\n"
+            "- `/api/tests/?ordering=-created_at&skill=R` - Bài Reading, mới nhất trước"
         ),
         tags=["tests"],
         parameters=[
@@ -84,6 +106,12 @@ class TestListView(generics.ListAPIView):
                 description="Số phần tử mỗi trang (mặc định: 10, tối đa: 100)",
                 required=False,
                 type=int,
+            ),
+            OpenApiParameter(
+                name="ordering",
+                description="Sắp xếp kết quả: created_at, -created_at, updated_at, -updated_at, title, -title",
+                required=False,
+                type=str,
             ),
         ],
         responses={
@@ -162,17 +190,6 @@ class TestListView(generics.ListAPIView):
         # Filter is handled by DjangoFilterBackend + TestFilter
         # Pagination is handled by TestPagination
         return super().get(request, *args, **kwargs)
-
-
-class TestCreateView(generics.CreateAPIView):
-    """
-    Create a new test - Teacher only
-    Initial status is always 'D' (Draft)
-    """
-
-    queryset = Test.objects.all()
-    serializer_class = TestSerializer
-    permission_classes = [IsTeacher]
 
     @extend_schema(
         summary="Tạo bài kiểm tra mới",

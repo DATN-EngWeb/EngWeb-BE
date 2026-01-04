@@ -154,6 +154,7 @@ CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework.authentication.BasicAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
@@ -180,9 +181,16 @@ SPECTACULAR_SETTINGS = {
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "JWT",
+        },
+        "BasicAuth": {
+            "type": "http",
+            "scheme": "basic",
         }
     },
-    "SECURITY": [{"BearerAuth": []}],
+    "SECURITY": [
+        {"BearerAuth": []},
+        {"BasicAuth": []}
+    ],
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
