@@ -2,6 +2,7 @@ import os
 import base64
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from pathlib import Path
 import uuid
 
@@ -9,9 +10,9 @@ import uuid
 def get_receptive_part_media_path(user_uuid, test_id, part_order):
     """
     Get the media path for a specific receptive part
-    Format: receptive_test/{user_uuid}/test_{test_id}/part_{part_order}/
+    Format: media/receptive_test/{user_uuid}/test_{test_id}/part_{part_order}/
     """
-    return f"receptive_test/{user_uuid}/test_{test_id}/part_{part_order}"
+    return f"media/receptive_test/{user_uuid}/test_{test_id}/part_{part_order}"
 
 
 def save_html_content(html_content, user_uuid, test_id, part_order):
@@ -30,20 +31,17 @@ def save_html_content(html_content, user_uuid, test_id, part_order):
     if not html_content:
         return None
 
-    # Create directory structure
+    # Create file path
     base_path = get_receptive_part_media_path(user_uuid, test_id, part_order)
-    full_path = os.path.join(settings.MEDIA_ROOT, base_path)
-    Path(full_path).mkdir(parents=True, exist_ok=True)
-
-    # Save HTML content
     file_name = "content.html"
-    file_path = os.path.join(full_path, file_name)
+    file_path = f"{base_path}/{file_name}"
 
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(html_content)
+    # Save file using Django storage backend
+    content_file = ContentFile(html_content.encode("utf-8"))
+    default_storage.save(file_path, content_file)
 
     # Return relative path for storing in DB
-    return f"{base_path}/{file_name}"
+    return file_path
 
 
 def save_uploaded_file(file_obj, user_uuid, test_id, part_order):
@@ -62,22 +60,18 @@ def save_uploaded_file(file_obj, user_uuid, test_id, part_order):
     if not file_obj:
         return None
 
-    # Create directory
+    # Create file path
     base_path = get_receptive_part_media_path(user_uuid, test_id, part_order)
-    full_path = os.path.join(settings.MEDIA_ROOT, base_path)
-    Path(full_path).mkdir(parents=True, exist_ok=True)
 
     # Get file extension
     file_ext = os.path.splitext(file_obj.name)[1]
 
     # Generate unique filename
     file_name = f"{uuid.uuid4()}{file_ext}"
-    file_path = os.path.join(full_path, file_name)
+    file_path = f"{base_path}/{file_name}"
 
-    # Save file
-    with open(file_path, "wb") as f:
-        for chunk in file_obj.chunks():
-            f.write(chunk)
+    # Save file using Django storage backend
+    default_storage.save(file_path, file_obj)
 
     # Return relative path
-    return f"{base_path}/{file_name}"
+    return file_path

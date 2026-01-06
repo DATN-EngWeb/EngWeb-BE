@@ -17,9 +17,9 @@ const path = require("path");
 
 const Configuration = {
   BASE_URL: "http://localhost:8000/api",
-  TEST_ID: 2,
+  TEST_ID: 1,
   ACCESS_TOKEN:
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzY3NDk2OTkxLCJpYXQiOjE3Njc0OTUxOTEsImp0aSI6IjFiZTA4MThkNGYwZjQ4Nzk5ZWJiOWVmNTg0NGVjNDUxIiwidXNlcl9pZCI6IjEwMjQiLCJyb2xlIjoiVCJ9.UQaaG6MAGkRVnX4KkSrzOb0TfXFuYQJNoFz_NxxyCXE",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzY3NjIwNTg0LCJpYXQiOjE3Njc2MTg3ODQsImp0aSI6IjMyM2Y2ZmFjZTcyZDQwMGFhNDZiY2FlZTViYzUyODlkIiwidXNlcl9pZCI6IjEwMjQiLCJyb2xlIjoiVCJ9.xIqgBv6gITSrzGe1PqszIBrP5SU59S6B0liSRNjkDbM",
   CHUNK_SIZE: 512, // 512 bytes chunks - for testing multiple chunks
 };
 

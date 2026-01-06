@@ -1,12 +1,19 @@
 import os
 import shutil
 from django.conf import settings
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from pathlib import Path
 
 
 def get_chunk_temp_dir(upload_id):
     """Get temporary directory for chunks of this upload session"""
-    temp_dir = os.path.join(settings.MEDIA_ROOT, "temp_uploads", upload_id)
+    # Always use local temp directory for chunked uploads (even with S3)
+    if hasattr(settings, 'MEDIA_ROOT'):
+        temp_dir = os.path.join(settings.MEDIA_ROOT, "media", "temp_uploads", upload_id)
+    else:
+        # Fallback for S3
+        temp_dir = f"media/temp_uploads/{upload_id}"
     return temp_dir
 
 
@@ -187,7 +194,7 @@ def cleanup_old_uploads(max_age_hours=24):
     """
     try:
         import time
-        temp_uploads_dir = os.path.join(settings.MEDIA_ROOT, "temp_uploads")
+        temp_uploads_dir = os.path.join(settings.MEDIA_ROOT, "media", "temp_uploads")
         if not os.path.exists(temp_uploads_dir):
             return
         
