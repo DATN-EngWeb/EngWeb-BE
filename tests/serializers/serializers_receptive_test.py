@@ -1,8 +1,6 @@
-import json
 from rest_framework import serializers
 
 from ..models import ReceptiveTest, ReceptivePart, ReceptiveQuestion, ReceptiveAnswer
-from ..utils.upload_file import save_html_content, save_uploaded_file
 
 # Valid format choices - support both Reading and Listening
 VALID_PART_FORMATS = {
@@ -36,17 +34,12 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
     - Audio files (MP3, WAV, etc.)
     """
 
-    data = serializers.CharField(
-        help_text="JSON string with parts, questions, answers structure (content is text, not file)"
+    data = serializers.JSONField(
+        help_text="JSON object with parts, questions, answers structure"
     )
 
-    def validate_data(self, value):
-        """Validate JSON format and structure"""
-        try:
-            test_data = json.loads(value)
-        except json.JSONDecodeError as e:
-            raise serializers.ValidationError(f"Invalid JSON format: {str(e)}")
-
+    def validate_data(self, test_data):
+        """Validate JSON structure"""
         # Check required fields
         if not isinstance(test_data, dict):
             raise serializers.ValidationError("JSON must be an object/dict")
@@ -111,44 +104,8 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
                             f"part[{idx}].questions[{q_idx}].answers[{a_idx}] option_label must be a single character"
                         )
 
-        return value
-
-    def _process_resources(self, resources_data, files, user_uuid, test_id, part_order):
-        """
-        Process resources for a part/question/answer
-
-        Args:
-            resources_data: Dict of {resource_type: file_name}
-                           e.g., {"image": "question_1.png", "audio": "q1_audio.mp3"}
-            files: Dict of available files from request
-            user_uuid: User's UUID for storage
-            test_id: Test ID
-            part_order: Part order number
-
-        Returns:
-            Dict of {resource_type: file_path}
-                    e.g., {"image": "media/receptive_test/uuid/test_1/part_1/...", ...}
-        """
-        processed_resources = {}
-
-        if not isinstance(resources_data, dict):
-            return processed_resources
-
-        for resource_type, file_name in resources_data.items():
-            # Validate resource type
-            if resource_type not in VALID_RESOURCE_TYPES:
-                continue  # Skip invalid types
-
-            # Check if file exists in uploaded files
-            if not file_name or file_name not in files:
-                continue
-
-            # Save the file (both image and audio supported)
-            file_obj = files[file_name]
-            file_path = save_uploaded_file(file_obj, user_uuid, test_id, part_order)
-            processed_resources[resource_type] = file_path
-
-        return processed_resources
+                    # Return the validated JSON structure
+                    return test_data
 
     def create(self, validated_data):
         """
@@ -169,11 +126,10 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
         user_uuid = self.context.get("user_uuid")
         files = self.context.get("files", {})
 
-        # Parse JSON data
-        try:
-            test_data = json.loads(validated_data.get("data", "{}"))
-        except json.JSONDecodeError:
-            raise serializers.ValidationError({"data": "Invalid JSON format"})
+        # JSON data is already parsed by JSONField
+        test_data = validated_data.get("data", {})
+        if not isinstance(test_data, dict):
+            raise serializers.ValidationError({"data": "JSON must be an object/dict"})
 
         parts_data = test_data.get("parts", [])
 
@@ -184,27 +140,14 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
         for part_data in parts_data:
             part_order = part_data.get("order")
 
-            # Save part content (if any)
-            content_path = None
-            content_text = part_data.get("content")
-            if content_text:
-                content_path = save_html_content(
-                    content_text, user_uuid, test_id, part_order
-                )
-
-            # Process part resources (image/audio)
-            part_resources = self._process_resources(
-                part_data.get("resources", {}), files, user_uuid, test_id, part_order
-            )
-
             # Create part with resources
             part = ReceptivePart.objects.create(
                 receptive_test=receptive_test,
                 order=part_order,
                 format=part_data.get("format"),
                 description=part_data.get("description"),
-                content=content_path,
-                resources=part_resources,
+                content=part_data.get("content", ""),
+                resources=part_data.get("resources", {}),
             )
 
             # Process questions
@@ -212,22 +155,13 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
             for question_idx, question_data in enumerate(
                 part_data.get("questions", [])
             ):
-                # Process question resources (image/audio)
-                question_resources = self._process_resources(
-                    question_data.get("resources", {}),
-                    files,
-                    user_uuid,
-                    test_id,
-                    part_order,
-                )
-
                 question = ReceptiveQuestion.objects.create(
                     receptive_part=part,
                     question_number=question_data.get("question_number"),
                     content=question_data.get("content"),
                     explanation=question_data.get("explanation"),
                     score=question_data.get("score", 0),
-                    resources=question_resources,
+                    resources=question_data.get("resources", {}),
                 )
 
                 part_score += question.score
@@ -236,21 +170,13 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
                 for answer_idx, answer_data in enumerate(
                     question_data.get("answers", [])
                 ):
-                    # Process answer resources (image/audio)
-                    answer_resources = self._process_resources(
-                        answer_data.get("resources", {}),
-                        files,
-                        user_uuid,
-                        test_id,
-                        part_order,
-                    )
 
                     answer = ReceptiveAnswer.objects.create(
                         receptive_question=question,
                         option_label=answer_data.get("option_label"),
                         answer_text=answer_data.get("answer_text", ""),
                         is_correct=answer_data.get("is_correct", False),
-                        resources=answer_resources,
+                        resources=answer_data.get("resources", {}),
                     )
 
             # Update part score
