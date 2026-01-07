@@ -146,7 +146,7 @@ class ReceptiveAnswer(models.Model):
         ReceptiveQuestion, on_delete=models.CASCADE, related_name="receptive_answers"
     )
 
-    option_label = models.CharField(max_length=1)
+    option_label = models.CharField(max_length=1, blank=True, null=True)
     answer_text = models.TextField(blank=True, null=True)
     is_correct = models.BooleanField(default=False)
     resources = models.JSONField(default=dict)

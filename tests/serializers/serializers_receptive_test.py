@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db import transaction
 
 from ..models import ReceptiveTest, ReceptivePart, ReceptiveQuestion, ReceptiveAnswer
 
@@ -22,16 +23,14 @@ VALID_RESOURCE_TYPES = {"image", "audio"}
 
 class ReceptiveTestCreateSerializer(serializers.Serializer):
     """
-    Serializer for creating Receptive Tests (Reading & Listening) with file uploads
+    Serializer for creating Receptive Tests (Reading & Listening)
 
     Supports:
     - Reading tests (formats F, G, H, I, J)
     - Listening tests (formats A, B, C, D, E)
 
     Handles multipart/form-data with:
-    - JSON data (parts, questions, answers structure)
-    - Image files (PNG, JPG, etc.)
-    - Audio files (MP3, WAV, etc.)
+    - 'data' field: JSON structure defining parts, questions, answers
     """
 
     data = serializers.JSONField(
@@ -69,6 +68,21 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
                     f"part[{idx}] has invalid format '{part_format}'. Valid formats: {valid_formats}"
                 )
 
+            # Validate part resources
+            part_resources = part.get("resources", {})
+            if not isinstance(part_resources, dict):
+                raise serializers.ValidationError(
+                    f"part[{idx}].resources must be an object/dict"
+                )
+            invalid_part_resource_types = set(part_resources.keys()) - VALID_RESOURCE_TYPES
+            if invalid_part_resource_types:
+                invalid_str = ", ".join(sorted(invalid_part_resource_types))
+                valid_str = ", ".join(sorted(VALID_RESOURCE_TYPES))
+                raise serializers.ValidationError(
+                    f"part[{idx}].resources has invalid resource types: {invalid_str}. "
+                    f"Allowed types: {valid_str}"
+                )
+
             questions = part.get("questions", [])
             if not isinstance(questions, list):
                 raise serializers.ValidationError(
@@ -81,31 +95,52 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
                         f"part[{idx}].questions[{q_idx}] missing 'question_number'"
                     )
 
+                # Validate question resources
+                question_resources = question.get("resources", {})
+                if not isinstance(question_resources, dict):
+                    raise serializers.ValidationError(
+                        f"part[{idx}].questions[{q_idx}].resources must be an object/dict"
+                    )
+                invalid_question_resource_types = set(question_resources.keys()) - VALID_RESOURCE_TYPES
+                if invalid_question_resource_types:
+                    invalid_str = ", ".join(sorted(invalid_question_resource_types))
+                    valid_str = ", ".join(sorted(VALID_RESOURCE_TYPES))
+                    raise serializers.ValidationError(
+                        f"part[{idx}].questions[{q_idx}].resources has invalid resource types: {invalid_str}. "
+                        f"Allowed types: {valid_str}"
+                    )
+
                 answers = question.get("answers", [])
                 if not isinstance(answers, list):
                     raise serializers.ValidationError(
                         f"part[{idx}].questions[{q_idx}].answers must be a list"
                     )
 
-                # Validate each answer has option_label
+                # Validate option_label
                 for a_idx, answer in enumerate(answers):
-                    if "option_label" not in answer:
-                        raise serializers.ValidationError(
-                            f"part[{idx}].questions[{q_idx}].answers[{a_idx}] missing 'option_label' field"
-                        )
-
-                    option_label = answer.get("option_label")
-                    if (
-                        not option_label
-                        or not isinstance(option_label, str)
-                        or len(option_label) != 1
-                    ):
+                    option_label = answer.get("option_label", None)
+                    if option_label is not None and len(option_label) != 1:
                         raise serializers.ValidationError(
                             f"part[{idx}].questions[{q_idx}].answers[{a_idx}] option_label must be a single character"
                         )
 
-                    # Return the validated JSON structure
-                    return test_data
+                    # Validate answer resources
+                    answer_resources = answer.get("resources", {})
+                    if not isinstance(answer_resources, dict):
+                        raise serializers.ValidationError(
+                            f"part[{idx}].questions[{q_idx}].answers[{a_idx}].resources must be an object/dict"
+                        )
+                    invalid_answer_resource_types = set(answer_resources.keys()) - VALID_RESOURCE_TYPES
+                    if invalid_answer_resource_types:
+                        invalid_str = ", ".join(sorted(invalid_answer_resource_types))
+                        valid_str = ", ".join(sorted(VALID_RESOURCE_TYPES))
+                        raise serializers.ValidationError(
+                            f"part[{idx}].questions[{q_idx}].answers[{a_idx}].resources has invalid resource types: {invalid_str}. "
+                            f"Allowed types: {valid_str}"
+                        )
+
+        # Return the validated JSON structure
+        return test_data
 
     def create(self, validated_data):
         """
@@ -116,15 +151,12 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
         2. Create ReceptiveTest
         3. For each part:
            - Save part content (if any)
-           - Process part resources (image/audio)
            - For each question:
              - Process question resources
              - For each answer:
                - Process answer resources
         """
         test_id = self.context.get("test_id")
-        user_uuid = self.context.get("user_uuid")
-        files = self.context.get("files", {})
 
         # JSON data is already parsed by JSONField
         test_data = validated_data.get("data", {})
@@ -133,58 +165,59 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
 
         parts_data = test_data.get("parts", [])
 
-        # Create ReceptiveTest
-        receptive_test = ReceptiveTest.objects.create(test_id=test_id)
+        with transaction.atomic():
+            # Create ReceptiveTest
+            receptive_test = ReceptiveTest.objects.create(test_id=test_id)
 
-        # Process parts
-        for part_data in parts_data:
-            part_order = part_data.get("order")
+            # Process parts
+            for part_data in parts_data:
 
-            # Create part with resources
-            part = ReceptivePart.objects.create(
-                receptive_test=receptive_test,
-                order=part_order,
-                format=part_data.get("format"),
-                description=part_data.get("description"),
-                content=part_data.get("content", ""),
-                resources=part_data.get("resources", {}),
-            )
-
-            # Process questions
-            part_score = 0
-            for question_idx, question_data in enumerate(
-                part_data.get("questions", [])
-            ):
-                question = ReceptiveQuestion.objects.create(
-                    receptive_part=part,
-                    question_number=question_data.get("question_number"),
-                    content=question_data.get("content"),
-                    explanation=question_data.get("explanation"),
-                    score=question_data.get("score", 0),
-                    resources=question_data.get("resources", {}),
+                # Create part
+                part = ReceptivePart.objects.create(
+                    receptive_test=receptive_test,
+                    order=part_data.get("order"),
+                    format=part_data.get("format"),
+                    description=part_data.get("description", ""),
+                    content=part_data.get("content", ""),
+                    resources=part_data.get("resources", {}),
                 )
 
-                part_score += question.score
-
-                # Process answers
-                for answer_idx, answer_data in enumerate(
-                    question_data.get("answers", [])
+                # Process questions
+                part_score = 0
+                for question_idx, question_data in enumerate(
+                    part_data.get("questions", [])
                 ):
-
-                    answer = ReceptiveAnswer.objects.create(
-                        receptive_question=question,
-                        option_label=answer_data.get("option_label"),
-                        answer_text=answer_data.get("answer_text", ""),
-                        is_correct=answer_data.get("is_correct", False),
-                        resources=answer_data.get("resources", {}),
+                    question = ReceptiveQuestion.objects.create(
+                        receptive_part=part,
+                        question_number=question_data.get("question_number"),
+                        content=question_data.get("content", ""),
+                        explanation=question_data.get("explanation", ""),
+                        score=question_data.get("score", 0),
+                        resources=question_data.get("resources", {}),
                     )
 
-            # Update part score
-            part.score = part_score
-            part.save()
+                    part_score += question.score
 
-            # Add to total score
-            receptive_test.total_score += part_score
+                    # Process answers
+                    for answer_idx, answer_data in enumerate(
+                        question_data.get("answers", [])
+                    ):
 
-        receptive_test.save()
+                        ReceptiveAnswer.objects.create(
+                            receptive_question=question,
+                            option_label=answer_data.get("option_label", None),
+                            answer_text=answer_data.get("answer_text", ""),
+                            is_correct=answer_data.get("is_correct", False),
+                            resources=answer_data.get("resources", {}),
+                        )
+
+                # Update part score
+                part.score = part_score
+                part.save()
+
+                # Add to total score
+                receptive_test.total_score += part_score
+
+            receptive_test.save()
+
         return receptive_test

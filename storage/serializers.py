@@ -1,13 +1,14 @@
 """
 Serializers for media/upload endpoints
 """
+
 from rest_framework import serializers
 
 
 class RequestPresignedURLSerializer(serializers.Serializer):
     """
     Serializer for requesting presigned URL for file upload
-    
+
     Example for avatars:
     {
         "filename": "avatar.jpg",
@@ -15,7 +16,7 @@ class RequestPresignedURLSerializer(serializers.Serializer):
         "mime_type": "image/jpeg",
         "category": "avatars"
     }
-    
+
     Example for tests:
     {
         "filename": "listening_part1.mp3",
@@ -26,46 +27,44 @@ class RequestPresignedURLSerializer(serializers.Serializer):
         "part": 1
     }
     """
+
     filename = serializers.CharField(
-        max_length=255,
-        help_text="Original filename (e.g., avatar.jpg, listening.mp3)"
+        max_length=255, help_text="Original filename (e.g., avatar.jpg, listening.mp3)"
     )
     file_size = serializers.IntegerField(
         min_value=1,
-        max_value=50*1024*1024,
-        help_text="File size in bytes (max 50MB)"
+        max_value=50 * 1024 * 1024,
+        help_text="File size in bytes (max 50MB)",
     )
     mime_type = serializers.CharField(
-        max_length=100,
-        help_text="MIME type (e.g., image/jpeg, audio/mpeg)"
+        max_length=100, help_text="MIME type (e.g., image/jpeg, audio/mpeg)"
     )
     category = serializers.ChoiceField(
-        choices=['avatars', 'tests'],
-        help_text="File category: 'avatars' or 'tests'"
+        choices=["avatars", "tests"], help_text="File category: 'avatars' or 'tests'"
     )
     test_id = serializers.IntegerField(
         required=False,
         allow_null=True,
-        help_text="Test ID (required if category='tests')"
+        help_text="Test ID (required if category='tests')",
     )
     part = serializers.IntegerField(
         required=False,
         allow_null=True,
         min_value=1,
-        help_text="Test part number (required if category='tests')"
+        help_text="Test part number (required if category='tests')",
     )
-    
+
     def validate(self, data):
         """Validate testid and part for tests category"""
-        category = data.get('category')
-        if category == 'tests':
-            if 'test_id' not in data or data['test_id'] is None:
+        category = data.get("category")
+        if category == "tests":
+            if "test_id" not in data or data["test_id"] is None:
                 raise serializers.ValidationError(
-                    {'test_id': 'test_id is required when category is tests'}
+                    {"test_id": "test_id is required when category is tests"}
                 )
-            if 'part' not in data or data['part'] is None:
+            if "part" not in data or data["part"] is None:
                 raise serializers.ValidationError(
-                    {'part': 'part is required when category is tests'}
+                    {"part": "part is required when category is tests"}
                 )
         return data
 
@@ -73,7 +72,7 @@ class RequestPresignedURLSerializer(serializers.Serializer):
 class ConfirmUploadSerializer(serializers.Serializer):
     """
     Serializer for confirming file upload completion
-    
+
     Example for avatars:
     {
         "key": "media/avatars/user_123/uuid.jpg",
@@ -81,7 +80,7 @@ class ConfirmUploadSerializer(serializers.Serializer):
         "mime_type": "image/jpeg",
         "etag": "abc123def456"
     }
-    
+
     Example for tests:
     {
         "key": "media/tests/5/part1/uuid.mp3",
@@ -90,28 +89,25 @@ class ConfirmUploadSerializer(serializers.Serializer):
         "etag": "abc123def456"
     }
     """
+
     key = serializers.CharField(
-        max_length=1024,
-        help_text="S3 object key returned from presigned URL"
+        max_length=1024, help_text="S3 object key returned from presigned URL"
     )
     file_size = serializers.IntegerField(
-        min_value=1,
-        help_text="Actual uploaded file size"
+        min_value=1, help_text="Actual uploaded file size"
     )
     mime_type = serializers.CharField(
-        max_length=100,
-        help_text="Actual MIME type of uploaded file"
+        max_length=100, help_text="Actual MIME type of uploaded file"
     )
     etag = serializers.CharField(
-        max_length=255,
-        help_text="ETag from S3 response (for integrity check)"
+        max_length=255, help_text="ETag from S3 response (for integrity check)"
     )
 
 
 class PresignedURLResponseSerializer(serializers.Serializer):
     """
     Response serializer for presigned URL endpoint
-    
+
     Example:
     {
         "key": "media/avatars/user_123/uuid.jpg",
@@ -125,6 +121,7 @@ class PresignedURLResponseSerializer(serializers.Serializer):
         "expiry": 900
     }
     """
+
     key = serializers.CharField()
     url = serializers.CharField()
     fields = serializers.JSONField()
@@ -134,7 +131,7 @@ class PresignedURLResponseSerializer(serializers.Serializer):
 class UploadConfirmationResponseSerializer(serializers.Serializer):
     """
     Response serializer for upload confirmation
-    
+
     Example:
     {
         "success": true,
@@ -142,6 +139,7 @@ class UploadConfirmationResponseSerializer(serializers.Serializer):
         "file_url": "http://minio:9000/englishapp/media/avatars/user_123/uuid.jpg"
     }
     """
+
     success = serializers.BooleanField()
     message = serializers.CharField()
     file_url = serializers.CharField(required=False)

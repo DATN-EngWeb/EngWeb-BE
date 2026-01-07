@@ -199,7 +199,7 @@ class TestListCreateView(generics.ListCreateAPIView):
             "- **Bắt buộc**: Người dùng phải là giáo viên\n"
             "- Nếu user không phải teacher → 403 Forbidden\n\n"
             "**Trạng thái mặc định:**\n"
-            "- Bài kiểm tra mới luôn được tạo với trạng thái `D` (Draft)\n"
+            "- Bài kiểm tra được tạo với trạng thái mặc định là `D` (Draft)\n"
             "- `created_by` tự động được set là teacher của người dùng\n\n"
             "**Tham số bắt buộc:**\n"
             "- `title`: Tên bài kiểm tra (không quá 255 ký tự, không được để trống)\n"
@@ -212,6 +212,7 @@ class TestListCreateView(generics.ListCreateAPIView):
             "- `time`: Thời gian làm bài (phút, tối thiểu 1)\n"
             "- `description`: Mô tả bài kiểm tra (không được để trống)\n\n"
             "**Tham số tùy chọn:**\n"
+            "- `status`: Trạng thái - D (Draft), I (In Review), P (Published) (mặc định: D)\n"
             "- `completed_bonus`: Điểm thưởng hoàn thành (mặc định: 0, phải >= 0)"
         ),
         tags=["tests"],
@@ -236,6 +237,15 @@ class TestListCreateView(generics.ListCreateAPIView):
                 ),
                 "description": serializers.CharField(
                     required=True, help_text="Mô tả bài kiểm tra"
+                ),
+                "status": serializers.ChoiceField(
+                    choices=["D", "I", "P"],
+                    required=False,
+                    default="D",
+                    help_text=(
+                        "Trạng thái (D: Draft, I: In Review, P: Published). "
+                        "Nếu không gửi sẽ mặc định là D."
+                    ),
                 ),
                 "completed_bonus": serializers.IntegerField(
                     required=False,
@@ -268,7 +278,11 @@ class TestListCreateView(generics.ListCreateAPIView):
                             "example": "Test description...",
                         },
                         "completed_bonus": {"type": "integer", "example": 10},
-                        "status": {"type": "string", "enum": ["D"], "example": "D"},
+                        "status": {
+                            "type": "string",
+                            "enum": ["D", "I", "P"],
+                            "example": "D",
+                        },
                         "created_at": {"type": "string", "format": "date-time"},
                         "updated_at": {"type": "string", "format": "date-time"},
                         "created_by": {"type": "integer", "example": 1},
