@@ -1,5 +1,12 @@
 from django.contrib import admin
-from .models import Test, ReceptiveTest, ProductiveTest
+from .models import (
+    Test,
+    ReceptiveTest,
+    ProductiveTest,
+    ReceptivePart,
+    ReceptiveQuestion,
+    ReceptiveAnswer,
+)
 
 
 # Register your models here.
@@ -27,3 +34,42 @@ class ReceptiveTestAdmin(admin.ModelAdmin):
 @admin.register(ProductiveTest)
 class ProductiveTestAdmin(admin.ModelAdmin):
     list_display = ("test", "format", "question_text", "resources", "criteria")
+
+
+@admin.register(ReceptivePart)
+class ReceptivePartAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "receptive_test",
+        "order",
+        "format",
+        "description",
+        "content",
+        "score",
+        "resources",
+    )
+
+
+@admin.register(ReceptiveQuestion)
+class ReceptiveQuestionAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "receptive_part",
+        "question_number",
+        "content",
+        "explanation",
+        "score",
+        "resources",
+    )
+
+
+@admin.register(ReceptiveAnswer)
+class ReceptiveAnswerAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "receptive_question",
+        "option_label",
+        "answer_text",
+        "is_correct",
+        "resources",
+    )

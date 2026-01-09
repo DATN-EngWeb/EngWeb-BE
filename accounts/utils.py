@@ -18,16 +18,16 @@ def get_or_create_file_storage_uuid(user):
     """
     Get the file storage UUID for a user. UUID is auto-generated and stored in User model.
     This UUID is used for organizing file storage (avatars, credentials).
-    
+
     Args:
         user: User instance
-    
+
     Returns:
         uuid.UUID: The file storage UUID
     """
     if not user.file_storage_uuid:
         user.file_storage_uuid = uuid.uuid4()
-        user.save(update_fields=['file_storage_uuid'])
+        user.save(update_fields=["file_storage_uuid"])
     return user.file_storage_uuid
 
 
@@ -575,11 +575,11 @@ def download_and_save_avatar(avatar_url, user):
     """
     Download avatar image from URL and save to media/avatars/{file_storage_uuid}/{file_storage_uuid}.{ext}
     Returns relative path to saved file or None if failed
-    
+
     Args:
         avatar_url: URL of avatar image
         user: User instance for getting file storage UUID
-    
+
     Returns:
         str: Relative path to saved file or None if failed
     """
@@ -654,33 +654,33 @@ def generate_unique_username(base_username):
 def get_absolute_media_url(media_field, request=None):
     """
     Build absolute URL for any media file field (ImageField, FileField, etc.) or string path.
-    
+
     This function can be used for:
     - Avatar images
     - Credential files (PDFs, images)
     - Any other media files
     - String paths (e.g., from serializer)
-    
+
     Args:
         media_field: ImageField/FileField instance OR string path (e.g., user.avatar or "avatars/default.jpg")
         request: HttpRequest object (optional, for building absolute URL)
-    
+
     Returns:
         str: Absolute URL if media field exists, None otherwise
     """
     if not media_field:
         return None
-    
+
     # Handle string path (from serializer)
     if isinstance(media_field, str):
         # Check if already absolute URL
-        if media_field.startswith('http'):
+        if media_field.startswith("http"):
             return media_field
         # Build absolute URL from relative path
         if request:
-            return request.build_absolute_uri(f'/media/{media_field}')
-        return f'/media/{media_field}'
-    
+            return request.build_absolute_uri(f"/media/{media_field}")
+        return f"/media/{media_field}"
+
     # Handle ImageField/FileField object
     # Try to build absolute URL from request first
     if request:
@@ -688,7 +688,7 @@ def get_absolute_media_url(media_field, request=None):
             return request.build_absolute_uri(media_field.url)
         except Exception:
             pass
-    
+
     # Fallback: return relative path from field
     # Frontend can handle it if needed
     return media_field.url if media_field else None

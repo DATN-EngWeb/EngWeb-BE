@@ -35,12 +35,14 @@ INSTALLED_APPS = [
     "django_filters",
     "drf_spectacular",
     "drf_spectacular_sidecar",
+    "storages",
     # authentication apps
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     # custom apps
     "accounts",
     "tests",
+    "storage",
 ]
 
 # Middleware
@@ -138,6 +140,53 @@ STATIC_ROOT = BASE_DIR / "static"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# MinIO S3 Storage Configuration
+USE_S3 = env.bool("USE_S3", default=False)
+
+# AWS/S3 Settings
+AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default="minio")
+AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default="minio123")
+AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="englishapp")
+AWS_S3_REGION_NAME = env("AWS_S3_REGION_NAME", default="us-east-1")
+AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL", default="http://minio:9000")
+AWS_S3_CLIENT_ENDPOINT_URL = env("AWS_S3_CLIENT_ENDPOINT_URL", default="http://localhost:9000")
+AWS_S3_USE_SSL = env.bool("AWS_S3_USE_SSL", default=False)
+AWS_S3_SIGNATURE_VERSION = env("AWS_S3_SIGNATURE_VERSION", default="s3v4")
+AWS_DEFAULT_ACL = env("AWS_DEFAULT_ACL", default="public-read")
+AWS_QUERYSTRING_AUTH = env.bool("AWS_QUERYSTRING_AUTH", default=False)
+
+if USE_S3:
+    # S3 storage backend (compatible with MinIO)
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+            "OPTIONS": {
+                "access_key": AWS_ACCESS_KEY_ID,
+                "secret_key": AWS_SECRET_ACCESS_KEY,
+                "bucket_name": AWS_STORAGE_BUCKET_NAME,
+                "region_name": AWS_S3_REGION_NAME,
+                "endpoint_url": AWS_S3_ENDPOINT_URL,
+                "use_ssl": AWS_S3_USE_SSL,
+                "signature_version": AWS_S3_SIGNATURE_VERSION,
+                "default_acl": AWS_DEFAULT_ACL,
+                "querystring_auth": AWS_QUERYSTRING_AUTH,
+            }
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        }
+    }
+    MEDIA_URL = f"{AWS_S3_ENDPOINT_URL}/{AWS_STORAGE_BUCKET_NAME}/media/"
+else:
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        }
+    }
+
 # email settings
 EMAIL_HOST = env("EMAIL_HOST")
 EMAIL_HOST_USER = env("EMAIL_HOST_USER")
@@ -154,6 +203,7 @@ CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework.authentication.BasicAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
@@ -180,9 +230,16 @@ SPECTACULAR_SETTINGS = {
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "JWT",
+        },
+        "BasicAuth": {
+            "type": "http",
+            "scheme": "basic",
         }
     },
-    "SECURITY": [{"BearerAuth": []}],
+    "SECURITY": [
+        {"BearerAuth": []},
+        {"BasicAuth": []}
+    ],
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

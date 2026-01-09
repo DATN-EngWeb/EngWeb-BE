@@ -1,7 +1,12 @@
 from django.urls import path
-from .views.tests import TestListView, TestCreateView
+from .views.tests import TestListCreateView
+from .views.receptive_tests import ReceptiveTestCreateView
 
 urlpatterns = [
-    path('', TestListView.as_view(), name='test-list'),
-    path('create/', TestCreateView.as_view(), name='test-create'),
+    path("", TestListCreateView.as_view(), name="test"),
+    path(
+        "/receptive/<int:test_id>",
+        ReceptiveTestCreateView.as_view(),
+        name="receptive-test",
+    ),
 ]

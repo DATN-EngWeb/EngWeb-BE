@@ -1,4 +1,6 @@
-from .models import Test, ProductiveTest, ReceptiveTest
+from ..models import (
+    Test
+)
 
 from rest_framework import serializers
 
@@ -24,7 +26,6 @@ class TestSerializer(serializers.ModelSerializer):
             "created_at": {"read_only": True},
             "updated_at": {"read_only": True},
             "created_by": {"read_only": True},
-            "status": {"read_only": True},  # Status will be set by view logic
         }
 
     def validate(self, attrs):
@@ -76,14 +77,21 @@ class TestSerializer(serializers.ModelSerializer):
             if completed_bonus < 0:
                 errors["completed_bonus"] = "Must be a non-negative integer."
 
+        # Validate status (allow only D, I, P on create)
+        status = attrs.get("status")
+        if status and status not in ["D", "I", "P"]:
+            errors["status"] = (
+                "Must be one of: D (Draft), I (In Review), P (Published)."
+            )
+
         if errors:
             raise serializers.ValidationError(errors)
 
         return attrs
 
     def create(self, validated_data):
-        # Set default status to Draft
-        validated_data["status"] = "D"
+        # Set default status to Draft if not provided
+        validated_data.setdefault("status", "D")
 
         # Get creator (teacher) from context
         request = self.context.get("request")
