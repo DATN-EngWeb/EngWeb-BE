@@ -18,11 +18,11 @@ from .serializers import (
 from .utils.s3_presigned import S3PresignedURLManager
 
 
-class StorageRateThrottle(UserRateThrottle):
-    """Rate limit: 10 storage requests per minute"""
+# class StorageRateThrottle(UserRateThrottle):
+#     """Rate limit: 10 storage requests per minute"""
 
-    scope = "storage"
-    rate = "10/min"
+#     scope = "storage"
+#     rate = "10/min"
 
 
 class RequestPresignedURLView(generics.CreateAPIView):
@@ -30,7 +30,7 @@ class RequestPresignedURLView(generics.CreateAPIView):
 
     serializer_class = RequestPresignedURLSerializer
     permission_classes = [IsAuthenticated]
-    throttle_classes = [StorageRateThrottle]
+    # throttle_classes = [StorageRateThrottle]
 
     def get_s3_manager(self):
         """Lazy-load S3PresignedURLManager"""
