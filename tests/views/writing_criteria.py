@@ -25,23 +25,23 @@ class WritingCriteriaTemplateListView(generics.ListAPIView):
     filterset_class = WritingCriteriaTemplateFilter
 
     @extend_schema(
-        summary="List Writing Criteria Templates",
+        summary="Lấy danh sách Writing Criteria Templates",
         description=(
-            "Get all Writing Criteria Templates with optional filtering by level and band.\n\n"
-            "**Filter parameters:**\n"
-            "- `level`: Filter by CEFR level (A1, A2, B1, B2)\n"
-            "- `band`: Filter by band score (1, 2, 3, ...)\n\n"
-            "**Example:**\n"
-            "- `/api/tests/writing-criteria?level=B1` - Get all B1 level criteria\n"
-            "- `/api/tests/writing-criteria?level=B1&band=3` - Get B1 level, band 3 criteria"
+            "Lấy tất cả Writing Criteria Templates với bộ lọc theo level và band.\n\n"
+            "**Tham số lọc:**\n"
+            "- `level`: Lọc theo trình độ CEFR (A1, A2, B1, B2)\n"
+            "- `band`: Lọc theo điểm band (0, 1, 2, 3, 4, 5)\n\n"
+            "**Ví dụ:**\n"
+            "- `/api/tests/writing-criteria?level=B1` - Lấy tất cả criteria của level B1\n"
+            "- `/api/tests/writing-criteria?level=B1&band=3` - Lấy criteria của level B1, band 3"
         ),
-        tags=["writing-criteria"],
+        tags=["writing-criteria-template"],
         parameters=[
             OpenApiParameter(
                 name="level",
                 type=str,
                 location=OpenApiParameter.QUERY,
-                description="Filter by CEFR level",
+                description="Lọc theo trình độ CEFR",
                 enum=["A1", "A2", "B1", "B2"],
                 required=False,
             ),
@@ -49,7 +49,7 @@ class WritingCriteriaTemplateListView(generics.ListAPIView):
                 name="band",
                 type=int,
                 location=OpenApiParameter.QUERY,
-                description="Filter by band score",
+                description="Lọc theo điểm band",
                 required=False,
             ),
         ],

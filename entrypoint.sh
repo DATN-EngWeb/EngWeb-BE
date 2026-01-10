@@ -60,4 +60,14 @@ else:
         print(f"Superuser '{username}' already exists with status=V. Skipping creation.")
 PY
 
+# Seed data from SQL files in init folder
+echo "Seeding data from init/*.sql files..."
+for sql_file in /app/init/*.sql; do
+  if [ -f "$sql_file" ]; then
+    echo "  Running $sql_file..."
+    PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U "${DB_USER}" -d "${DB_NAME}" -f "$sql_file"
+  fi
+done
+echo "✓ SQL seed files executed."
+
 exec python manage.py runserver 0.0.0.0:8000

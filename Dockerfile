@@ -17,6 +17,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     netcat-openbsd \
     dos2unix \
+    # for psql command (seed SQL files)
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 ENV TZ=UTC
