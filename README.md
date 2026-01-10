@@ -60,6 +60,7 @@ docker compose logs -f english_app_api
   - Admin: http://localhost:8000/admin/
   - Swagger UI: http://localhost:8000/api/docs/
   - OpenAPI schema: http://localhost:8000/api/schema/
+  - MinIO: http://localhost:9000/
 
 ### 3) Day-to-day commands
 

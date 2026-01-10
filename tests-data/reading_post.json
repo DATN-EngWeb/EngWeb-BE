@@ -1,0 +1,258 @@
+{
+  "test": {
+    "title": "Test 1",
+    "level": "B1",
+    "skill": "R",
+    "time": 60,
+    "description": "This is a test for the A1 level",
+    "status": "P"
+  },
+  "parts": [
+    {
+      "order": 1,
+      "format": "F",
+      "description": "This part does not need ckeditor to be rendered.",
+      "questions": [
+        {
+          "question_number": 1,
+          "content": "This question needs ckeditor to be rendered.",
+          "explanation": "The man thinks he left his wallet in the bar.",
+          "score": 10,
+          "answers": [
+            {
+              "option_label": "A",
+              "is_correct": true,
+              "answer_text": "In the bar"
+            },
+            {
+              "option_label": "B",
+              "is_correct": false,
+              "answer_text": "In the restaurant"
+            },
+            {
+              "option_label": "C",
+              "is_correct": false,
+              "answer_text": "In the park"
+            }
+          ]
+        },
+        {
+          "question_number": 2,
+          "content": "This question needs ckeditor to be rendered.",
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "option_label": "A",
+              "is_correct": true,
+              "answer_text": "In the bar"
+            },
+            {
+              "option_label": "B",
+              "is_correct": false,
+              "answer_text": "In the restaurant"
+            },
+            {
+              "option_label": "C",
+              "is_correct": false,
+              "answer_text": "In the park"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 2,
+      "format": "G",
+      "description": "This part needs ckeditor to be rendered.",
+      "content": "...<img src='base64...'/>...",
+      "questions": [
+        {
+          "question_number": 3,
+          "content": "This question does not need ckeditor to be rendered.",
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "option_label": "A",
+              "answer_text": "In the bar",
+              "is_correct": true
+            },
+            {
+              "option_label": "B",
+              "answer_text": "In the restaurant",
+              "is_correct": false
+            },
+            {
+              "option_label": "C",
+              "answer_text": "In the park",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 4,
+          "content": "This question does not need ckeditor to be rendered.",
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "option_label": "A",
+              "answer_text": "In the bar",
+              "is_correct": true
+            },
+            {
+              "option_label": "B",
+              "answer_text": "In the restaurant",
+              "is_correct": false
+            },
+            {
+              "option_label": "C",
+              "answer_text": "In the park",
+              "is_correct": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "format": "H",
+      "description": "This part needs ckeditor to be rendered.",
+      "content": "...<img src='base64...'/>...",
+      "questions": [
+        {
+          "question_number": 5,
+          "content": "This question does not need ckeditor to be rendered.",
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "option_label": "A",
+              "answer_text": "In the bar",
+              "is_correct": true
+            },
+            {
+              "option_label": "B",
+              "answer_text": "In the restaurant",
+              "is_correct": false
+            },
+            {
+              "option_label": "C",
+              "answer_text": "In the park",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 6,
+          "content": "This question needs ckeditor to be rendered.",
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "option_label": "A",
+              "answer_text": "In the bar",
+              "is_correct": true
+            },
+            {
+              "option_label": "B",
+              "answer_text": "In the restaurant",
+              "is_correct": false
+            },
+            {
+              "option_label": "C",
+              "answer_text": "In the park",
+              "is_correct": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 4,
+      "format": "I",
+      "description": "This part needs ckeditor to be rendered.(Word form is special)",
+      "content": "...<img src='base64...'/>...",
+      "questions": [
+        {
+          "question_number": 7,
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "answer_text": "In the bar",
+              "is_correct": true
+            }
+          ]
+        },
+        {
+          "question_number": 8,
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "answer_text": "In the restaurant",
+              "is_correct": true
+            }
+          ]
+        },
+        {
+          "question_number": 9,
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "answer_text": "In the park",
+              "is_correct": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 5,
+      "format": "J",
+      "description": "This part needs ckeditor to be rendered.",
+      "content": "...<img src='base64...'/>...",
+      "questions": [
+        {
+          "question_number": 10,
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "option_label": "C",
+              "is_correct": true,
+              "answer_text": "In the park"
+            }
+          ]
+        },
+        {
+          "question_number": 11,
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [ 
+            {
+              "option_label": "A",
+              "is_correct": true,
+              "answer_text": "In the bar"
+            }
+          ]
+        },
+        {
+          "question_number": 12,
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "option_label": "B",
+              "is_correct": true,
+              "answer_text": "In the restaurant"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
