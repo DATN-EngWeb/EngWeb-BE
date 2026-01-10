@@ -183,7 +183,9 @@ class ProductiveTest(models.Model):
         ],
     )
     topic = models.TextField(blank=True, default="")
-    description = models.TextField(blank=True, default="")  # save url link to the description content
+    description = models.TextField(
+        blank=True, default=""
+    )  # save url link to the description content
     min_word = models.IntegerField(validators=[MinValueValidator(0)], default=0)
     glue_text = models.TextField(blank=True, null=True)
     glue_resources = models.JSONField(default=dict)
@@ -216,3 +218,6 @@ class WritingCriteriaTemplate(models.Model):
 
     class Meta:
         db_table = "writing_criteria_template"
+        constraints = [
+            models.UniqueConstraint(fields=["level", "band"], name="unique_level_band")
+        ]
