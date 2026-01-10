@@ -74,7 +74,9 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     f"part[{idx}].resources must be an object/dict"
                 )
-            invalid_part_resource_types = set(part_resources.keys()) - VALID_RESOURCE_TYPES
+            invalid_part_resource_types = (
+                set(part_resources.keys()) - VALID_RESOURCE_TYPES
+            )
             if invalid_part_resource_types:
                 invalid_str = ", ".join(sorted(invalid_part_resource_types))
                 valid_str = ", ".join(sorted(VALID_RESOURCE_TYPES))
@@ -101,7 +103,9 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
                     raise serializers.ValidationError(
                         f"part[{idx}].questions[{q_idx}].resources must be an object/dict"
                     )
-                invalid_question_resource_types = set(question_resources.keys()) - VALID_RESOURCE_TYPES
+                invalid_question_resource_types = (
+                    set(question_resources.keys()) - VALID_RESOURCE_TYPES
+                )
                 if invalid_question_resource_types:
                     invalid_str = ", ".join(sorted(invalid_question_resource_types))
                     valid_str = ", ".join(sorted(VALID_RESOURCE_TYPES))
@@ -130,7 +134,9 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
                         raise serializers.ValidationError(
                             f"part[{idx}].questions[{q_idx}].answers[{a_idx}].resources must be an object/dict"
                         )
-                    invalid_answer_resource_types = set(answer_resources.keys()) - VALID_RESOURCE_TYPES
+                    invalid_answer_resource_types = (
+                        set(answer_resources.keys()) - VALID_RESOURCE_TYPES
+                    )
                     if invalid_answer_resource_types:
                         invalid_str = ", ".join(sorted(invalid_answer_resource_types))
                         valid_str = ", ".join(sorted(VALID_RESOURCE_TYPES))
@@ -145,16 +151,14 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
     def create(self, validated_data):
         """
         Create receptive test with parts, questions, answers, and resources
+        using bulk_create for better performance.
 
         Flow:
         1. Parse JSON data
         2. Create ReceptiveTest
-        3. For each part:
-           - Save part content (if any)
-           - For each question:
-             - Process question resources
-             - For each answer:
-               - Process answer resources
+        3. Bulk create all parts
+        4. Bulk create all questions (with part references)
+        5. Bulk create all answers (with question references)
         """
         test_id = self.context.get("test_id")
 
@@ -169,55 +173,87 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
             # Create ReceptiveTest
             receptive_test = ReceptiveTest.objects.create(test_id=test_id)
 
-            # Process parts
-            for part_data in parts_data:
+            # Prepare parts for bulk create
+            parts_to_create = []
+            # Store questions data with part index for later reference
+            questions_by_part_idx = {}  # {part_idx: [(question_data, score), ...]}
 
-                # Create part
-                part = ReceptivePart.objects.create(
+            for part_idx, part_data in enumerate(parts_data):
+                part = ReceptivePart(
                     receptive_test=receptive_test,
                     order=part_data.get("order"),
                     format=part_data.get("format"),
                     description=part_data.get("description", ""),
                     content=part_data.get("content", ""),
                     resources=part_data.get("resources", {}),
+                    score=0,  # Will be updated after questions are processed
                 )
+                parts_to_create.append(part)
+                questions_by_part_idx[part_idx] = part_data.get("questions", [])
 
-                # Process questions
+            # Bulk create parts
+            created_parts = ReceptivePart.objects.bulk_create(parts_to_create)
+
+            # Prepare questions for bulk create
+            questions_to_create = []
+            # Store answers data with question index for later reference
+            answers_by_question_idx = {}  # {global_question_idx: [answer_data, ...]}
+            part_scores = {}  # {part_idx: total_score}
+            global_question_idx = 0
+
+            for part_idx, part in enumerate(created_parts):
                 part_score = 0
-                for question_idx, question_data in enumerate(
-                    part_data.get("questions", [])
-                ):
-                    question = ReceptiveQuestion.objects.create(
+                for question_data in questions_by_part_idx[part_idx]:
+                    score = question_data.get("score", 0)
+                    question = ReceptiveQuestion(
                         receptive_part=part,
                         question_number=question_data.get("question_number"),
                         content=question_data.get("content", ""),
                         explanation=question_data.get("explanation", ""),
-                        score=question_data.get("score", 0),
+                        score=score,
                         resources=question_data.get("resources", {}),
                     )
+                    questions_to_create.append(question)
+                    answers_by_question_idx[global_question_idx] = question_data.get(
+                        "answers", []
+                    )
+                    part_score += score
+                    global_question_idx += 1
 
-                    part_score += question.score
+                part_scores[part_idx] = part_score
 
-                    # Process answers
-                    for answer_idx, answer_data in enumerate(
-                        question_data.get("answers", [])
-                    ):
+            # Bulk create questions
+            created_questions = ReceptiveQuestion.objects.bulk_create(
+                questions_to_create
+            )
 
-                        ReceptiveAnswer.objects.create(
-                            receptive_question=question,
-                            option_label=answer_data.get("option_label", None),
-                            answer_text=answer_data.get("answer_text", ""),
-                            is_correct=answer_data.get("is_correct", False),
-                            resources=answer_data.get("resources", {}),
-                        )
+            # Prepare answers for bulk create
+            answers_to_create = []
+            for question_idx, question in enumerate(created_questions):
+                for answer_data in answers_by_question_idx[question_idx]:
+                    answer = ReceptiveAnswer(
+                        receptive_question=question,
+                        option_label=answer_data.get("option_label", None),
+                        answer_text=answer_data.get("answer_text", ""),
+                        is_correct=answer_data.get("is_correct", False),
+                        resources=answer_data.get("resources", {}),
+                    )
+                    answers_to_create.append(answer)
 
-                # Update part score
-                part.score = part_score
-                part.save()
+            # Bulk create answers
+            ReceptiveAnswer.objects.bulk_create(answers_to_create)
 
-                # Add to total score
-                receptive_test.total_score += part_score
+            # Update part scores and calculate total score
+            total_score = 0
+            for part_idx, part in enumerate(created_parts):
+                part.score = part_scores[part_idx]
+                total_score += part_scores[part_idx]
 
+            # Bulk update part scores
+            ReceptivePart.objects.bulk_update(created_parts, ["score"])
+
+            # Update total score
+            receptive_test.total_score = total_score
             receptive_test.save()
 
         return receptive_test

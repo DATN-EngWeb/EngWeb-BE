@@ -140,7 +140,7 @@ class ConfirmUploadView(generics.CreateAPIView):
 
     serializer_class = ConfirmUploadSerializer
     permission_classes = [IsAuthenticated]
-    throttle_classes = [StorageRateThrottle]
+    # throttle_classes = [StorageRateThrottle]
 
     def get_s3_manager(self):
         """Lazy-load S3PresignedURLManager to avoid issues during schema generation"""
