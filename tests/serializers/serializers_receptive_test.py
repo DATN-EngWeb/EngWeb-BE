@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.db import transaction
 
-from ..models import ReceptiveTest, ReceptivePart, ReceptiveQuestion, ReceptiveAnswer
+from ..models import ReceptiveTest, ReceptivePart, ReceptiveQuestion, ReceptiveAnswer, Test
 
 # Valid format choices - support both Reading and Listening
 VALID_PART_FORMATS = {
@@ -16,6 +16,11 @@ VALID_PART_FORMATS = {
     "I": "Reading - Fill in the blanks (text)",
     "J": "Reading - Matching",
 }
+
+# Listening formats (A-E)
+LISTENING_FORMATS = {"A", "B", "C", "D", "E"}
+# Reading formats (F-J)
+READING_FORMATS = {"F", "G", "H", "I", "J"}
 
 # Valid resource types for receptive tests
 VALID_RESOURCE_TYPES = {"image", "audio"}
@@ -67,6 +72,27 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     f"part[{idx}] has invalid format '{part_format}'. Valid formats: {valid_formats}"
                 )
+
+            # Validate format matches skill (Reading: F-J, Listening: A-E)
+            test_id = self.context.get("test_id")
+            if test_id:
+                try:
+                    test = Test.objects.get(pk=test_id)
+                    skill = test.skill
+                    if skill == "R" and part_format not in READING_FORMATS:
+                        valid_str = ", ".join(sorted(READING_FORMATS))
+                        raise serializers.ValidationError(
+                            f"part[{idx}] has format '{part_format}' which is not valid for Reading skill. "
+                            f"Valid Reading formats: {valid_str}"
+                        )
+                    elif skill == "L" and part_format not in LISTENING_FORMATS:
+                        valid_str = ", ".join(sorted(LISTENING_FORMATS))
+                        raise serializers.ValidationError(
+                            f"part[{idx}] has format '{part_format}' which is not valid for Listening skill. "
+                            f"Valid Listening formats: {valid_str}"
+                        )
+                except Test.DoesNotExist:
+                    pass
 
             # Validate part resources
             part_resources = part.get("resources", {})

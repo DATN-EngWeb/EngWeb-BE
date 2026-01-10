@@ -5,6 +5,15 @@ from django.core.validators import MinValueValidator
 # Create your models here.
 class Test(models.Model):
     title = models.CharField(max_length=255)
+    type = models.CharField(
+        choices=[
+            ("R", "Receptive test"),
+            ("P", "Productive test"),
+        ],
+        max_length=1,
+        default="R",
+    )
+
     level = models.CharField(
         max_length=2,
         choices=[
@@ -56,6 +65,18 @@ class Test(models.Model):
 
     class Meta:
         db_table = "test"
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    # type=R (Receptive) → skill must be R (Reading) or L (Listening)
+                    models.Q(type="R", skill__in=["R", "L"])
+                    |
+                    # type=P (Productive) → skill must be S (Speaking) or W (Writing)
+                    models.Q(type="P", skill__in=["S", "W"])
+                ),
+                name="test_type_skill_compatibility",
+            ),
+        ]
 
 
 class ReceptiveTest(models.Model):
@@ -71,21 +92,6 @@ class ReceptiveTest(models.Model):
 
     class Meta:
         db_table = "receptive_test"
-
-
-class ProductiveTest(models.Model):
-    test = models.OneToOneField(Test, on_delete=models.CASCADE, primary_key=True)
-
-    format = models.CharField(max_length=1, choices=[])  # Update choices when needed
-    question_text = models.TextField()
-    resources = models.JSONField(default=dict)
-    criteria = models.JSONField(default=dict)
-
-    def __str__(self):
-        return f"Productive Test for {self.test.title}"
-
-    class Meta:
-        db_table = "productive_test"
 
 
 class ReceptivePart(models.Model):
@@ -156,3 +162,57 @@ class ReceptiveAnswer(models.Model):
 
     class Meta:
         db_table = "receptive_answer"
+
+
+class ProductiveTest(models.Model):
+    test = models.OneToOneField(Test, on_delete=models.CASCADE, primary_key=True)
+
+    format = models.CharField(
+        max_length=1,
+        choices=[
+            ("A", "Writing - Email"),
+            ("B", "Writing - Article"),
+            ("C", "Writing - Tell a story based on pictures"),
+            ("D", "Writing - Essay"),
+            ("E", "Writing - Letter"),
+            ("F", "Writing - Reviews"),
+            ("G", "Speaking - Narrative"),
+            ("H", "Speaking - Description"),
+            ("I", "Speaking - Social argument"),
+            ("J", "Speaking - Reading aloud"),
+        ],
+    )
+    topic = models.TextField(blank=True, default="")
+    description = models.TextField(blank=True, default="")  # save url link to the description content
+    min_word = models.IntegerField(validators=[MinValueValidator(0)], default=0)
+    glue_text = models.TextField(blank=True, null=True)
+    glue_resources = models.JSONField(default=dict)
+
+    def __str__(self):
+        return f"Productive Test for {self.test.title}"
+
+    class Meta:
+        db_table = "productive_test"
+
+
+class WritingCriteriaTemplate(models.Model):
+    level = models.CharField(
+        max_length=2,
+        choices=[
+            ("B1", "B1"),
+            ("B2", "B2"),
+            ("A1", "A1"),
+            ("A2", "A2"),
+        ],
+    )
+    band = models.IntegerField(validators=[MinValueValidator(1)])
+    content = models.TextField(null=True, blank=True)
+    communicative_achievement = models.TextField(null=True, blank=True)
+    organisation = models.TextField(null=True, blank=True)
+    language = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Level: {self.level}, Band: {self.band}"
+
+    class Meta:
+        db_table = "writing_criteria_template"

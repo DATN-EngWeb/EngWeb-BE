@@ -1,0 +1,27 @@
+
+[
+{
+  "title": "Writing and Speaking Test 1",
+  "type": "P",
+  "level": "A1",
+  "skill": "W",
+  "time": 0,
+  "description": "string",
+  "status": "D",
+  "completed_bonus": 0
+},
+
+{
+  "data": {
+    "format": "E",
+    "topic": "Describe a memorable trip you have taken.",
+    "description": "https://example.com/media/tests/1/part1/content.html",
+    "min_word": 150,
+    "glue_text": "You should write at least 150 words. You can use the following points to help you:\n- Where you went\n- Who you went with\n- What you did there\n- Why it was memorable",
+    "glue_resources": {
+      "image": "glue_image.png",
+      "audio": "glue_audio.mp3"
+    }
+  }
+}
+]

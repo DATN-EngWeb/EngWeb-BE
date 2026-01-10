@@ -1,6 +1,7 @@
 {
   "test": {
     "title": "Test 1",
+    "type": "R",
     "level": "A1",
     "skill": "L",
     "time": 30,

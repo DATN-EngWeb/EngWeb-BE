@@ -37,7 +37,7 @@ urlpatterns = [
     # Accounts API
     path("api/accounts/", include("accounts.urls")),
     # Tests API
-    path("api/tests", include("tests.urls")),
+    path("api/tests/", include("tests.urls")),
     # Storage API
     path("api/storage/", include("storage.urls")),
     # OpenAPI schema

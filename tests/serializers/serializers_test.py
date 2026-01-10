@@ -1,6 +1,4 @@
-from ..models import (
-    Test
-)
+from ..models import Test
 
 from rest_framework import serializers
 
@@ -11,6 +9,7 @@ class TestSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "title",
+            "type",
             "level",
             "skill",
             "time",
@@ -36,6 +35,13 @@ class TestSerializer(serializers.ModelSerializer):
         if not title:
             errors["title"] = "This field is required."
 
+        # Validate type
+        test_type = attrs.get("type")
+        if not test_type:
+            errors["type"] = "This field is required."
+        elif test_type not in ["R", "P"]:
+            errors["type"] = "Must be one of: R (Receptive), P (Productive)."
+
         # Validate level
         level = attrs.get("level")
         if level and level not in ["B1", "B2", "A1", "A2"]:
@@ -47,6 +53,17 @@ class TestSerializer(serializers.ModelSerializer):
             errors["skill"] = (
                 "Must be one of: R (Reading), L (Listening), S (Speaking), W (Writing)."
             )
+
+        # Validate type-skill compatibility
+        if test_type and skill:
+            if test_type == "R" and skill not in ["R", "L"]:
+                errors["skill"] = (
+                    "Receptive test (type=R) only supports Reading (R) or Listening (L) skills."
+                )
+            elif test_type == "P" and skill not in ["S", "W"]:
+                errors["skill"] = (
+                    "Productive test (type=P) only supports Speaking (S) or Writing (W) skills."
+                )
 
         # Validate time
         time_value = attrs.get("time")

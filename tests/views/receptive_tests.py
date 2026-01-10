@@ -1,12 +1,5 @@
 from rest_framework import status, generics, serializers
 from rest_framework.response import Response
-from rest_framework.parsers import BaseParser
-from rest_framework.views import APIView
-import io
-
-from django.http.request import HttpRequest
-from django.http.multipartparser import MultiPartParser
-from django.core.files.uploadhandler import MemoryFileUploadHandler
 
 from ..models import Test
 from ..serializers.serializers_receptive_test import ReceptiveTestCreateSerializer
@@ -46,7 +39,7 @@ class ReceptiveTestCreateView(generics.CreateAPIView):
             "Tạo cấu trúc Receptive Test (Reading/Listening) cho một bài kiểm tra đã tồn tại.\n\n"
             "**Yêu cầu:**\n"
             "- Bài kiểm tra `test_id` phải tồn tại\n"
-            "- Kỹ năng của bài kiểm tra phải là `R` (Reading) hoặc `L` (Listening)\n"
+            "- Loại bài kiểm tra (type) phải là `R` (Receptive)\n"
             "- Chỉ giáo viên (IsTeacher) mới được phép gọi API này\n"
             "- Mỗi bài kiểm tra chỉ có **một** ReceptiveTest (nếu đã tồn tại sẽ trả lỗi)\n\n"
             "**Body request (JSON):**\n"
@@ -109,7 +102,7 @@ class ReceptiveTestCreateView(generics.CreateAPIView):
         ),
         examples=[
             OpenApiExample(
-                "ReceptiveTestCreate example",
+                "ReceptiveTestCreate request example",
                 value={
                     "data": {
                         "parts": [
@@ -180,6 +173,7 @@ class ReceptiveTestCreateView(generics.CreateAPIView):
                         ]
                     }
                 },
+                request_only=True,
             )
         ],
         responses={
@@ -231,11 +225,12 @@ class ReceptiveTestCreateView(generics.CreateAPIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # 2. Ensure skill is Reading or Listening
-        if test.skill not in ("R", "L"):
+        # 2. Ensure test type is Receptive
+        if test.type != "R":
             return Response(
                 {
-                    "detail": "Only Reading (R) and Listening (L) tests can have a Receptive Test.",
+                    "detail": "Only Receptive tests (type='R') can have Receptive Test content. "
+                    f"This test has type='{test.type}'.",
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -259,7 +254,7 @@ class ReceptiveTestCreateView(generics.CreateAPIView):
             "message": "Receptive Test created successfully.",
             "test_id": receptive_test.test_id,
             "total_score": receptive_test.total_score,
-            "parts_count": receptive_test.receptive_parts.count(),
+            "parts_count": receptive_test.receptive_parts.count()
         }
 
         return Response(response_data, status=status.HTTP_201_CREATED)
