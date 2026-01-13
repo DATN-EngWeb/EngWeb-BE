@@ -26,7 +26,7 @@ class CustomUserManager(BaseUserManager):
     def create_superuser(self, username, email, password=None, **extra_fields):
         extra_fields.setdefault('role', 'A')
         extra_fields.setdefault('is_active', True)
-        extra_fields.setdefault('avatar', 'avatars/admin-avatar.png')
+        extra_fields.setdefault('avatar', 'users/avatars/admin-avatar.png')
 
         return self.create_user(username, email, password, **extra_fields)
 
@@ -40,7 +40,8 @@ class User(AbstractUser):
     file_storage_uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
     full_name = models.CharField(max_length=100, blank=True, null=True)
     date_of_birth = models.DateField(null=True, blank=True)
-    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True, default='avatars/default-avatar.jpg')
+    avatar = models.ImageField(upload_to='users/avatars/', null=True, blank=True, default='users/avatars/default-avatar.jpg')
+    cover = models.ImageField(upload_to='users/covers/', null=True, blank=True, default='users/covers/default-cover.jpg')
     
     # is_active is always set to True, staus will be used instead
     status = models.CharField(
