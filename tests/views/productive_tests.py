@@ -2,7 +2,7 @@ from rest_framework import status, generics, serializers
 from rest_framework.response import Response
 
 from ..models import Test
-from ..serializers.serializers_productive_test import ProductiveTestCreateSerializer
+from ..serializers.productive_test import ProductiveTestCreateSerializer
 from ..permissions import IsTeacher
 from accounts.utils import get_or_create_file_storage_uuid
 

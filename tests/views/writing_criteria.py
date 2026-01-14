@@ -2,7 +2,7 @@ from rest_framework import generics, permissions
 import django_filters
 
 from ..models import WritingCriteriaTemplate
-from ..serializers.serializers_writing_criteria import WritingCriteriaTemplateSerializer
+from ..serializers.writing_criteria import WritingCriteriaTemplateSerializer
 from ..filters import WritingCriteriaTemplateFilter
 
 from drf_spectacular.utils import (
@@ -51,32 +51,6 @@ class WritingCriteriaTemplateListView(generics.ListAPIView):
                 location=OpenApiParameter.QUERY,
                 description="Lọc theo điểm band",
                 required=False,
-            ),
-        ],
-        examples=[
-            OpenApiExample(
-                "WritingCriteriaTemplate list response",
-                value=[
-                    {
-                        "id": 1,
-                        "level": "B1",
-                        "band": 1,
-                        "content": "Content is irrelevant...",
-                        "communicative_achievement": "Communicative achievement is not evident...",
-                        "organisation": "Organisation is not evident...",
-                        "language": "Language is not evident...",
-                    },
-                    {
-                        "id": 2,
-                        "level": "B1",
-                        "band": 2,
-                        "content": "Content is slightly relevant...",
-                        "communicative_achievement": "Uses the conventions of the communicative task with limited success...",
-                        "organisation": "Text is connected using basic linking words...",
-                        "language": "Uses everyday vocabulary generally appropriately...",
-                    },
-                ],
-                response_only=True,
             ),
         ],
         responses={

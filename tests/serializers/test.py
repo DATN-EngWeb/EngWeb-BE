@@ -14,7 +14,6 @@ class TestSerializer(serializers.ModelSerializer):
             "skill",
             "time",
             "description",
-            "completed_bonus",
             "status",
             "created_at",
             "updated_at",

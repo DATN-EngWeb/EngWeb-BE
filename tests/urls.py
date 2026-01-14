@@ -4,6 +4,7 @@ from .views.overview_tests import TestOverviewListCreateView
 from .views.receptive_tests import ReceptiveTestCreateView
 from .views.productive_tests import ProductiveTestCreateView
 from .views.writing_criteria import WritingCriteriaTemplateListView
+from .views.completed_bonus import CompletedBonusListView
 
 urlpatterns = [
     path("overview", TestOverviewListCreateView.as_view(), name="test"),
@@ -21,5 +22,10 @@ urlpatterns = [
         "writing-criteria",
         WritingCriteriaTemplateListView.as_view(),
         name="writing-criteria",
+    ),
+    path(
+        "completed-bonus",
+        CompletedBonusListView.as_view(),
+        name="completed-bonus",
     ),
 ]

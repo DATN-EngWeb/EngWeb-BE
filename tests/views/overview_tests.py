@@ -5,7 +5,7 @@ from rest_framework.exceptions import PermissionDenied
 import django_filters
 
 from ..models import Test
-from ..serializers.serializers_test import TestSerializer
+from ..serializers.test import TestSerializer
 from ..permissions import IsTeacher
 from ..filters import TestFilter
 from accounts.models import Teacher
@@ -218,7 +218,6 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "- `description`: Mô tả bài kiểm tra (không được để trống)\n\n"
             "**Tham số tùy chọn:**\n"
             "- `status`: Trạng thái - D (Draft), I (In Review), P (Published) (mặc định: D)\n"
-            "- `completed_bonus`: Điểm thưởng hoàn thành (mặc định: 0, phải >= 0)\n\n"
             "**Lưu ý:**\n"
             "- `type` và `skill` phải tương thích:\n"
             "  - type=R chỉ dùng với skill=R hoặc skill=L\n"
@@ -261,11 +260,6 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                         "Nếu không gửi sẽ mặc định là D."
                     ),
                 ),
-                "completed_bonus": serializers.IntegerField(
-                    required=False,
-                    default=0,
-                    help_text="Điểm thưởng hoàn thành (mặc định: 0)",
-                ),
             },
         ),
         responses={
@@ -297,7 +291,6 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                             "type": "string",
                             "example": "Test description...",
                         },
-                        "completed_bonus": {"type": "integer", "example": 10},
                         "status": {
                             "type": "string",
                             "enum": ["D", "I", "P"],

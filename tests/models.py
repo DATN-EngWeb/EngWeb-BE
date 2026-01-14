@@ -38,7 +38,6 @@ class Test(models.Model):
         help_text="Time in minutes", validators=[MinValueValidator(1)]
     )
     description = models.TextField()
-    completed_bonus = models.IntegerField(validators=[MinValueValidator(0)], default=0)
     status = models.CharField(
         max_length=1,
         choices=[
@@ -220,4 +219,35 @@ class WritingCriteriaTemplate(models.Model):
         db_table = "writing_criteria_template"
         constraints = [
             models.UniqueConstraint(fields=["level", "band"], name="unique_level_band")
+        ]
+
+
+class CompletedBonus(models.Model):
+    skill = models.CharField(
+        max_length=1,
+        choices=[
+            ("R", "Reading"),
+            ("L", "Listening"),
+            ("S", "Speaking"),
+            ("W", "Writing"),
+        ],
+    )
+    level = models.CharField(
+        max_length=2,
+        choices=[
+            ("B1", "B1"),
+            ("B2", "B2"),
+            ("A1", "A1"),
+            ("A2", "A2"),
+        ],
+    )
+    completed_bonus = models.IntegerField(validators=[MinValueValidator(0)], default=0)
+
+    def __str__(self):
+        return f"Skill: {self.skill}, Level: {self.level}, Bonus: {self.completed_bonus}"
+
+    class Meta:
+        db_table = "completed_bonus"
+        constraints = [
+            models.UniqueConstraint(fields=["skill", "level"], name="unique_skill_level")
         ]
