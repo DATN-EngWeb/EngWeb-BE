@@ -82,40 +82,75 @@ class TeacherSerializer(serializers.ModelSerializer):
         }
 
     def validate(self, attrs):
-        required_teacher_fields = ['current_workplace', 'teacher_type', 'introduction']
         errors = {}
-
-        # Validate teacher fields
-        for field in required_teacher_fields:
-            value = attrs.get(field)
-            if isinstance(value, str):
-                value = value.strip()
-            if not value:
-                errors[field] = 'This field is required.'
         
-        # Validate teacher_type values
+        # Check if this is an update operation (partial update)
+        is_update = self.instance is not None
+        
+        # If this is a create operation, all required fields must be present
+        # If this is an update operation, only validate fields that are being updated
+        if not is_update:
+            # CREATE: Validate all required fields
+            required_teacher_fields = ['current_workplace', 'teacher_type', 'introduction']
+            for field in required_teacher_fields:
+                value = attrs.get(field)
+                if isinstance(value, str):
+                    value = value.strip()
+                if not value:
+                    errors[field] = 'This field is required.'
+            
+            # Validate experience_year is required for create
+            experience_year = attrs.get('experience_year')
+            if experience_year is None:
+                errors['experience_year'] = 'This field is required.'
+            
+            # Validate credentials is required for create
+            credentials = attrs.get('credentials', {})
+            if not credentials or not isinstance(credentials, dict):
+                errors['credentials'] = 'Credentials data is required.'
+            elif not credentials.get('certificates') or len(credentials.get('certificates', [])) == 0:
+                errors['credentials'] = 'At least one certificate is required.'
+        else:
+            # UPDATE (partial): Only validate fields that are being updated
+            # Validate current_workplace if provided
+            if 'current_workplace' in attrs:
+                current_workplace = attrs.get('current_workplace')
+                if isinstance(current_workplace, str):
+                    current_workplace = current_workplace.strip()
+                if not current_workplace:
+                    errors['current_workplace'] = 'This field cannot be empty.'
+            
+            # Validate introduction if provided
+            if 'introduction' in attrs:
+                introduction = attrs.get('introduction')
+                if isinstance(introduction, str):
+                    introduction = introduction.strip()
+                if not introduction:
+                    errors['introduction'] = 'This field cannot be empty.'
+            
+            # Validate credentials if provided (must have at least one certificate)
+            if 'credentials' in attrs:
+                credentials = attrs.get('credentials', {})
+                if not credentials or not isinstance(credentials, dict):
+                    errors['credentials'] = 'Credentials data is required.'
+                elif not credentials.get('certificates') or len(credentials.get('certificates', [])) == 0:
+                    errors['credentials'] = 'At least one certificate is required.'
+        
+        # Validate teacher_type values (if provided)
         teacher_type = attrs.get('teacher_type')
         if teacher_type and teacher_type not in ['S', 'C', 'F']:
             errors['teacher_type'] = 'Must be one of: S (School Teacher), C (Center Teacher), F (Freelance Teacher).'
         
-        # Validate experience_year
+        # Validate experience_year (if provided)
         experience_year = attrs.get('experience_year')
-        if experience_year is None:
-            errors['experience_year'] = 'This field is required.'
-        elif isinstance(experience_year, str):
-            try:
-                attrs['experience_year'] = int(experience_year)
-            except ValueError:
-                errors['experience_year'] = 'Must be a valid integer.'
-        elif not isinstance(experience_year, int) or experience_year < 0:
-            errors['experience_year'] = 'Must be a non-negative integer.'
-        
-        # Validate credentials - at least one certificate required
-        credentials = attrs.get('credentials', {})
-        if not credentials or not isinstance(credentials, dict):
-            errors['credentials'] = 'Credentials data is required.'
-        elif not credentials.get('certificates') or len(credentials.get('certificates', [])) == 0:
-            errors['credentials'] = 'At least one certificate is required.'
+        if experience_year is not None:
+            if isinstance(experience_year, str):
+                try:
+                    attrs['experience_year'] = int(experience_year)
+                except ValueError:
+                    errors['experience_year'] = 'Must be a valid integer.'
+            elif not isinstance(experience_year, int) or experience_year < 0:
+                errors['experience_year'] = 'Must be a non-negative integer.'
 
         if errors:
             raise serializers.ValidationError(errors)

@@ -23,6 +23,9 @@ from .views.users import (
     UserListAPIView,
     UserRetrieveUpdateDestroyAPIView,
 )
+from .views.teachers import (
+    TeacherRetrieveUpdateDestroyAPIView,
+)
 urlpatterns = [
     # Authentication endpoints
     path('token', CustomTokenObtainPairView.as_view(), name='token-obtain-pair'),
@@ -46,4 +49,7 @@ urlpatterns = [
     # Users endpoints
     path('users', UserListAPIView.as_view(), name='user-list'),
     path('users/<int:pk>', UserRetrieveUpdateDestroyAPIView.as_view(), name='user-retrieve-update-destroy'),
+
+    # Teachers endpoints
+    path('teachers/<int:pk>', TeacherRetrieveUpdateDestroyAPIView.as_view(), name='teacher-retrieve-update-destroy'),
 ]

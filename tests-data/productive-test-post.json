@@ -1,0 +1,27 @@
+{
+    "title" : "Test 1",
+    "level" : "A2",
+    "skill" : "W",
+    "time" : 30,
+    "test_description" : "This is a test for the A1 level",
+    "status" : "D",
+    "format" : "A",
+    "topic" : "Travel",
+    "productive_test_description" : "email_test.html",
+    "min_words" : 100,
+    "glue_text" : "hehe"
+},
+
+{
+    "title" : "Test 1",
+    "level" : "B2",
+    "skill" : "S",
+    "time" : 60,
+    "test_description" : "This is a test for the B2 level",
+    "status" : "P",
+    "format" : "I",
+    "topic" : "Food",
+    "productive_test_description" : "social_argument.html",
+    "glue_text" : "hehe",
+    "glue_resource" : "glue_resource.mp3"
+}

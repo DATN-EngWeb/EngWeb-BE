@@ -330,7 +330,7 @@ def process_credential_files(request_files, user):
         {
             "certificates": [
                 {
-                    "url": "credentials/{file_storage_uuid}/cert_0.pdf",
+                    "url": "teachers/credentials/{file_storage_uuid}/cert_0.pdf",
                     "name": "certificate.pdf",
                     "type": "application/pdf",
                     "size": 12345
@@ -352,12 +352,6 @@ def process_credential_files(request_files, user):
 
     # Get or create file storage UUID for user
     file_storage_uuid = get_or_create_file_storage_uuid(user)
-
-    # Create directory for user's credentials
-    credentials_dir = os.path.join(
-        settings.MEDIA_ROOT, "credentials", str(file_storage_uuid)
-    )
-    os.makedirs(credentials_dir, exist_ok=True)
 
     for index, file_obj in enumerate(credential_files):
         if not file_obj:
@@ -383,15 +377,17 @@ def process_credential_files(request_files, user):
 
         file_extension = extension_map[file_type]
         filename = f"cert_{index}{file_extension}"
-        file_path = os.path.join(credentials_dir, filename)
+        
+        # Create relative path for storage (works with both local and S3)
+        relative_path = f"teachers/credentials/{file_storage_uuid}/{filename}"
 
-        # Save file
-        with open(file_path, "wb") as f:
-            for chunk in file_obj.chunks():
-                f.write(chunk)
+        # Save file using Django storage backend (works with both local and S3)
+        # When USE_S3=True, default_storage will save to S3/MinIO
+        # When USE_S3=False, default_storage will save to local MEDIA_ROOT
+        default_storage.save(relative_path, file_obj)
 
-        # Create relative URL for database storage
-        relative_url = f"credentials/{file_storage_uuid}/{filename}"
+        # Create relative URL for database storage (same as relative_path)
+        relative_url = relative_path
 
         # Add to credentials data
         credentials_data["certificates"].append(
@@ -573,7 +569,7 @@ def resend_forgot_password_otp_email(username):
 # download and save avatar from social account when user hasn't existed in database
 def download_and_save_avatar(avatar_url, user):
     """
-    Download avatar image from URL and save to media/avatars/{file_storage_uuid}/{file_storage_uuid}.{ext}
+    Download avatar image from URL and save to media/users/avatars/{file_storage_uuid}/{file_storage_uuid}.{ext}
     Returns relative path to saved file or None if failed
 
     Args:
@@ -604,9 +600,9 @@ def download_and_save_avatar(avatar_url, user):
             # Get or create file storage UUID for user
             file_storage_uuid = get_or_create_file_storage_uuid(user)
 
-            # Directory and filename pattern: avatars/{file_storage_uuid}/{file_storage_uuid}.ext
+            # Directory and filename pattern: users/avatars/{file_storage_uuid}/{file_storage_uuid}.ext
             filename = f"{file_storage_uuid}.{file_extension}"
-            folder_path = f"avatars/{file_storage_uuid}"
+            folder_path = f"users/avatars/{file_storage_uuid}"
             file_path = f"{folder_path}/{filename}"
 
             image_content = ContentFile(response.content)
@@ -662,7 +658,7 @@ def get_absolute_media_url(media_field, request=None):
     - String paths (e.g., from serializer)
 
     Args:
-        media_field: ImageField/FileField instance OR string path (e.g., user.avatar or "avatars/default.jpg")
+        media_field: ImageField/FileField instance OR string path (e.g., user.avatar or "users/avatars/default.jpg")
         request: HttpRequest object (optional, for building absolute URL)
 
     Returns:
@@ -675,20 +671,145 @@ def get_absolute_media_url(media_field, request=None):
     if isinstance(media_field, str):
         # Check if already absolute URL
         if media_field.startswith("http"):
+            # If using S3, replace backend endpoint with client endpoint for frontend access
+            from django.conf import settings
+            if getattr(settings, 'USE_S3', False):
+                backend_endpoint = getattr(settings, 'AWS_S3_ENDPOINT_URL', '')
+                client_endpoint = getattr(settings, 'AWS_S3_CLIENT_ENDPOINT_URL', '')
+                if backend_endpoint and client_endpoint and backend_endpoint in media_field:
+                    media_field = media_field.replace(backend_endpoint, client_endpoint)
             return media_field
+        
         # Build absolute URL from relative path
+        from django.conf import settings
+        if getattr(settings, 'USE_S3', False):
+            # If using S3, build URL from S3 client endpoint
+            bucket_name = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', 'englishapp')
+            client_endpoint = getattr(settings, 'AWS_S3_CLIENT_ENDPOINT_URL', 'http://localhost:9000')
+            # Use path as-is (file is stored directly in bucket without 'media/' prefix)
+            s3_path = media_field
+            return f"{client_endpoint}/{bucket_name}/{s3_path}"
+        
+        # If not using S3, build URL from Django server
         if request:
             return request.build_absolute_uri(f"/media/{media_field}")
         return f"/media/{media_field}"
 
     # Handle ImageField/FileField object
-    # Try to build absolute URL from request first
-    if request:
-        try:
-            return request.build_absolute_uri(media_field.url)
-        except Exception:
-            pass
+    try:
+        # Get URL from field (may be relative or absolute depending on storage backend)
+        field_url = media_field.url if media_field else None
+        if not field_url:
+            return None
+        
+        # If URL is already absolute (S3 storage)
+        if field_url.startswith("http"):
+            # If using S3, replace backend endpoint with client endpoint for frontend access
+            from django.conf import settings
+            if getattr(settings, 'USE_S3', False):
+                backend_endpoint = getattr(settings, 'AWS_S3_ENDPOINT_URL', '')
+                client_endpoint = getattr(settings, 'AWS_S3_CLIENT_ENDPOINT_URL', '')
+                if backend_endpoint and client_endpoint and backend_endpoint in field_url:
+                    field_url = field_url.replace(backend_endpoint, client_endpoint)
+            return field_url
+        
+        # If URL is relative, build absolute URL from request
+        if request:
+            return request.build_absolute_uri(field_url)
+        
+        # Fallback: return relative path
+        return field_url
+    except Exception:
+        return None
 
-    # Fallback: return relative path from field
-    # Frontend can handle it if needed
-    return media_field.url if media_field else None
+
+def get_s3_key_from_imagefield(image_field):
+    """
+    Extract S3 key from ImageField for deletion
+    
+    Args:
+        image_field: ImageField instance (e.g., user.avatar, user.cover)
+        
+    Returns:
+        str: S3 key (e.g., "users/avatars/{uuid}/file.jpg") or None
+        
+    Note:
+        - When using S3 storage, Django stores relative path in DB (without 'media/' prefix)
+        - Example: DB value = 'users/avatars/{uuid}/file.jpg'
+        - S3 key = db_path (as-is, no prefix needed)
+        - Files are stored directly in bucket without 'media/' prefix
+    """
+    if not image_field:
+        return None
+    
+    try:
+        # Get the actual value stored in database (relative path)
+        # This is the 'name' attribute of the ImageField
+        db_path = image_field.name if hasattr(image_field, 'name') and image_field.name else None
+        
+        if not db_path:
+            return None
+        
+        # Only process if using S3
+        if not getattr(settings, 'USE_S3', False):
+            return None
+        
+        # Files are stored directly in bucket without 'media/' prefix
+        # Return path as-is
+        return db_path
+    except Exception:
+        return None
+
+
+def get_s3_key_from_credential_url(credential_url):
+    """
+    Extract S3 key from credential URL string (relative path)
+    
+    Args:
+        credential_url: Relative path string (e.g., "teachers/credentials/{uuid}/cert_0.png")
+        
+    Returns:
+        str: S3 key (same as credential_url, no prefix needed) or None
+        
+    Note:
+        - Credentials are stored directly in bucket without 'media/' prefix
+        - Example: credential_url = 'teachers/credentials/{uuid}/cert_0.png'
+        - S3 key = credential_url (as-is)
+    """
+    if not credential_url:
+        return None
+    
+    try:
+        # Only process if using S3
+        if not getattr(settings, 'USE_S3', False):
+            return None
+        
+        # Credentials are stored directly without 'media/' prefix
+        # Return path as-is
+        return credential_url
+    except Exception:
+        return None
+
+
+def delete_old_file_from_s3(s3_key):
+    """
+    Delete file from S3/MinIO if it exists
+    
+    Args:
+        s3_key: S3 object key (e.g., "users/avatars/{uuid}/file.jpg" or "teachers/credentials/{uuid}/cert_0.png")
+    """
+    if not s3_key:
+        return
+    
+    # Only delete if using S3
+    if not getattr(settings, 'USE_S3', False):
+        return
+    
+    try:
+        from storage.utils.s3_presigned import S3PresignedURLManager
+        s3_manager = S3PresignedURLManager()
+        s3_manager.delete_object(s3_key)
+    except Exception:
+        # Silently fail - file might not exist or already deleted
+        # Don't raise error to avoid breaking the update flow
+        pass

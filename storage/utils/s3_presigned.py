@@ -13,6 +13,8 @@ class S3PresignedURLManager:
 
     ALLOWED_MIME_TYPES = {
         "avatars": ["image/jpeg", "image/png"],
+        "covers": ["image/jpeg", "image/png"],
+        "credentials": ["application/pdf", "image/jpeg", "image/png"],
         "tests": ["image/jpeg", "image/png", "video/mp4", "audio/mpeg", "text/html"],
     }
 
@@ -178,7 +180,7 @@ class S3PresignedURLManager:
         Generate S3 object key with proper path structure
 
         Args:
-            category: 'avatars' or 'tests'
+            category: 'avatars', 'covers', 'credentials', or 'tests'
             user_id: User ID or UUID
             filename: Original filename
             test_id: Test ID (required if category='tests')
@@ -186,7 +188,9 @@ class S3PresignedURLManager:
 
         Returns:
             S3 key:
-            - avatars: media/avatars/user_id/unique_filename
+            - avatars: media/users/avatars/user_id/unique_filename
+            - covers: media/users/covers/user_id/unique_filename
+            - credentials: media/teachers/credentials/user_id/unique_filename
             - tests: media/tests/test_id/part{part}/unique_filename
         """
         import uuid
@@ -200,6 +204,15 @@ class S3PresignedURLManager:
             if test_id is None or part is None:
                 raise ValueError("test_id and part are required for tests category")
             return f"media/tests/{test_id}/part{part}/{unique_filename}"
+        elif category == "avatars":
+            # avatars category: use users/avatars path
+            return f"media/users/avatars/{user_id}/{unique_filename}"
+        elif category == "covers":
+            # covers category: use users/covers path
+            return f"media/users/covers/{user_id}/{unique_filename}"
+        elif category == "credentials":
+            # credentials category: use teachers/credentials path
+            return f"media/teachers/credentials/{user_id}/{unique_filename}"
         else:
-            # avatars and other categories
+            # other categories (if any in the future)
             return f"media/{category}/{user_id}/{unique_filename}"
