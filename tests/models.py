@@ -79,7 +79,9 @@ class Test(models.Model):
 
 
 class ReceptiveTest(models.Model):
-    test = models.OneToOneField(Test, on_delete=models.CASCADE, primary_key=True)
+    test = models.OneToOneField(
+        Test, on_delete=models.CASCADE, primary_key=True, related_name="receptive_test"
+    )
 
     total_score = models.IntegerField(validators=[MinValueValidator(0)], default=0)
     base_qualified_bonus = models.IntegerField(
@@ -164,7 +166,9 @@ class ReceptiveAnswer(models.Model):
 
 
 class ProductiveTest(models.Model):
-    test = models.OneToOneField(Test, on_delete=models.CASCADE, primary_key=True)
+    test = models.OneToOneField(
+        Test, on_delete=models.CASCADE, primary_key=True, related_name="productive_test"
+    )
 
     format = models.CharField(
         max_length=1,
@@ -244,10 +248,14 @@ class CompletedBonus(models.Model):
     completed_bonus = models.IntegerField(validators=[MinValueValidator(0)], default=0)
 
     def __str__(self):
-        return f"Skill: {self.skill}, Level: {self.level}, Bonus: {self.completed_bonus}"
+        return (
+            f"Skill: {self.skill}, Level: {self.level}, Bonus: {self.completed_bonus}"
+        )
 
     class Meta:
         db_table = "completed_bonus"
         constraints = [
-            models.UniqueConstraint(fields=["skill", "level"], name="unique_skill_level")
+            models.UniqueConstraint(
+                fields=["skill", "level"], name="unique_skill_level"
+            )
         ]

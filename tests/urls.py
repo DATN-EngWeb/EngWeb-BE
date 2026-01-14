@@ -5,6 +5,10 @@ from .views.receptive_tests import ReceptiveTestCreateView
 from .views.productive_tests import ProductiveTestCreateView
 from .views.writing_criteria import WritingCriteriaTemplateListView
 from .views.completed_bonus import CompletedBonusListView
+from .views.full_tests import (
+    ReceptiveTestRetrieveAPIView,
+    ProductiveTestRetrieveAPIView,
+)
 
 urlpatterns = [
     path("overview", TestOverviewListCreateView.as_view(), name="test"),
@@ -27,5 +31,15 @@ urlpatterns = [
         "completed-bonus",
         CompletedBonusListView.as_view(),
         name="completed-bonus",
+    ),
+    path(
+        "full-test/receptive/<int:test_id>",
+        ReceptiveTestRetrieveAPIView.as_view(),
+        name="receptive-test-retrieve",
+    ),
+    path(
+        "full-test/productive/<int:test_id>",
+        ProductiveTestRetrieveAPIView.as_view(),
+        name="productive-test-retrieve",
     ),
 ]
