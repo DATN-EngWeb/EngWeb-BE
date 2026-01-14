@@ -225,7 +225,9 @@ class TeacherRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView)
             "- `user.full_name`: Họ và tên (string)\n"
             "- `user.date_of_birth`: Ngày sinh (YYYY-MM-DD)\n"
             "- `user.avatar`: Ảnh đại diện (image file - JPEG, PNG)\n"
-            "- `user.cover`: Ảnh bìa (image file - JPEG, PNG)\n\n"
+            "- `user.cover`: Ảnh bìa (image file - JPEG, PNG)\n"
+            "- `old_password`: Mật khẩu cũ (string, required nếu muốn đổi mật khẩu)\n"
+            "- `new_password`: Mật khẩu mới (string, required nếu muốn đổi mật khẩu, tối thiểu 8 ký tự)\n\n"
             "**Teacher fields (optional):**\n"
             "- `current_workplace`: Nơi làm việc (string)\n"
             "- `teacher_type`: Loại giáo viên - S (School), C (Center), F (Freelance)\n"
@@ -235,7 +237,9 @@ class TeacherRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView)
             "- `credentials`: Chứng chỉ/bằng cấp (multiple files - PDF, JPEG, PNG)\n"
             "- Nếu gửi credentials files, sẽ **replace** toàn bộ credentials hiện tại\n\n"
             "**Lưu ý:**\n"
-            "- File cũ (avatar, cover) sẽ tự động bị xóa khỏi MinIO sau khi update thành công\n"
+            "- File cũ (avatar, cover, credentials) sẽ tự động bị xóa khỏi MinIO sau khi update thành công\n"
+            "- Để đổi mật khẩu: phải gửi cả `old_password` và `new_password`\n"
+            "- Mật khẩu mới phải khác mật khẩu cũ và tối thiểu 8 ký tự\n"
             "- Chỉ cần gửi các fields muốn update, không cần gửi tất cả"
         ),
         tags=["teachers"],
@@ -255,6 +259,8 @@ class TeacherRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView)
                 "user.date_of_birth": serializers.DateField(required=False),
                 "user.avatar": serializers.ImageField(required=False),
                 "user.cover": serializers.ImageField(required=False),
+                "old_password": serializers.CharField(required=False, write_only=True, help_text="Mật khẩu cũ (required nếu muốn đổi mật khẩu)"),
+                "new_password": serializers.CharField(required=False, write_only=True, help_text="Mật khẩu mới (required nếu muốn đổi mật khẩu, tối thiểu 8 ký tự)"),
                 "current_workplace": serializers.CharField(required=False),
                 "teacher_type": serializers.ChoiceField(choices=["S", "C", "F"], required=False),
                 "experience_year": serializers.IntegerField(required=False),
@@ -347,6 +353,7 @@ class TeacherRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView)
 
         # Update User fields (partial update)
         user_errors = {}
+        password_updated = False
         
         if "user.full_name" in request.data:
             full_name = request.data.get("user.full_name", "").strip()
@@ -373,6 +380,29 @@ class TeacherRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView)
             if cover_file:
                 user.cover = cover_file
                 cover_updated = True
+
+        # Handle password change
+        if "old_password" in request.data or "new_password" in request.data:
+            old_password = request.data.get("old_password")
+            new_password = request.data.get("new_password")
+            
+            # Both fields are required for password change
+            if not old_password or not new_password:
+                user_errors["password"] = "Both old_password and new_password are required to change password."
+            else:
+                # Verify old password
+                if not user.check_password(old_password):
+                    user_errors["old_password"] = "Old password is incorrect."
+                else:
+                    # Validate new password strength
+                    if len(new_password) < 8:
+                        user_errors["new_password"] = "Password must be at least 8 characters long."
+                    elif new_password == old_password:
+                        user_errors["new_password"] = "New password must be different from old password."
+                    else:
+                        # Set new password
+                        user.set_password(new_password)
+                        password_updated = True
 
         if user_errors:
             return Response({"user": user_errors}, status=status.HTTP_400_BAD_REQUEST)
@@ -440,7 +470,8 @@ class TeacherRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView)
             "user.full_name" in request.data,
             "user.date_of_birth" in request.data,
             avatar_updated,
-            cover_updated
+            cover_updated,
+            password_updated
         ]):
             user.save()
 
