@@ -35,7 +35,11 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
     POST: Create a new test (Teacher only)
     """
 
-    queryset = Test.objects.all().order_by("-created_at")
+    queryset = (
+        Test.objects.all()
+        .select_related("created_by__user", "receptive_test", "productive_test")
+        .order_by("-created_at")
+    )
     serializer_class = TestSerializer
     pagination_class = TestPagination
     filter_backends = [

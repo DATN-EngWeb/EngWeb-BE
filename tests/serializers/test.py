@@ -1,9 +1,24 @@
-from ..models import Test
+from ..models import Test, ReceptiveTest, ProductiveTest
 
 from rest_framework import serializers
 
 
+class ReceptiveTestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReceptiveTest
+        fields = ["total_score", "base_qualified_bonus"]
+
+
+class ProductiveTestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductiveTest
+        fields = ["format", "topic", "min_word"]
+
+
 class TestSerializer(serializers.ModelSerializer):
+    test_details = serializers.SerializerMethodField()
+    created_by = serializers.SerializerMethodField()
+
     class Meta:
         model = Test
         fields = [
@@ -17,14 +32,39 @@ class TestSerializer(serializers.ModelSerializer):
             "status",
             "created_at",
             "updated_at",
+            "test_details",
             "created_by",
         ]
         extra_kwargs = {
             "id": {"read_only": True},
             "created_at": {"read_only": True},
             "updated_at": {"read_only": True},
-            "created_by": {"read_only": True},
         }
+
+    def get_test_details(self, obj):
+        if obj.type == "R":
+            try:
+                receptive_test = obj.receptive_test
+                return ReceptiveTestSerializer(receptive_test).data
+            except ReceptiveTest.DoesNotExist:
+                return None
+        elif obj.type == "P":
+            try:
+                productive_test = obj.productive_test
+                return ProductiveTestSerializer(productive_test).data
+            except ProductiveTest.DoesNotExist:
+                return None
+        return None
+
+    def get_created_by(self, obj):
+        if obj.created_by:
+            user = obj.created_by.user
+            return {
+                "id": obj.created_by.pk,
+                "full_name": user.full_name,
+                "avatar": user.avatar.url if user.avatar else None,
+            }
+        return None
 
     def validate(self, attrs):
         errors = {}
