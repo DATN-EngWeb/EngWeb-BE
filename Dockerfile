@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System deps (build tools if needed by some packages)
+# system deps (build tools if needed by some packages)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
@@ -19,19 +19,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     dos2unix \
     && rm -rf /var/lib/apt/lists/*
 
-ENV TZ=UTC
+ENV TZ=Asia/Ho_Chi_Minh
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Install pipenv
+# install pipenv
 RUN pip install --no-cache-dir pipenv
 
-# Copy Pipfile & Pipfile.lock first (for caching layers)
+# copy Pipfile & Pipfile.lock first (for caching layers)
 COPY Pipfile Pipfile.lock ./
 
-# Install dependencies (into system, not virtualenv)
+# install dependencies (into system, not virtualenv)
 RUN pipenv install --deploy --system
 
-# Copy project
+# copy project
 COPY . .
 
 EXPOSE 8000

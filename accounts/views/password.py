@@ -1,17 +1,3 @@
-from rest_framework import generics, permissions, status
-from rest_framework.response import Response
-from django.db.models import Q
-from django.conf import settings
-from django.core.cache import cache
-from datetime import datetime, timedelta
-import json
-import jwt
-from rest_framework_simplejwt.exceptions import TokenError
-from rest_framework_simplejwt.token_blacklist.models import (
-    BlacklistedToken,
-    OutstandingToken,
-)
-
 from ..models import User
 from ..utils import (
     create_otp_code,
@@ -20,18 +6,32 @@ from ..utils import (
     cache_forgot_password_otp,
     send_forgot_password_otp_email,
     resend_forgot_password_otp_email,
+    verify_forgot_password_otp,
+    delete_forgot_password_otp_cache,
 )
-from rest_framework_simplejwt.tokens import RefreshToken
 
+from django.db.models import Q
+from django.utils import timezone
+from django.conf import settings
 from drf_spectacular.utils import (
     extend_schema,
     OpenApiResponse,
     inline_serializer,
 )
+
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework import serializers
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
+
+from datetime import timedelta
+
+import jwt
 
 
-class ForgotPasswordAPIView(generics.GenericAPIView):
+class ForgotPasswordAPIView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(
@@ -82,91 +82,73 @@ class ForgotPasswordAPIView(generics.GenericAPIView):
         username_or_email = request.data.get("username_or_email")
 
         if not username_or_email:
-            return Response(
-                {"detail": "Username or email is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "Username or email is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Find user by username or email
         try:
-            user = User.objects.get(
-                Q(username=username_or_email) | Q(email=username_or_email)
-            )
+            user = User.objects.get(Q(username=username_or_email) | Q(email=username_or_email))
         except User.DoesNotExist:
-            return Response(
-                {"detail": "Account not found."}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "Account not found."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check is_active
-        if not user.is_active:
-            return Response(
-                {"detail": "Account is deactivated."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        if not user.is_active or user.status == "D":
+            return Response({"detail": "Account is deactivated."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check status - only verified accounts can reset password
         status_code = getattr(user, "status", None)
 
         if status_code == "P":
-            # Resend OTP for registration verification
+            # resend OTP for registration verification
             otp_code = create_otp_code()
+
             cache_register_otp(user.id, otp_code, user.email)
             send_registration_otp_email(user.email, otp_code)
-            return Response(
-                {
-                    "detail": "Account is not verified yet. OTP sent to your email.",
-                    "status": status_code,
-                    "user_id": user.id,
-                    "require_verification": True,
-                    "redirect_to": f"/verify-otp?user_id={user.id}",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            
+            response = {
+                "detail": "Account is not verified yet. OTP sent to your email.",
+                "status": status_code,
+                "user_id": user.id,
+                "require_verification": True,
+                "redirect_to": f"/verify-otp?user_id={user.id}",
+            }
+            
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
 
         if status_code == "I":
-            return Response(
-                {
-                    "detail": "Please complete your profile first before resetting password.",
-                    "status": status_code,
-                    "user_id": user.id,
-                    "require_certificate": True,
-                    "redirect_to": f"/upload-profile?user_id={user.id}",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            response = {
+                "detail": "Please complete your profile first before resetting password.",
+                "status": status_code,
+                "user_id": user.id,
+                "require_certificate": True,
+                "redirect_to": f"/upload-profile?user_id={user.id}",
+            }
+
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
 
         if status_code == "W":
-            return Response(
-                {
-                    "detail": "Account is pending approval. Please wait for admin review.",
-                    "status": status_code,
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            response = {
+                "detail": "Account is pending approval. Please wait for admin review.",
+                "status": status_code,
+            }
+
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
 
         if status_code == "D":
-            return Response(
-                {
-                    "detail": "Account has been disabled.",
-                    "status": status_code,
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            response = {
+                "detail": "Account has been disabled.",
+                "status": status_code,
+            }
+            
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
 
         # Only status 'V' (Verified) can proceed
         if status_code != "V":
-            return Response(
-                {"detail": "Account status does not allow password reset."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            response = {
+                "detail": "Account status does not allow password reset.",
+                "status": status_code,
+            }
+            
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
 
-        # Generate OTP code
         otp_code = create_otp_code()
-
-        # Cache OTP
         cache_forgot_password_otp(user.username, otp_code)
-
-        # Send OTP email
         send_forgot_password_otp_email(user.username, user.email, otp_code)
 
         response = {
@@ -176,8 +158,7 @@ class ForgotPasswordAPIView(generics.GenericAPIView):
 
         return Response(response, status=status.HTTP_200_OK)
 
-
-class ForgotPasswordVerifyOTPAPIView(generics.GenericAPIView):
+class ForgotPasswordVerifyOTPAPIView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(
@@ -228,48 +209,23 @@ class ForgotPasswordVerifyOTPAPIView(generics.GenericAPIView):
         otp_code = request.data.get("otp_code")
 
         if not username or not otp_code:
-            return Response(
-                {"detail": "Username and OTP code are required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "Username and OTP code are required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get OTP from cache
-        cache_key = f"forgot_password_{username}"
-        cache_data = cache.get(cache_key)
+        try:
+            verify_forgot_password_otp(username, otp_code)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not cache_data:
-            return Response(
-                {"detail": "OTP code has expired or is invalid."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        delete_forgot_password_otp_cache(username)
 
-        cache_data = json.loads(cache_data)
-
-        # Verify OTP
-        if cache_data["otp_code"] != otp_code:
-            return Response(
-                {"detail": "Invalid OTP code."}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # OTP verified, delete cache
-        cache.delete(cache_key)
-
-        # Get user
         try:
             user = User.objects.get(username=username)
         except User.DoesNotExist:
-            return Response(
-                {"detail": "User not found."}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "User not found."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Generate reset token (JWT RefreshToken)
         reset_token = RefreshToken.for_user(user)
-
-        # Mark token as password reset token
         reset_token["token_type"] = "password_reset"
-
-        # Set expiry time (30 minutes)
-        expiry_time = datetime.now() + timedelta(minutes=30)
+        expiry_time = timezone.now() + timedelta(minutes=30)
 
         response = {
             "message": "OTP verified successfully.",
@@ -279,8 +235,7 @@ class ForgotPasswordVerifyOTPAPIView(generics.GenericAPIView):
 
         return Response(response, status=status.HTTP_200_OK)
 
-
-class ResetPasswordAPIView(generics.GenericAPIView):
+class ResetPasswordAPIView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(
@@ -327,13 +282,9 @@ class ResetPasswordAPIView(generics.GenericAPIView):
         new_password = request.data.get("new_password")
 
         if not reset_token or not new_password:
-            return Response(
-                {"detail": "Reset token and new password are required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "Reset token and new password are required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Decode and verify token
             decoded_token = jwt.decode(
                 reset_token,
                 settings.SECRET_KEY,
@@ -341,55 +292,33 @@ class ResetPasswordAPIView(generics.GenericAPIView):
                 options={"verify_signature": True},
             )
 
-            # Check token type
             if decoded_token.get("token_type") != "password_reset":
-                return Response(
-                    {"detail": "Invalid token type for password reset."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+                return Response({"detail": "Invalid token type for password reset."}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Get user_id from token
             user_id = decoded_token.get("user_id")
 
-            # Find user
             try:
                 user = User.objects.get(id=user_id)
             except User.DoesNotExist:
-                return Response(
-                    {"detail": "User not found."}, status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({"detail": "User not found."}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Set new password
             user.set_password(new_password)
             user.save()
 
-            # Blacklist token to prevent reuse
             try:
                 outstanding_token = OutstandingToken.objects.get(token=reset_token)
                 BlacklistedToken.objects.create(token=outstanding_token)
             except OutstandingToken.DoesNotExist:
-                pass  # Token might not exist in DB if it's a new token
+                pass
 
-            return Response(
-                {
-                    "message": "Password reset successfully. Please login with your new password."
-                },
-                status=status.HTTP_200_OK,
-            )
+            return Response({"message": "Password reset successfully. Please login with your new password."}, status=status.HTTP_200_OK)
 
         except (TokenError, jwt.PyJWTError) as e:
-            return Response(
-                {"detail": "Invalid or expired token."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "Invalid or expired token."}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response(
-                {"detail": "Error resetting password."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            return Response({"detail": "Error resetting password."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-class ResendForgotPasswordOTPAPIView(generics.GenericAPIView):
+class ResendForgotPasswordOTPAPIView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(
@@ -426,18 +355,14 @@ class ResendForgotPasswordOTPAPIView(generics.GenericAPIView):
         username = request.data.get("username")
 
         if not username:
-            return Response(
-                {"detail": "Username is required."}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "Username is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             resend_forgot_password_otp_email(username)
-            return Response(
-                {"detail": "OTP code has been resent to your email."},
-                status=status.HTTP_200_OK,
-            )
+            return Response({"detail": "OTP code has been resent to your email."}, status=status.HTTP_200_OK)
+        
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
         except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
+            return Response({"detail": "Error resending OTP."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

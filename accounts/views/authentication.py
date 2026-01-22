@@ -1,10 +1,3 @@
-from rest_framework import generics, permissions, status
-from rest_framework.response import Response
-from django.conf import settings
-import requests
-from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework_simplejwt.tokens import RefreshToken
-
 from ..models import User, Student
 from ..serializers import CustomTokenObtainPairSerializer
 from ..utils import (
@@ -12,12 +5,21 @@ from ..utils import (
     generate_unique_username,
     get_absolute_media_url,
 )
+
+from django.conf import settings
 from drf_spectacular.utils import (
     extend_schema,
     OpenApiResponse,
     inline_serializer,
 )
+
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework import serializers
+
+import requests
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -73,8 +75,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
 
-
-class LogoutAPIView(generics.GenericAPIView):
+class LogoutAPIView(generics.CreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @extend_schema(
@@ -114,25 +115,19 @@ class LogoutAPIView(generics.GenericAPIView):
     )
     def post(self, request):
         refresh_token = request.data.get("refresh")
+        
         if not refresh_token:
-            return Response(
-                {"detail": "refresh token is required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "refresh token is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
             token = RefreshToken(refresh_token)
             token.blacklist()
         except Exception:
-            return Response(
-                {"detail": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "Invalid refresh token"}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response(
-            {"message": "Logged out successfully"}, status=status.HTTP_200_OK
-        )
+        return Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
 
-
-class GoogleLoginAPIView(generics.GenericAPIView):
+class GoogleLoginAPIView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(
@@ -204,9 +199,7 @@ class GoogleLoginAPIView(generics.GenericAPIView):
         code = request.data.get("code")
 
         if not code:
-            return Response(
-                {"error": "No code provided"}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "No code provided"}, status=status.HTTP_400_BAD_REQUEST)
 
         # send code to Google to get access token
         google_token_url = "https://oauth2.googleapis.com/token"
@@ -220,170 +213,133 @@ class GoogleLoginAPIView(generics.GenericAPIView):
 
         try:
             token_response = requests.post(google_token_url, data=params, timeout=10)
-            print(token_response.json())
         except requests.RequestException:
-            return Response(
-                {"error": "Failed to connect to Google"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            return Response({"error": "Failed to connect to Google"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         if token_response.status_code != 200:
-            return Response(
-                {"error": "Failed to exchange code for token"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"error": "Failed to exchange code for token"}, status=status.HTTP_400_BAD_REQUEST)
 
         google_access_token = token_response.json().get("access_token")
 
         if not google_access_token:
-            return Response(
-                {"error": "No access token received from Google"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"error": "No access token received from Google"}, status=status.HTTP_400_BAD_REQUEST)
 
         # get user info from Google
         google_user_url = "https://www.googleapis.com/oauth2/v2/userinfo"
+
         try:
             user_response = requests.get(
                 google_user_url,
                 headers={"Authorization": f"Bearer {google_access_token}"},
-                timeout=10,
+                timeout=10
             )
         except requests.RequestException:
-            return Response(
-                {"error": "Failed to fetch user info from Google"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            return Response({"error": "Failed to fetch user info from Google"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         if user_response.status_code != 200:
-            return Response(
-                {"error": "Failed to get user information"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"error": "Failed to get user information"}, status=status.HTTP_400_BAD_REQUEST)
 
         google_data = user_response.json()
-
         email = google_data.get("email")
         full_name = google_data.get("name")
         avatar_url = google_data.get("picture")
 
         if not email:
-            return Response(
-                {"error": "Email is required from Google account"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"error": "Email is required from Google account"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get role from request (can be passed via state parameter in OAuth URL)
-        # Default to Student if not specified
         role = request.data.get("role", "S").upper()
         if role not in ["S", "T"]:
-            role = "S"  # Default to Student if invalid role
+            role = "S"
 
-        # Check if user exists by email
+        # check if user exists by email
         try:
             user = User.objects.get(email=email)
 
-            # Branch by role for existing user
+            if user.status == "D":
+                return Response({"error": "Account has been disabled"}, status=status.HTTP_403_FORBIDDEN)
+
+            # admin
             if user.role == "A":
-                # Admin login flow - only allow status V
                 if user.status != "V":
-                    return Response(
-                        {"error": "Please contact the development team for assistance."},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
-                # Admin with status V -> return tokens
+                    return Response({"error": "Please contact the development team for assistance."}, status=status.HTTP_403_FORBIDDEN)
+
                 refresh = RefreshToken.for_user(user)
                 refresh["role"] = user.role
-                response_data = {
+                response = {
                     "access": str(refresh.access_token),
                     "refresh": str(refresh),
                     "status": user.status,
                     "username": user.username,
-                    "avatar": get_absolute_media_url(user.avatar, request),
+                    "avatar": get_absolute_media_url(user.avatar)
                 }
-                return Response(response_data, status=status.HTTP_200_OK)
 
+                return Response(response, status=status.HTTP_200_OK)
+
+            # student
             if user.role == "S":
-                # Student flow
-                if user.status == "D":
-                    return Response(
-                        {"error": "Account has been disabled"},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
                 if user.status == "P":
                     user.status = "V"
                     user.save()
-                # status V -> return tokens
+
                 refresh = RefreshToken.for_user(user)
                 refresh["role"] = user.role
-                response_data = {
+                response = {
                     "access": str(refresh.access_token),
                     "refresh": str(refresh),
                     "status": user.status,
                     "username": user.username,
-                    "avatar": get_absolute_media_url(user.avatar, request),
+                    "avatar": get_absolute_media_url(user.avatar)
                 }
-                return Response(response_data, status=status.HTTP_200_OK)
+
+                return Response(response, status=status.HTTP_200_OK)
 
             elif user.role == "T":
-                # Teacher flow
-                if user.status == "D":
-                    return Response(
-                        {"error": "Account has been disabled"},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
+                # teacher
                 if user.status == "W":
-                    return Response(
-                        {
-                            "error": "Your account is waiting for admin approval. Please wait."
-                        },
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
+                    return Response({"error": "Your account is waiting for admin approval."}, status=status.HTTP_403_FORBIDDEN)
+                
                 if user.status == "P":
                     # move to incomplete profile
                     user.status = "I"
                     user.save()
-                    return Response(
-                        {
-                            "user_id": user.id,
-                            "username": user.username,
-                            "role": user.role,
-                            "status": user.status,
-                            "require_profile": True,
-                        },
-                        status=status.HTTP_200_OK,
-                    )
+
+                    response = {
+                        "user_id": user.id,
+                        "username": user.username,
+                        "role": user.role,
+                        "status": user.status,
+                        "require_profile": True,
+                    }
+
+                    return Response(response, status=status.HTTP_200_OK)
+
                 # status I -> require profile completion, no tokens
                 if user.status == "I":
-                    return Response(
-                        {
-                            "user_id": user.id,
-                            "username": user.username,
-                            "role": user.role,
-                            "status": user.status,
-                            "require_profile": True,
-                        },
-                        status=status.HTTP_200_OK,
-                    )
+                    response = {
+                        "user_id": user.id,
+                        "username": user.username,
+                        "role": user.role,
+                        "status": user.status,
+                        "require_profile": True,
+                    }
+
+                    return Response(response, status=status.HTTP_200_OK)
+
                 if user.status == "V":
                     refresh = RefreshToken.for_user(user)
                     refresh["role"] = user.role
-                    response_data = {
+
+                    response = {
                         "access": str(refresh.access_token),
                         "refresh": str(refresh),
                         "status": user.status,
                         "username": user.username,
-                        "avatar": get_absolute_media_url(user.avatar, request),
+                        "avatar": get_absolute_media_url(user.avatar)
                     }
-                    return Response(response_data, status=status.HTTP_200_OK)
+                    return Response(response, status=status.HTTP_200_OK)
 
                 # any other unexpected status
-                return Response(
-                    {
-                        "error": "Account is not in a valid state. Please contact support."
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+                return Response({"error": "Account is not in a valid state."}, status=status.HTTP_403_FORBIDDEN)
 
         except User.DoesNotExist:
             # Create a new user
@@ -394,16 +350,13 @@ class GoogleLoginAPIView(generics.GenericAPIView):
                 username=unique_username,
                 email=email,
                 full_name=full_name or "",
-                password=None,  # Social login users don't need a password
+                password=None,
             )
 
-            # Set role and status based on user type
             user.role = role
             if role == "S":
-                # Student: Verified status, can login immediately
                 user.status = "V"
 
-                # Download and save avatar
                 if avatar_url:
                     avatar_path = download_and_save_avatar(avatar_url, user)
                     if avatar_path:
@@ -411,28 +364,24 @@ class GoogleLoginAPIView(generics.GenericAPIView):
 
                 user.save()
 
-                # Create Student instance
                 Student.objects.create(user=user)
 
-                # Generate JWT tokens for verified student
                 refresh = RefreshToken.for_user(user)
                 refresh["role"] = user.role
 
-                response_data = {
+                response = {
                     "access": str(refresh.access_token),
                     "refresh": str(refresh),
                     "status": user.status,
                     "username": user.username,
-                    "avatar": get_absolute_media_url(user.avatar, request),
+                    "avatar": get_absolute_media_url(user.avatar)
                 }
 
-                return Response(response_data, status=status.HTTP_200_OK)
+                return Response(response, status=status.HTTP_200_OK)
 
             elif role == "T":
-                # Teacher: Incomplete status, require profile completion
                 user.status = "I"
 
-                # Download and save avatar
                 if avatar_url:
                     avatar_path = download_and_save_avatar(avatar_url, user)
                     if avatar_path:
@@ -440,18 +389,18 @@ class GoogleLoginAPIView(generics.GenericAPIView):
 
                 user.save()
 
-                response_data = {
+                response = {
                     "user_id": user.id,
                     "username": user.username,
                     "role": user.role,
                     "status": user.status,
-                    "avatar": get_absolute_media_url(user.avatar, request),
-                    "require_profile": True,
+                    "avatar": get_absolute_media_url(user.avatar),
+                    "require_profile": True
                 }
-                return Response(response_data, status=status.HTTP_200_OK)
 
+                return Response(response, status=status.HTTP_200_OK)
 
-class FacebookLoginAPIView(generics.GenericAPIView):
+class FacebookLoginAPIView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(
@@ -519,14 +468,11 @@ class FacebookLoginAPIView(generics.GenericAPIView):
         },
     )
     def post(self, request, *args, **kwargs):
-        # One-time code from Facebook OAuth
         code = request.data.get("code")
-        if not code:
-            return Response(
-                {"error": "No code provided"}, status=status.HTTP_400_BAD_REQUEST
-            )
 
-        # Exchange code for access token
+        if not code:
+            return Response({"error": "No code provided"}, status=status.HTTP_400_BAD_REQUEST)
+
         token_url = "https://graph.facebook.com/v17.0/oauth/access_token"
         params = {
             "client_id": settings.OAUTH2_FACEBOOK_KEY,
@@ -534,43 +480,29 @@ class FacebookLoginAPIView(generics.GenericAPIView):
             "client_secret": settings.OAUTH2_FACEBOOK_SECRET,
             "code": code,
         }
+
         try:
             token_response = requests.get(token_url, params=params, timeout=10)
         except requests.RequestException:
-            return Response(
-                {"error": "Failed to connect to Facebook"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            return Response({"error": "Failed to connect to Facebook"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         if token_response.status_code != 200:
-            return Response(
-                {"error": "Failed to exchange code for token"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"error": "Failed to exchange code for token"}, status=status.HTTP_400_BAD_REQUEST)
 
         access_token = token_response.json().get("access_token")
         if not access_token:
-            return Response(
-                {"error": "No access token received from Facebook"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"error": "No access token received from Facebook"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Fetch user info
         user_info_url = "https://graph.facebook.com/me"
         user_params = {"fields": "id,name,email,picture", "access_token": access_token}
+
         try:
             user_response = requests.get(user_info_url, params=user_params, timeout=10)
         except requests.RequestException:
-            return Response(
-                {"error": "Failed to fetch user info from Facebook"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            return Response({"error": "Failed to fetch user info from Facebook"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         if user_response.status_code != 200:
-            return Response(
-                {"error": "Failed to get user information"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"error": "Failed to get user information"}, status=status.HTTP_400_BAD_REQUEST)
 
         fb_data = user_response.json()
         email = fb_data.get("email")
@@ -579,113 +511,92 @@ class FacebookLoginAPIView(generics.GenericAPIView):
         avatar_url = picture_data.get("url")
 
         if not email:
-            return Response(
-                {"error": "Email is required from Facebook account"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"error": "Email is required from Facebook account"}, status=status.HTTP_400_BAD_REQUEST)
 
         role = request.data.get("role", "S").upper()
+        
         if role not in ["S", "T"]:
             role = "S"
 
         try:
             user = User.objects.get(email=email)
 
+            if user.status == "D":
+                return Response({"error": "Account has been disabled"}, status=status.HTTP_403_FORBIDDEN)
+
             if user.role == "A":
-                # Admin login flow - only allow status V
                 if user.status != "V":
-                    return Response(
-                        {"error": "Please contact the development team for assistance."},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
-                # Admin with status V -> return tokens
+                    return Response({"error": "Please contact the development team for assistance."}, status=status.HTTP_403_FORBIDDEN)
+
                 refresh = RefreshToken.for_user(user)
                 refresh["role"] = user.role
-                response_data = {
+                response = {
                     "access": str(refresh.access_token),
                     "refresh": str(refresh),
                     "status": user.status,
                     "username": user.username,
-                    "avatar": get_absolute_media_url(user.avatar, request),
+                    "avatar": get_absolute_media_url(user.avatar)
                 }
-                return Response(response_data, status=status.HTTP_200_OK)
+
+                return Response(response, status=status.HTTP_200_OK)
 
             if user.role == "S":
-                if user.status == "D":
-                    return Response(
-                        {"error": "Account has been disabled"},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
                 if user.status == "P":
                     user.status = "V"
                     user.save()
 
                 refresh = RefreshToken.for_user(user)
                 refresh["role"] = user.role
-                response_data = {
+                response = {
                     "access": str(refresh.access_token),
                     "refresh": str(refresh),
                     "status": user.status,
                     "username": user.username,
-                    "avatar": get_absolute_media_url(user.avatar, request),
+                    "avatar": get_absolute_media_url(user.avatar)
                 }
-                return Response(response_data, status=status.HTTP_200_OK)
+
+                return Response(response, status=status.HTTP_200_OK)
 
             elif user.role == "T":
-                if user.status == "D":
-                    return Response(
-                        {"error": "Account has been disabled"},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
                 if user.status == "W":
-                    return Response(
-                        {
-                            "error": "Your account is waiting for admin approval. Please wait."
-                        },
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
+                    return Response({"error": "Your account is waiting for admin approval. Please wait."}, status=status.HTTP_403_FORBIDDEN)
+
                 if user.status == "P":
                     user.status = "I"
                     user.save()
-                    return Response(
-                        {
-                            "user_id": user.id,
-                            "username": user.username,
-                            "role": user.role,
-                            "status": user.status,
-                            "require_profile": True,
-                        },
-                        status=status.HTTP_200_OK,
-                    )
+                    response = {
+                        "user_id": user.id,
+                        "username": user.username,
+                        "role": user.role,
+                        "status": user.status,
+                        "require_profile": True,
+                    }
+
+                    return Response(response, status=status.HTTP_200_OK)
                 if user.status == "I":
-                    return Response(
-                        {
-                            "user_id": user.id,
-                            "username": user.username,
-                            "role": user.role,
-                            "status": user.status,
-                            "require_profile": True,
-                        },
-                        status=status.HTTP_200_OK,
-                    )
+                    response = {
+                        "user_id": user.id,
+                        "username": user.username,
+                        "role": user.role,
+                        "status": user.status,
+                        "require_profile": True,
+                    }
+
+                    return Response(response, status=status.HTTP_200_OK)
+
                 if user.status == "V":
                     refresh = RefreshToken.for_user(user)
                     refresh["role"] = user.role
-                    response_data = {
+                    response = {
                         "access": str(refresh.access_token),
                         "refresh": str(refresh),
                         "status": user.status,
                         "username": user.username,
-                        "avatar": get_absolute_media_url(user.avatar, request),
+                        "avatar": get_absolute_media_url(user.avatar)
                     }
-                    return Response(response_data, status=status.HTTP_200_OK)
+                    return Response(response, status=status.HTTP_200_OK)
 
-                return Response(
-                    {
-                        "error": "Account is not in a valid state. Please contact support."
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+                return Response({"error": "Account is not in a valid state. Please contact support."}, status=status.HTTP_403_FORBIDDEN)
 
         except User.DoesNotExist:
             base_username = email.split("@")[0]
@@ -711,14 +622,15 @@ class FacebookLoginAPIView(generics.GenericAPIView):
 
                 refresh = RefreshToken.for_user(user)
                 refresh["role"] = user.role
-                response_data = {
+                response = {
                     "access": str(refresh.access_token),
                     "refresh": str(refresh),
                     "status": user.status,
                     "username": user.username,
-                    "avatar": get_absolute_media_url(user.avatar, request),
+                    "avatar": get_absolute_media_url(user.avatar)
                 }
-                return Response(response_data, status=status.HTTP_200_OK)
+
+                return Response(response, status=status.HTTP_200_OK)
 
             elif role == "T":
                 user.status = "I"
@@ -729,14 +641,15 @@ class FacebookLoginAPIView(generics.GenericAPIView):
                         user.avatar = avatar_path
                 user.save()
 
-                response_data = {
+                response = {
                     "user_id": user.id,
                     "username": user.username,
                     "role": user.role,
                     "status": user.status,
-                    "avatar": get_absolute_media_url(user.avatar, request),
-                    "require_profile": True,
+                    "avatar": get_absolute_media_url(user.avatar),
+                    "require_profile": True
                 }
-                return Response(response_data, status=status.HTTP_200_OK)
+
+                return Response(response, status=status.HTTP_200_OK)
 
         return Response({"error": "Unhandled flow"}, status=status.HTTP_400_BAD_REQUEST)

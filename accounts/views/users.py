@@ -20,19 +20,11 @@ from drf_spectacular.utils import (
 
 
 class UserPagination(PageNumberPagination):
-    """
-    Pagination class for Users API
-    """
     page_size = 10
-    page_size_query_param = 'page_size'
+    page_size_query_param = "page_size"
     max_page_size = 100
 
-
 class UserListAPIView(generics.ListAPIView):
-    """
-    List Users API - GET only (Admin only)
-    List users with filtering and pagination
-    """
     permission_classes = [IsAdmin]
     authentication_classes = [CustomTokenAuthentication]
     queryset = User.objects.all()
@@ -42,13 +34,11 @@ class UserListAPIView(generics.ListAPIView):
     pagination_class = UserPagination
 
     def get_queryset(self):
-        """Get queryset - can be overridden for custom filtering"""
         return User.objects.all()
 
     def get_serializer_context(self):
-        """Add request to serializer context for building absolute URLs"""
         context = super().get_serializer_context()
-        context['request'] = self.request
+        context["request"] = self.request
         return context
 
     @extend_schema(
@@ -66,38 +56,38 @@ class UserListAPIView(generics.ListAPIView):
         tags=["admin"],
         parameters=[
             OpenApiParameter(
-                name='role',
+                name="role",
                 type=str,
                 location=OpenApiParameter.QUERY,
-                description='Lọc theo vai trò - S (Student), T (Teacher), A (Admin)',
+                description="Lọc theo vai trò - S (Student), T (Teacher), A (Admin)",
                 required=False,
             ),
             OpenApiParameter(
-                name='status',
+                name="status",
                 type=str,
                 location=OpenApiParameter.QUERY,
-                description='Lọc theo trạng thái - P (Pending), I (Incomplete), W (Waiting), V (Verified), D (Disabled)',
+                description="Lọc theo trạng thái - P (Pending), I (Incomplete), W (Waiting), V (Verified), D (Disabled)",
                 required=False,
             ),
             OpenApiParameter(
-                name='search',
+                name="search",
                 type=str,
                 location=OpenApiParameter.QUERY,
-                description='Tìm kiếm theo username hoặc email',
+                description="Tìm kiếm theo username hoặc email",
                 required=False,
             ),
             OpenApiParameter(
-                name='page',
+                name="page",
                 type=int,
                 location=OpenApiParameter.QUERY,
-                description='Số trang (mặc định: 1)',
+                description="Số trang (mặc định: 1)",
                 required=False,
             ),
             OpenApiParameter(
-                name='page_size',
+                name="page_size",
                 type=int,
                 location=OpenApiParameter.QUERY,
-                description='Số phần tử mỗi trang (mặc định: 10, tối đa: 100)',
+                description="Số phần tử mỗi trang (mặc định: 10, tối đa: 100)",
                 required=False,
             ),
         ],
@@ -108,28 +98,85 @@ class UserListAPIView(generics.ListAPIView):
                     "type": "object",
                     "properties": {
                         "count": {"type": "integer", "example": 3},
-                        "next": {"type": "string", "nullable": True, "example": "http://localhost:8000/api/accounts/users?page=2&page_size=1&role=T&search=teacher&status=W"},
-                        "previous": {"type": "string", "nullable": True, "example": None},
+                        "next": {
+                            "type": "string",
+                            "nullable": True,
+                            "example": "http://localhost:8000/api/accounts/users?page=2&page_size=1&role=T&search=teacher&status=W",
+                        },
+                        "previous": {
+                            "type": "string",
+                            "nullable": True,
+                            "example": None,
+                        },
                         "results": {
                             "type": "array",
                             "items": {
                                 "type": "object",
                                 "properties": {
                                     "id": {"type": "integer", "example": 1023},
-                                    "last_login": {"type": "string", "format": "date-time", "example": "2024-01-25T10:30:00+07:00", "nullable": True},
-                                    "username": {"type": "string", "example": "teacher9"},
+                                    "last_login": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2024-01-25T10:30:00+07:00",
+                                        "nullable": True,
+                                    },
+                                    "username": {
+                                        "type": "string",
+                                        "example": "teacher9",
+                                    },
                                     "is_active": {"type": "boolean", "example": True},
-                                    "date_joined": {"type": "string", "format": "date-time", "example": "2024-01-24T17:00:00+07:00"},
-                                    "email": {"type": "string", "example": "john@example.com"},
-                                    "file_storage_uuid": {"type": "string", "example": "550e8400-e29b-41d4-a716-446655440024"},
-                                    "full_name": {"type": "string", "example": "Teacher Nine", "nullable": True},
-                                    "date_of_birth": {"type": "string", "format": "date", "example": "1990-05-15", "nullable": True},
-                                    "status": {"type": "string", "enum": ["P", "I", "W", "V", "D"], "example": "W"},
-                                    "role": {"type": "string", "enum": ["S", "T", "A"], "example": "T"},
-                                    "updated_at": {"type": "string", "format": "date-time", "example": "2024-01-24T17:00:00+07:00"},
-                                    "role_display": {"type": "string", "example": "Teacher"},
-                                    "status_display": {"type": "string", "example": "Waiting Approval"},
-                                    "avatar_url": {"type": "string", "example": "http://localhost:8000/media/avatars/default-avatar.jpg", "nullable": True},
+                                    "date_joined": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2024-01-24T17:00:00+07:00",
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "example": "john@example.com",
+                                    },
+                                    "file_storage_uuid": {
+                                        "type": "string",
+                                        "example": "550e8400-e29b-41d4-a716-446655440024",
+                                    },
+                                    "full_name": {
+                                        "type": "string",
+                                        "example": "Teacher Nine",
+                                        "nullable": True,
+                                    },
+                                    "date_of_birth": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "example": "1990-05-15",
+                                        "nullable": True,
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "enum": ["P", "I", "W", "V", "D"],
+                                        "example": "W",
+                                    },
+                                    "role": {
+                                        "type": "string",
+                                        "enum": ["S", "T", "A"],
+                                        "example": "T",
+                                    },
+                                    "updated_at": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2024-01-24T17:00:00+07:00",
+                                    },
+                                    "role_display": {
+                                        "type": "string",
+                                        "example": "Teacher",
+                                    },
+                                    "status_display": {
+                                        "type": "string",
+                                        "example": "Waiting Approval",
+                                    },
+                                    "avatar_url": {
+                                        "type": "string",
+                                        "example": "http://localhost:8000/media/avatars/default-avatar.jpg",
+                                        "nullable": True,
+                                    },
                                 },
                             },
                         },
@@ -139,80 +186,57 @@ class UserListAPIView(generics.ListAPIView):
         },
     )
     def get(self, request, *args, **kwargs):
-        """
-        GET method - List users with filtering and pagination (Admin only)
-        """
-        # Get filtered queryset
         queryset = self.filter_queryset(self.get_queryset())
-        
-        # Order by date_joined (newest first)
-        queryset = queryset.order_by('-date_joined')
-        
-        # Paginate
+        queryset = queryset.order_by("-date_joined")
         page = self.paginate_queryset(queryset)
+
         if page is not None:
             serializer = self.get_serializer(page, many=True)
-            # Add additional fields for admin list view
             data = self._add_admin_list_fields(serializer.data)
+
             return self.get_paginated_response(data)
-        
-        # If no pagination, return all (shouldn't happen with pagination_class set)
+
         serializer = self.get_serializer(queryset, many=True)
         data = self._add_admin_list_fields(serializer.data)
+
         return Response(data, status=status.HTTP_200_OK)
 
     def _add_admin_list_fields(self, data_list):
-        """
-        Add role_display, status_display, avatar_url to each user in list
-        """
         request = self.request
+
         for item in data_list:
-            # Add role_display
-            role = item.get('role', '')
-            role_display_map = {'S': 'Student', 'T': 'Teacher', 'A': 'Admin'}
-            item['role_display'] = role_display_map.get(role, '')
-            
-            # Add status_display
-            status = item.get('status', '')
+            role = item.get("role", "")
+            role_display_map = {"S": "Student", "T": "Teacher", "A": "Admin"}
+            item["role_display"] = role_display_map.get(role, "")
+
+            status = item.get("status", "")
             status_display_map = {
-                'P': 'Pending Verification',
-                'I': 'Incomplete Profile',
-                'W': 'Waiting Approval',
-                'V': 'Verified',
-                'D': 'Disabled'
+                "P": "Pending Verification",
+                "I": "Incomplete Profile",
+                "W": "Waiting Approval",
+                "V": "Verified",
+                "D": "Disabled",
             }
-            item['status_display'] = status_display_map.get(status, '')
-            
-            # Add avatar_url (convert avatar field to avatar_url with absolute URL)
-            avatar = item.get('avatar')
-            item['avatar_url'] = get_absolute_media_url(avatar, request)
-            # Remove avatar field if exists (keep only avatar_url)
-            item.pop('avatar', None)
-        
+            item["status_display"] = status_display_map.get(status, "")
+
+            avatar = item.get("avatar")
+            item["avatar_url"] = get_absolute_media_url(avatar)
+            item.pop("avatar", None)
+
         return data_list
 
-
 class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
-    """
-    User Retrieve, Update, Destroy API (Admin only)
-    
-    - GET: Retrieve user detail (with special rules based on role)
-    - PATCH: Enable account or Accept/Reject teacher profile
-    - DELETE: Disable account (soft delete)
-    """
     permission_classes = [IsAdmin]
     authentication_classes = [CustomTokenAuthentication]
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    lookup_field = 'pk'
-    lookup_url_kwarg = 'pk'
-    # Allow only GET, PATCH, DELETE to be exposed (no PUT)
-    http_method_names = ['get', 'patch', 'delete']
+    lookup_field = "pk"
+    lookup_url_kwarg = "pk"
+    http_method_names = ["get", "patch", "delete"]
 
     def get_serializer_context(self):
-        """Add request to serializer context for building absolute URLs"""
         context = super().get_serializer_context()
-        context['request'] = self.request
+        context["request"] = self.request
         return context
 
     @extend_schema(
@@ -229,10 +253,10 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         tags=["admin"],
         parameters=[
             OpenApiParameter(
-                name='pk',
+                name="pk",
                 type=int,
                 location=OpenApiParameter.PATH,
-                description='ID của user',
+                description="ID của user",
                 required=True,
             ),
         ],
@@ -268,14 +292,14 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             )
 
         # Check role-based access rules
-        if user.role == 'A':
+        if user.role == "A":
             # Admin can only view their own profile
             if user.id != request.user.id:
                 return Response(
                     {"error": "You cannot view another admin's profile"},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-        elif user.role == 'S':
+        elif user.role == "S":
             # Cannot view student information
             return Response(
                 {"error": "Cannot view student personal information"},
@@ -284,47 +308,46 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         # Teacher (T) can be viewed freely
 
         # Get user data
-        user_serializer = UserSerializer(user, context={'request': request})
+        user_serializer = UserSerializer(user, context={"request": request})
         user_data = user_serializer.data
 
         # If teacher, add teacher data
-        if user.role == 'T':
+        if user.role == "T":
             try:
                 teacher = user.teacher
-                teacher_serializer = TeacherSerializer(teacher, context={'request': request})
+                teacher_serializer = TeacherSerializer(
+                    teacher, context={"request": request}
+                )
                 teacher_data = teacher_serializer.data
 
                 # Process credentials to absolute URLs
-                credentials = teacher_data.get('credentials', {})
-                if credentials and 'certificates' in credentials:
-                    certificates = credentials['certificates']
-                    processed_certificates = []
-                    for cert in certificates:
-                        cert_url = cert.get('url', '')
-                        if cert_url:
-                            absolute_url = get_absolute_media_url(cert_url, request)
-                            processed_cert = cert.copy()
-                            processed_cert['url'] = absolute_url
-                            processed_certificates.append(processed_cert)
+                credentials = teacher_data.get("credentials", [])
+                if isinstance(credentials, list):
+                    processed_credentials = []
+                    for cred in credentials:
+                        cred_url = cred.get("url", "") if isinstance(cred, dict) else ""
+                        if cred_url:
+                            processed_cred = cred.copy()
+                            processed_cred["url"] = get_absolute_media_url(cred_url)
+                            processed_credentials.append(processed_cred)
                         else:
-                            processed_certificates.append(cert)
-                    credentials['certificates'] = processed_certificates
-                    teacher_data['credentials'] = credentials
+                            processed_credentials.append(cred)
+                    teacher_data["credentials"] = processed_credentials
 
                 user_data.update(teacher_data)
-                user_data['teacher_type_display'] = teacher.get_teacher_type_display()
+                user_data["teacher_type_display"] = teacher.get_teacher_type_display()
             except Teacher.DoesNotExist:
                 # No teacher profile attached to this user, ignore silently
                 pass
 
         # Add display fields
-        user_data['role_display'] = user.get_role_display()
-        user_data['status_display'] = user.get_status_display()
+        user_data["role_display"] = user.get_role_display()
+        user_data["status_display"] = user.get_status_display()
 
         # Convert avatar to avatar_url
-        avatar = user_data.get('avatar')
-        user_data['avatar_url'] = get_absolute_media_url(avatar, request)
-        user_data.pop('avatar', None)
+        avatar = user_data.get("avatar")
+        user_data["avatar_url"] = get_absolute_media_url(avatar)
+        user_data.pop("avatar", None)
 
         return Response(user_data, status=status.HTTP_200_OK)
 
@@ -339,10 +362,10 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             "```json\n"
             "PATCH /api/accounts/users/1/\n"
             "{\n"
-            "  \"username\": \"admin_new\",\n"
-            "  \"email\": \"admin@example.com\",\n"
-            "  \"full_name\": \"System Admin\",\n"
-            "  \"date_of_birth\": \"1990-01-01\"\n"
+            '  "username": "admin_new",\n'
+            '  "email": "admin@example.com",\n'
+            '  "full_name": "System Admin",\n'
+            '  "date_of_birth": "1990-01-01"\n'
             "}\n"
             "```\n\n"
             "**Case 2: Admin enable tài khoản của Student/Teacher khác (role != 'A', status = 'D')**\n"
@@ -360,24 +383,24 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             "```json\n"
             "PATCH /api/accounts/users/1023/\n"
             "{\n"
-            "  \"approve\": true\n"
+            '  "approve": true\n'
             "}\n"
             "```\n"
             "- Ví dụ reject:\n"
             "```json\n"
             "PATCH /api/accounts/users/1023/\n"
             "{\n"
-            "  \"approve\": false\n"
+            '  "approve": false\n'
             "}\n"
             "```"
         ),
         tags=["admin"],
         parameters=[
             OpenApiParameter(
-                name='pk',
+                name="pk",
                 type=int,
                 location=OpenApiParameter.PATH,
-                description='ID của user',
+                description="ID của user",
                 required=True,
             ),
         ],
@@ -391,7 +414,7 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
                 "avatar": serializers.ImageField(required=False),
                 "approve": serializers.BooleanField(
                     required=False,
-                    help_text="Required for teacher approval/rejection. true = approve, false = reject"
+                    help_text="Required for teacher approval/rejection. true = approve, false = reject",
                 ),
             },
         ),
@@ -401,7 +424,10 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
                 response={
                     "type": "object",
                     "properties": {
-                        "message": {"type": "string", "example": "Account enabled successfully"},
+                        "message": {
+                            "type": "string",
+                            "example": "Account enabled successfully",
+                        },
                         "user_id": {"type": "integer", "example": 12},
                         "status": {"type": "string", "example": "V"},
                     },
@@ -431,19 +457,21 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             )
 
         # Case 1: Admin updating own profile (role = 'A', status = 'V', updating self)
-        if user.role == 'A' and user.id == request.user.id and user.status == 'V':
+        if user.role == "A" and user.id == request.user.id and user.status == "V":
             # Update user fields using serializer
-            serializer = UserSerializer(user, data=request.data, partial=True, context={'request': request})
+            serializer = UserSerializer(
+                user, data=request.data, partial=True, context={"request": request}
+            )
             if serializer.is_valid():
                 serializer.save()
                 # Return updated user data
                 updated_data = serializer.data
-                updated_data['role_display'] = user.get_role_display()
-                updated_data['status_display'] = user.get_status_display()
+                updated_data["role_display"] = user.get_role_display()
+                updated_data["status_display"] = user.get_status_display()
                 # Convert avatar to avatar_url
-                avatar = updated_data.get('avatar')
-                updated_data['avatar_url'] = get_absolute_media_url(avatar, request)
-                updated_data.pop('avatar', None)
+                avatar = updated_data.get("avatar")
+                updated_data["avatar_url"] = get_absolute_media_url(avatar)
+                updated_data.pop("avatar", None)
                 return Response(
                     {
                         "message": "Profile updated successfully",
@@ -454,8 +482,8 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         # Case 2: Enable account (role != 'A' and status = 'D')
-        elif user.role != 'A' and user.status == 'D':
-            user.status = 'V'
+        elif user.role != "A" and user.status == "D":
+            user.status = "V"
             user.save()
             return Response(
                 {
@@ -467,18 +495,20 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             )
 
         # Case 3: Accept/Reject teacher profile (role = 'T' and status = 'W')
-        elif user.role == 'T' and user.status == 'W':
-            approve = request.data.get('approve')
-            
+        elif user.role == "T" and user.status == "W":
+            approve = request.data.get("approve")
+
             if approve is None:
                 return Response(
-                    {"error": "approve field is required for teacher approval/rejection"},
+                    {
+                        "error": "approve field is required for teacher approval/rejection"
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
             if approve:
                 # Accept: Change status to 'V'
-                user.status = 'V'
+                user.status = "V"
                 user.save()
                 return Response(
                     {
@@ -501,7 +531,7 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             return Response(
                 {
                     "error": "User cannot be updated with current status and role "
-                             "or request body format is invalid for this user type."
+                    "or request body format is invalid for this user type."
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -521,10 +551,10 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         tags=["admin"],
         parameters=[
             OpenApiParameter(
-                name='pk',
+                name="pk",
                 type=int,
                 location=OpenApiParameter.PATH,
-                description='ID của user',
+                description="ID của user",
                 required=True,
             ),
         ],
@@ -534,7 +564,10 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
                 response={
                     "type": "object",
                     "properties": {
-                        "message": {"type": "string", "example": "User disabled successfully"},
+                        "message": {
+                            "type": "string",
+                            "example": "User disabled successfully",
+                        },
                         "user_id": {"type": "integer", "example": 12},
                         "status": {"type": "string", "example": "D"},
                     },
@@ -559,8 +592,8 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             )
 
         # Check conditions: role != 'A' and status = 'V'
-        if user.role != 'A' and user.status == 'V':
-            user.status = 'D'
+        if user.role != "A" and user.status == "V":
+            user.status = "D"
             user.save()
             return Response(
                 {
@@ -572,6 +605,8 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             )
 
         return Response(
-            {"error": "User cannot be disabled. User must have role != 'A' and status = 'V'"},
+            {
+                "error": "User cannot be disabled. User must have role != 'A' and status = 'V'"
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )

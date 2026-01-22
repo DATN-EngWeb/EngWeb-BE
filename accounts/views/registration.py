@@ -1,7 +1,3 @@
-from rest_framework import generics, permissions, status
-from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
-
 from ..models import User
 from ..serializers import (
     UserSerializer,
@@ -15,21 +11,22 @@ from ..utils import (
     resend_registration_otp_email,
     verify_registration_otp,
     delete_registration_otp_cache,
-    process_credential_files,
+    process_credential_files_upload,
 )
+
 from drf_spectacular.utils import (
     extend_schema,
     OpenApiResponse,
     inline_serializer,
 )
+
 from rest_framework import serializers
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
 
 
 class UserRegistrationAPIView(generics.CreateAPIView):
-    """
-    User Registration API - POST only
-    Register new user and send OTP email
-    """
     permission_classes = [AllowAny]
     queryset = User.objects.all()
     serializer_class = UserSerializer
@@ -64,30 +61,23 @@ class UserRegistrationAPIView(generics.CreateAPIView):
     def post(self, request):
         role = request.data.get("role", "").upper()
 
-        # Validate role
         if role not in ["S", "T"]:
             return Response(
                 {"detail": "Invalid role. Must be 'S' (Student) or 'T' (Teacher)."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Validate user data using UserSerializer
         user_serializer = UserSerializer(data=request.data)
 
         if not user_serializer.is_valid():
             return Response(user_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create user
         user = user_serializer.save()
-
-        # Generate OTP and cache it
         otp_code = create_otp_code()
-        cache_register_otp(user.id, otp_code, user.email)
 
-        # Send OTP email
+        cache_register_otp(user.id, otp_code, user.email)
         send_registration_otp_email(user.email, otp_code)
 
-        # Response message based on role
         role_name = "Student" if role == "S" else "Teacher"
         response = {
             "message": f"{role_name} account registered successfully. Please check your email to verify your account.",
@@ -96,12 +86,7 @@ class UserRegistrationAPIView(generics.CreateAPIView):
 
         return Response(response, status=status.HTTP_201_CREATED)
 
-
-class VerifyRegistrationOTPAPIView(generics.GenericAPIView):
-    """Verify OTP code for registration. Updates user status:
-    + Student: P → V (Verified)
-    + Teacher: P → I (Incomplete Profile)
-    """
+class VerifyRegistrationOTPAPIView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(
@@ -151,13 +136,11 @@ class VerifyRegistrationOTPAPIView(generics.GenericAPIView):
         user_id = request.data.get("user_id")
         otp_code = request.data.get("otp_code")
 
-        # Verify OTP
         try:
-            cache_data = verify_registration_otp(user_id, otp_code)
+            verify_registration_otp(user_id, otp_code)
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get user and verify status is Pending
         try:
             user = User.objects.get(id=user_id, status="P")
         except User.DoesNotExist:
@@ -166,25 +149,18 @@ class VerifyRegistrationOTPAPIView(generics.GenericAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Update status based on role
         if user.role == "S":
             user.status = "V"
         elif user.role == "T":
             user.status = "I"
         else:
-            return Response(
-                {"detail": "Invalid user role."}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "Invalid user role."}, status=status.HTTP_400_BAD_REQUEST)
 
         user.save()
-
-        # Delete OTP from cache
         delete_registration_otp_cache(user_id)
 
-        # Response message based on role
         role_name = "Student" if user.role == "S" else "Teacher"
 
-        # Create Student record if role is Student. Teacher record will be created later when they submit profile
         if user.role == "S":
             student_serializer = StudentSerializer(data={}, context={"user": user})
             student_serializer.is_valid()
@@ -198,10 +174,7 @@ class VerifyRegistrationOTPAPIView(generics.GenericAPIView):
 
         return Response(response, status=status.HTTP_200_OK)
 
-
-class ResendRegistrationOTPAPIView(generics.GenericAPIView):
-    """Resend OTP code for registration"""
-
+class ResendRegistrationOTPAPIView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(
@@ -239,57 +212,29 @@ class ResendRegistrationOTPAPIView(generics.GenericAPIView):
     def post(self, request):
         user_id = request.data.get("user_id")
 
-        # Validate input
         if not user_id:
-            return Response(
-                {"detail": "user_id is required."}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "user_id is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             user_id = int(user_id)
         except (ValueError, TypeError):
-            return Response(
-                {"detail": "user_id must be a valid integer"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "user_id must be a valid integer"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get user
         try:
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
-            return Response(
-                {"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Resend OTP
         try:
             resend_registration_otp_email(user.id)
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response(
-            {"message": "OTP code has been resent to your email."},
-            status=status.HTTP_200_OK,
-        )
+        response = {"message": "OTP code has been resent to your email."}
 
+        return Response(response, status=status.HTTP_200_OK)
 
-class TeacherSubmitProfileAPIView(generics.GenericAPIView):
-    """
-    Submit teacher profile after OTP verification (status I -> W)
-    POST only
-
-    Expected FormData format:
-    - user_id: integer (required)
-    - user.full_name: string (required)
-    - user.date_of_birth: date string YYYY-MM-DD (required)
-    - user.avatar: image file (required)
-    - current_workplace: string (required)
-    - teacher_type: string 'S'|'C'|'F' (required)
-    - experience_year: integer (required)
-    - introduction: string (required)
-    - credentials: file (optional, can send multiple with same key)
-    """
-
+class TeacherSubmitProfileAPIView(generics.CreateAPIView):
     serializer_class = TeacherSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -360,37 +305,24 @@ class TeacherSubmitProfileAPIView(generics.GenericAPIView):
         },
     )
     def post(self, request):
-        # Get user_id from form data
         user_id = request.data.get("user_id")
+
         if not user_id:
-            return Response(
-                {"detail": "user_id is required"}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "user_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             user_id = int(user_id)
         except (ValueError, TypeError):
-            return Response(
-                {"detail": "user_id must be a valid integer"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "user_id must be a valid integer"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get and validate user
         try:
             user = User.objects.get(id=user_id, role="T")
         except User.DoesNotExist:
-            return Response(
-                {"detail": "Teacher not found."}, status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({"detail": "Teacher not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Only allow when status is Incomplete profile
         if user.status != "I":
-            return Response(
-                {"detail": "Profile already completed or not allowed."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "Profile already completed or not allowed."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Validate and update User fields directly
         user_errors = {}
         full_name = request.data.get("user.full_name", "").strip()
         date_of_birth = request.data.get("user.date_of_birth")
@@ -406,26 +338,15 @@ class TeacherSubmitProfileAPIView(generics.GenericAPIView):
         if user_errors:
             return Response({"user": user_errors}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Update User fields
         user.full_name = full_name
         user.date_of_birth = date_of_birth
-        if avatar_file:
-            user.avatar = avatar_file
+        user.avatar = avatar_file
+        
+        try:
+            credentials_data = process_credential_files_upload(request.FILES, user)
+        except ValueError as e:
+            return Response({"credentials": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Process credential files
-        credentials_data = process_credential_files(request.FILES, user)
-
-        # Validate at least one certificate is required
-        if (
-            not credentials_data.get("certificates")
-            or len(credentials_data.get("certificates", [])) == 0
-        ):
-            return Response(
-                {"credentials": "At least one certificate is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Prepare data for serializer (only Teacher fields, no nested user)
         serializer_data = {
             "current_workplace": request.data.get("current_workplace", "").strip(),
             "teacher_type": request.data.get("teacher_type"),
@@ -437,17 +358,14 @@ class TeacherSubmitProfileAPIView(generics.GenericAPIView):
         serializer = self.get_serializer(data=serializer_data, context={"user": user})
         serializer.is_valid(raise_exception=True)
 
-        # Save user first, then create teacher
-        user.status = "W"  # move to waiting approval after profile completion
+        user.status = "W"
         user.save()
-
         teacher = serializer.save()
-
         response = {
             "message": "Teacher profile submitted successfully. Awaiting approval.",
             "user_id": user.id,
             "status": user.status,
             "teacher_id": teacher.user_id,
         }
-        
+
         return Response(response, status=status.HTTP_201_CREATED)
