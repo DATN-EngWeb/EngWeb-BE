@@ -451,40 +451,34 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         try:
             user = self.get_object()
         except User.DoesNotExist:
-            return Response(
-                {"error": "User not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
         # Case 1: Admin updating own profile (role = 'A', status = 'V', updating self)
         if user.role == "A" and user.id == request.user.id and user.status == "V":
             # Update user fields using serializer
-            serializer = UserSerializer(
-                user, data=request.data, partial=True, context={"request": request}
-            )
+            serializer = UserSerializer(user, data=request.data, partial=True, context={"request": request})
+
             if serializer.is_valid():
                 serializer.save()
                 # Return updated user data
                 updated_data = serializer.data
                 updated_data["role_display"] = user.get_role_display()
                 updated_data["status_display"] = user.get_status_display()
+
                 # Convert avatar to avatar_url
                 avatar = updated_data.get("avatar")
                 updated_data["avatar_url"] = get_absolute_media_url(avatar)
                 updated_data.pop("avatar", None)
-                return Response(
-                    {
-                        "message": "Profile updated successfully",
-                        "user": updated_data,
-                    },
-                    status=status.HTTP_200_OK,
-                )
+
+                return Response({"message": "Profile updated successfully", "user": updated_data}, status=status.HTTP_200_OK)
+
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         # Case 2: Enable account (role != 'A' and status = 'D')
         elif user.role != "A" and user.status == "D":
             user.status = "V"
             user.save()
+
             return Response(
                 {
                     "message": "Account enabled successfully",
@@ -499,17 +493,13 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             approve = request.data.get("approve")
 
             if approve is None:
-                return Response(
-                    {
-                        "error": "approve field is required for teacher approval/rejection"
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+                return Response({"error": "approve field is required for teacher approval/rejection"}, status=status.HTTP_400_BAD_REQUEST)
 
             if approve:
                 # Accept: Change status to 'V'
                 user.status = "V"
                 user.save()
+
                 return Response(
                     {
                         "message": "Teacher profile approved successfully",
@@ -521,10 +511,8 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             else:
                 # Reject: Delete user (Teacher will be deleted via CASCADE)
                 user.delete()
-                return Response(
-                    {"message": "Teacher profile rejected and user deleted"},
-                    status=status.HTTP_204_NO_CONTENT,
-                )
+
+                return Response({"message": "Teacher profile rejected and user deleted"}, status=status.HTTP_204_NO_CONTENT)
 
         # If none of the conditions match (invalid combination of role/status or wrong format)
         else:
@@ -586,15 +574,13 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         try:
             user = self.get_object()
         except User.DoesNotExist:
-            return Response(
-                {"error": "User not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
         # Check conditions: role != 'A' and status = 'V'
         if user.role != "A" and user.status == "V":
             user.status = "D"
             user.save()
+            
             return Response(
                 {
                     "message": "User disabled successfully",

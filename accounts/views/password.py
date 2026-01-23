@@ -9,6 +9,7 @@ from ..utils import (
     verify_forgot_password_otp,
     delete_forgot_password_otp_cache,
 )
+from ..authentication import CustomTokenAuthentication
 
 from django.db.models import Q
 from django.utils import timezone
@@ -196,7 +197,7 @@ class ForgotPasswordVerifyOTPAPIView(generics.CreateAPIView):
                         "expires_at": {
                             "type": "string",
                             "format": "date-time",
-                            "example": "2024-12-15T10:30:00",
+                            "example": "2024-12-15T10:30:00+00:00",
                         },
                     },
                     "required": ["message", "reset_token", "expires_at"],
@@ -318,6 +319,7 @@ class ResetPasswordAPIView(generics.CreateAPIView):
         except Exception as e:
             return Response({"detail": "Error resetting password."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 class ResendForgotPasswordOTPAPIView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
@@ -363,6 +365,63 @@ class ResendForgotPasswordOTPAPIView(generics.CreateAPIView):
         
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
-        except Exception as e:
+        except Exception:
             return Response({"detail": "Error resending OTP."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ChangePasswordAPIView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    authentication_classes = [CustomTokenAuthentication]
+
+    @extend_schema(
+        summary="Đổi mật khẩu",
+        description=(
+            "Đổi mật khẩu khi người dùng đang đăng nhập.\n\n"
+            "**Yêu cầu:**\n"
+            "- Người dùng phải đăng nhập\n\n"
+            "**Tham số đầu vào:**\n"
+            "- `old_password`: Mật khẩu cũ (bắt buộc)\n"
+            "- `new_password`: Mật khẩu mới (bắt buộc)\n\n"
+            "**Quy tắc:**\n"
+            "- `old_password` phải đúng\n"
+            "- `new_password` phải khác `old_password`"
+        ),
+        tags=["accounts"],
+        request=inline_serializer(
+            name="ChangePasswordRequest",
+            fields={
+                "old_password": serializers.CharField(required=True),
+                "new_password": serializers.CharField(required=True),
+            },
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="Password changed successfully",
+                response=inline_serializer(
+                    name="ChangePasswordResponse",
+                    fields={
+                        "detail": serializers.CharField(),
+                    },
+                ),
+            ),
+            400: OpenApiResponse(description="Validation error"),
+            401: OpenApiResponse(description="Unauthorized"),
+        },
+    )
+    def post(self, request):
+        old_password = request.data.get('old_password')
+        new_password = request.data.get('new_password')
+
+        if not old_password or not new_password:
+            return Response({"detail": "Please fill in all information"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not request.user.check_password(old_password):
+            return Response({"detail": "Old password is incorrect"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if old_password == new_password:
+            return Response({"detail": "New password must be different from old password"}, status=status.HTTP_400_BAD_REQUEST)
+
+        request.user.set_password(new_password)
+        request.user.save()
+
+        return Response({"detail": "Password has been changed successfully"}, status=status.HTTP_200_OK)

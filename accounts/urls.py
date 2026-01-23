@@ -20,6 +20,8 @@ from .views.users import (
     UserListAPIView,
     UserRetrieveUpdateDestroyAPIView,
 )
+from .views.teachers import TeacherRetrieveUpdateAPIView
+from .views.students import StudentRetrieveUpdateAPIView
 
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -44,8 +46,14 @@ urlpatterns = [
     path("verify-otp/forgot-password", ForgotPasswordVerifyOTPAPIView.as_view(), name="verify-otp-forgot-password"),
     path("resend-otp/forgot-password", ResendForgotPasswordOTPAPIView.as_view(), name="resend-otp-forgot-password"),
     path("reset-password", ResetPasswordAPIView.as_view(), name="reset-password"),
-    
-    # Users endpoints
+
+    # Admin manage user endpoints
     path("users", UserListAPIView.as_view(), name="user-list"),
     path("users/<int:pk>", UserRetrieveUpdateDestroyAPIView.as_view(), name="user-retrieve-update-destroy"),
+
+    # Teacher endpoints
+    path("teachers/<int:pk>", TeacherRetrieveUpdateAPIView.as_view(), name="teacher-retrieve-update"),
+
+    # Student endpoints
+    path("students/<int:pk>", StudentRetrieveUpdateAPIView.as_view(), name="student-retrieve-update"),
 ]
