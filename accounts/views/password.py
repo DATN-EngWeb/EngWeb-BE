@@ -36,26 +36,26 @@ class ForgotPasswordAPIView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(
-        summary="Yêu cầu đặt lại mật khẩu",
+        summary="Request forgot password reset",
         description=(
-            "Gửi mã OTP xác thực cho tài khoản để đặt lại mật khẩu.\n\n"
-            "**Yêu cầu:**\n"
-            "- Tài khoản phải ở trạng thái V (Verified)\n\n"
-            "**Luồng xử lý:**\n"
-            "- P (Pending): Gửi OTP xác thực email\n"
-            "- I (Incomplete): Yêu cầu hoàn thành hồ sơ\n"
-            "- W (Waiting): Chờ phê duyệt từ admin\n"
-            "- D (Disabled): Tài khoản bị vô hiệu hóa\n"
-            "- V (Verified): Gửi OTP để đặt lại mật khẩu\n\n"
-            "**Tham số đầu vào:**\n"
-            "- `username_or_email`: Username hoặc email (bắt buộc)"
+            "Send verification OTP to request password reset.\n\n"
+            "**Requirements:**\n"
+            "- Account must be in status V (Verified)\n\n"
+            "**Processing:**\n"
+            "- P (Pending): Send verification OTP email\n"
+            "- I (Incomplete): Request to complete profile\n"
+            "- W (Waiting): Wait for admin approval\n"
+            "- D (Disabled): Account disabled\n"
+            "- V (Verified): Send OTP to reset password\n\n"
+            "**Input parameters:**\n"
+            "- `username_or_email`: Username or email (required)"
         ),
-        tags=["accounts"],
+        tags=["password"],
         request=inline_serializer(
             name="ForgotPasswordRequest",
             fields={
                 "username_or_email": serializers.CharField(
-                    required=True, help_text="Username hoặc email"
+                    required=True, help_text="Username or email"
                 ),
             },
         ),
@@ -163,20 +163,20 @@ class ForgotPasswordVerifyOTPAPIView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(
-        summary="Xác thực OTP đặt lại mật khẩu",
+        summary="Verify OTP for password reset",
         description=(
-            "Xác minh mã OTP và cấp token để đặt lại mật khẩu.\n\n"
-            "**Tham số đầu vào:**\n"
-            "- `username`: Username (bắt buộc)\n"
-            "- `otp_code`: Mã OTP gửi đến email (bắt buộc)"
+            "Verify OTP and generate reset token for password reset.\n\n"
+            "**Input parameters:**\n"
+            "- `username`: Username (required)\n"
+            "- `otp_code`: OTP code sent to email (required)"
         ),
-        tags=["accounts"],
+        tags=["password"],
         request=inline_serializer(
             name="ForgotPasswordVerifyOTPRequest",
             fields={
                 "username": serializers.CharField(required=True),
                 "otp_code": serializers.CharField(
-                    required=True, help_text="Mã OTP gửi đến email"
+                    required=True, help_text="OTP code sent to email"
                 ),
             },
         ),
@@ -240,25 +240,25 @@ class ResetPasswordAPIView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(
-        summary="Đặt lại mật khẩu",
+        summary="Reset password",
         description=(
-            "Đặt lại mật khẩu mới sau khi xác minh OTP thành công.\n\n"
-            "**Yêu cầu:**\n"
-            "- Phải cấp reset_token hợp lệ từ `/forgot-password/verify-otp/`\n"
-            "- Token hết hạn sau 30 phút\n\n"
-            "**Tham số đầu vào:**\n"
-            "- `reset_token`: Token nhận từ xác thực OTP (bắt buộc)\n"
-            "- `new_password`: Mật khẩu mới (bắt buộc)"
+            "Reset password after successful OTP verification.\n\n"
+            "**Requirements:**\n"
+            "- Must provide valid reset_token from `/forgot-password/verify-otp/`\n"
+            "- Token expires after 30 minutes\n\n"
+            "**Input parameters:**\n"
+            "- `reset_token`: Reset token from OTP verification (required)\n"
+            "- `new_password`: New password (required)"
         ),
-        tags=["accounts"],
+        tags=["password"],
         request=inline_serializer(
             name="ResetPasswordRequest",
             fields={
                 "reset_token": serializers.CharField(
-                    required=True, help_text="Token từ xác thực OTP"
+                    required=True, help_text="Reset token from OTP verification"
                 ),
                 "new_password": serializers.CharField(
-                    required=True, write_only=True, help_text="Mật khẩu mới"
+                    required=True, write_only=True, help_text="New password"
                 ),
             },
         ),
@@ -324,13 +324,13 @@ class ResendForgotPasswordOTPAPIView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(
-        summary="Gửi lại OTP đặt lại mật khẩu",
+        summary="Resend forgot password OTP",
         description=(
-            "Gửi lại mã OTP khi người dùng không nhận được hoặc OTP hết hạn.\n\n"
-            "**Tham số đầu vào:**\n"
-            "- `username`: Username (bắt buộc)"
+            "Resend OTP when user doesn't receive or OTP expires.\n\n"
+            "**Input parameters:**\n"
+            "- `username`: Username (required)"
         ),
-        tags=["accounts"],
+        tags=["password"],
         request=inline_serializer(
             name="ResendForgotPasswordOTPRequest",
             fields={
@@ -374,19 +374,19 @@ class ChangePasswordAPIView(generics.GenericAPIView):
     authentication_classes = [CustomTokenAuthentication]
 
     @extend_schema(
-        summary="Đổi mật khẩu",
+        summary="Change password",
         description=(
-            "Đổi mật khẩu khi người dùng đang đăng nhập.\n\n"
-            "**Yêu cầu:**\n"
-            "- Người dùng phải đăng nhập\n\n"
-            "**Tham số đầu vào:**\n"
-            "- `old_password`: Mật khẩu cũ (bắt buộc)\n"
-            "- `new_password`: Mật khẩu mới (bắt buộc)\n\n"
-            "**Quy tắc:**\n"
-            "- `old_password` phải đúng\n"
-            "- `new_password` phải khác `old_password`"
+            "Change password when user is logged in.\n\n"
+            "**Requirements:**\n"
+            "- User must be logged in\n\n"
+            "**Input parameters:**\n"
+            "- `old_password`: Old password (required)\n"
+            "- `new_password`: New password (required)\n\n"
+            "**Rules:**\n"
+            "- `old_password` must be correct\n"
+            "- `new_password` must be different from `old_password`"
         ),
-        tags=["accounts"],
+        tags=["password"],
         request=inline_serializer(
             name="ChangePasswordRequest",
             fields={

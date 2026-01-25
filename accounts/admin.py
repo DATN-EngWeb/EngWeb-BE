@@ -2,7 +2,6 @@ from .models import User, Teacher, Student
 
 from django.contrib import admin
 
-
 # custom display for User in admin panel
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
@@ -16,7 +15,6 @@ class UserAdmin(admin.ModelAdmin):
         "is_active",
     )
 
-
 @admin.register(Teacher)
 class TeacherAdmin(admin.ModelAdmin):
     list_display = (
@@ -25,7 +23,6 @@ class TeacherAdmin(admin.ModelAdmin):
         "current_workplace", 
         "experience_year"
     )
-
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):

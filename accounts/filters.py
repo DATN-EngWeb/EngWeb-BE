@@ -1,8 +1,7 @@
 from .models import User
 
-from django_filters import rest_framework as filters
 from django.db.models import Q
-
+from django_filters import rest_framework as filters
 
 class UserFilter(filters.FilterSet):
     role = filters.ChoiceFilter(
@@ -18,7 +17,7 @@ class UserFilter(filters.FilterSet):
             ("I", "Incomplete Profile"),
             ("W", "Waiting Approval"),
             ("V", "Verified"),
-            ("D", "Disabled"),
+            ("D", "Disabled")
         ]
     )
     search = filters.CharFilter(method="filter_search")
@@ -29,7 +28,6 @@ class UserFilter(filters.FilterSet):
 
     def filter_search(self, queryset, name, value):
         if value:
-            return queryset.filter(
-                Q(username__icontains=value) | Q(email__icontains=value)
-            )
+            return queryset.filter(Q(username__icontains=value) | Q(email__icontains=value))
+            
         return queryset

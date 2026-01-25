@@ -17,7 +17,6 @@ import requests
 import json
 import time
 
-
 def create_otp_code():
     digits = "0123456789"
     otp = "".join(random.choice(digits) for i in range(6))
@@ -266,7 +265,7 @@ def process_credential_files_upload(request_files, user):
     if not request_files:
         raise ValueError("No files provided")
 
-    credential_files = request_files.getlist("credentials")
+    credential_files = request_files.getlist("teacher.credentials")
 
     if not credential_files:
         raise ValueError("At least one credential file is required")
@@ -559,3 +558,36 @@ def get_absolute_media_url(media_field):
         return media_field.url
     except Exception:
         return None
+
+def delete_user_storage_folder(user):
+    if not user.file_storage_uuid:
+        return
+    
+    # Delete credentials from teacher profile if exists
+    try:
+        if user.role == "T":
+            teacher = user.teacher
+            credentials = teacher.credentials if isinstance(teacher.credentials, list) else []
+            for cred in credentials:
+                if isinstance(cred, dict) and cred.get("url"):
+                    cred_url = cred.get("url")
+                    try:
+                        default_storage.delete(cred_url)
+                    except Exception:
+                        pass  # Ignore errors when deleting individual files
+    except Exception:
+        pass  # Teacher doesn't exist or not a teacher
+    
+    # Delete avatar if not default
+    if user.avatar and str(user.avatar) != "users/avatars/default-avatar.jpg":
+        try:
+            default_storage.delete(str(user.avatar))
+        except Exception:
+            pass
+    
+    # Delete cover if not default
+    if user.cover and str(user.cover) != "users/covers/default-cover.jpg":
+        try:
+            default_storage.delete(str(user.cover))
+        except Exception:
+            pass

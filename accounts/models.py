@@ -1,15 +1,21 @@
-from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.validators import MinValueValidator
+from django.db import models
 
 import uuid
 
-
 # custom user manager
 class CustomUserManager(BaseUserManager):
-    def create_user(self, username, email, password=None, **extra_fields):
+    def create_user(
+        self, 
+        username, 
+        email, 
+        password=None, 
+        **extra_fields
+    ):
         if not username:
             raise ValueError("Username is required")
+        
         if not email:
             raise ValueError("Email is required")
 
@@ -24,27 +30,31 @@ class CustomUserManager(BaseUserManager):
 
         return user
 
-    def create_superuser(self, username, email, password=None, **extra_fields):
+    def create_superuser(
+        self, 
+        username, 
+        email, 
+        password=None, 
+        **extra_fields
+    ):
         extra_fields.setdefault("role", "A")
         extra_fields.setdefault("is_active", True)
         extra_fields.setdefault("avatar", "users/avatars/admin-avatar.png")
+        user = self.create_user(
+            username, 
+            email, 
+            password, 
+            **extra_fields
+        )
 
-        return self.create_user(username, email, password, **extra_fields)
-
+        return user
 
 # custom user model
 class User(AbstractUser):
     # BaseAbstractUser/AbstractUser default fields : (password, last_login)/(username, date_joined, is_active)
     email = models.EmailField(unique=True)  # override email to make it unique
-
-    # additional fields
-    file_storage_uuid = models.UUIDField(
-        default=uuid.uuid4, 
-        editable=False, 
-        unique=True, 
-        db_index=True
-    )
-    full_name = models.CharField(max_length=100, blank=True, null=True)
+    file_storage_uuid = models.UUIDField(unique=True, default=uuid.uuid4, editable=False) # renamed folder name for file storage
+    full_name = models.CharField(max_length=100, null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     avatar = models.ImageField(
         upload_to="users/avatars/",
@@ -58,8 +68,6 @@ class User(AbstractUser):
         blank=True,
         default="users/covers/default-cover.jpg",
     )
-
-    # is_active is always set to True, staus will be used instead
     status = models.CharField(
         max_length=1,
         choices=[
@@ -71,8 +79,6 @@ class User(AbstractUser):
         ],
         default="P",
     )
-
-    # role
     role = models.CharField(
         max_length=1,
         choices=[
@@ -82,8 +88,6 @@ class User(AbstractUser):
         ],
         default="S",
     )
-
-    # timestamp
     updated_at = models.DateTimeField(auto_now=True)
 
     # remove default fields are not used
@@ -111,7 +115,6 @@ class User(AbstractUser):
     class Meta:
         db_table = "user"
 
-
 # teacher model
 class Teacher(models.Model):
     user = models.OneToOneField(
@@ -120,7 +123,6 @@ class Teacher(models.Model):
         primary_key=True, 
         related_name="teacher"
     )
-
     current_workplace = models.CharField(max_length=255)
     teacher_type = models.CharField(
         max_length=1,
@@ -134,8 +136,6 @@ class Teacher(models.Model):
     experience_year = models.IntegerField(validators=[MinValueValidator(0)])
     introduction = models.TextField()
     credentials = models.JSONField(default=dict)
-
-    # timestamp
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -146,7 +146,6 @@ class Teacher(models.Model):
 
     class Meta:
         db_table = "teacher"
-
 
 # student model
 class Student(models.Model):
@@ -176,7 +175,12 @@ class Student(models.Model):
 
     # level and title
     level = models.IntegerField(validators=[MinValueValidator(1)], default=1)
-    title = models.CharField(max_length=100, blank=True, null=True, default="Beginner")
+    title = models.CharField(
+        max_length=100, 
+        null=True, 
+        blank=True, 
+        default="Beginner"
+    )
 
     # timestamp
     created_at = models.DateTimeField(auto_now_add=True)

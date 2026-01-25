@@ -3,18 +3,17 @@ from .utils import (
     create_otp_code,
     cache_register_otp,
     send_registration_otp_email,
-    get_absolute_media_url,
+    get_absolute_media_url
 )
 
-from django.core.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import update_last_login
+from django.core.exceptions import ValidationError
 from django.db.models import Q
 
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -28,15 +27,13 @@ class UserSerializer(serializers.ModelSerializer):
             "role": {"read_only": True},
             "status": {"read_only": True},
             "is_active": {"read_only": True},
-            "updated_at": {"read_only": True},
+            "updated_at": {"read_only": True}
         }
 
     def validate(self, attrs):
         if attrs.get("password"):
             try:
-                validate_password(
-                    attrs["password"]
-                )
+                validate_password(attrs["password"])
             except ValidationError as e:
                 raise serializers.ValidationError({"password": list(e.messages)})
 
@@ -48,6 +45,9 @@ class UserSerializer(serializers.ModelSerializer):
         validated_data["status"] = "P"
         user = User.objects.create_user(**validated_data)
 
+        if role == "S":
+            Student.objects.create(user=user)
+
         return user
 
     def update(self, instance, validated_data):
@@ -55,6 +55,7 @@ class UserSerializer(serializers.ModelSerializer):
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+
         if password:
             instance.set_password(password)
         instance.save()
@@ -62,14 +63,19 @@ class UserSerializer(serializers.ModelSerializer):
         return instance
 
 class TeacherSerializer(serializers.ModelSerializer):
+    user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
+
     class Meta:
         model = Teacher
         fields = [
+            "user",
             "current_workplace",
             "teacher_type",
             "experience_year",
             "introduction",
             "credentials",
+            "created_at",
+            "updated_at"
         ]
         extra_kwargs = {
             "created_at": {"read_only": True},
@@ -77,40 +83,63 @@ class TeacherSerializer(serializers.ModelSerializer):
         }
 
     def validate(self, attrs):
-        required_teacher_fields = ["current_workplace", "teacher_type", "introduction"]
         errors = {}
+        is_create = self.instance is None  # True if creating new, False if updating
 
-        # Validate teacher fields
-        for field in required_teacher_fields:
-            value = attrs.get(field)
-            if isinstance(value, str):
-                value = value.strip()
-            if not value:
-                errors[field] = "This field is required."
+        # Only require these fields when creating (POST), not when updating (PATCH)
+        if is_create:
+            required_teacher_fields = ["current_workplace", "teacher_type", "introduction"]
+            
+            for field in required_teacher_fields:
+                value = attrs.get(field)
 
-        # Validate teacher_type values
+                if isinstance(value, str):
+                    value = value.strip()
+                
+                if not value:
+                    errors[field] = "This field is required."
+
+            # Validate experience_year - required only on create
+            experience_year = attrs.get("experience_year")
+            if experience_year is None:
+                errors["experience_year"] = "This field is required."
+            elif isinstance(experience_year, str):
+                try:
+                    attrs["experience_year"] = int(experience_year)
+                except ValueError:
+                    errors["experience_year"] = "Must be a valid integer."
+            elif not isinstance(experience_year, int) or experience_year < 0:
+                errors["experience_year"] = "Must be a non-negative integer."
+
+            # Validate credentials - required only on create
+            credentials = attrs.get("credentials", None)
+            if not isinstance(credentials, list) or len(credentials) == 0 or len(credentials) > 3:
+                errors["credentials"] = "At least one credential is required and maximum 3 credentials are allowed."
+        else:
+            # When updating, validate only if fields are provided
+            # Validate experience_year if provided
+            experience_year = attrs.get("experience_year")
+            if experience_year is not None:
+                if isinstance(experience_year, str):
+                    try:
+                        attrs["experience_year"] = int(experience_year)
+                    except ValueError:
+                        errors["experience_year"] = "Must be a valid integer."
+                elif not isinstance(experience_year, int) or experience_year < 0:
+                    errors["experience_year"] = "Must be a non-negative integer."
+
+            # Validate credentials if provided
+            credentials = attrs.get("credentials", None)
+            if credentials is not None:
+                if not isinstance(credentials, list) or len(credentials) == 0 or len(credentials) > 3:
+                    errors["credentials"] = "At least one credential is required and maximum 3 credentials are allowed."
+
+        # Validate teacher_type if provided (for both create and update)
         teacher_type = attrs.get("teacher_type")
         if teacher_type and teacher_type not in ["S", "C", "F"]:
             errors["teacher_type"] = (
                 "Must be one of: S (School Teacher), C (Center Teacher), F (Freelance Teacher)."
             )
-
-        # Validate experience_year
-        experience_year = attrs.get("experience_year")
-        if experience_year is None:
-            errors["experience_year"] = "This field is required."
-        elif isinstance(experience_year, str):
-            try:
-                attrs["experience_year"] = int(experience_year)
-            except ValueError:
-                errors["experience_year"] = "Must be a valid integer."
-        elif not isinstance(experience_year, int) or experience_year < 0:
-            errors["experience_year"] = "Must be a non-negative integer."
-
-        # Validate credentials - at least one credential item required
-        credentials = attrs.get("credentials", None)
-        if not isinstance(credentials, list) or len(credentials) == 0 or len(credentials) > 3:
-            errors["credentials"] = "At least one credential is required and maximum 3 credentials are allowed."
 
         if errors:
             raise serializers.ValidationError(errors)
@@ -118,15 +147,7 @@ class TeacherSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        user = self.context.get("user")
-
-        if not user:
-            raise serializers.ValidationError(
-                {"user": "User context is required for teacher creation."}
-            )
-
-        # User is already updated in view, just create teacher
-        teacher = Teacher.objects.create(user=user, **validated_data)
+        teacher = Teacher.objects.create(**validated_data)
         return teacher
 
     def update(self, instance, validated_data):
@@ -144,37 +165,41 @@ class TeacherSerializer(serializers.ModelSerializer):
         return instance
 
 class StudentSerializer(serializers.ModelSerializer):
-    user = UserSerializer(required=False)
+    user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
 
     class Meta:
         model = Student
-        fields = ["user"]  # other fields are updated by code logic not by api data
-
-    def create(self, validated_data):
-        user = self.context.get("user")
-
-        if not user:
-            raise serializers.ValidationError({"user": "User is required in context"})
-
-        if Student.objects.filter(user=user).exists():
-            return Student.objects.get(user=user)
-
-        student = Student.objects.create(user=user)
-        return student
-
-    def update(self, instance, validated_data):
-        user_data = validated_data.pop("user", {})
-        user = instance.user
-
-        for attr, value in user_data.items():
-            setattr(user, attr, value)
-        user.save()
-
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-
-        return instance
+        fields = [
+            "user",
+            "cumulative_point",
+            "weekly_point",
+            "weekly_ai_turn",
+            "bonus_ai_turn",
+            "completed_test",
+            "qualified_test",
+            "last_attempt_at",
+            "streak_count",
+            "max_streak",
+            "level",
+            "title",
+            "created_at",
+            "updated_at"
+        ]
+        extra_kwargs = {
+            "cumulative_point": {"read_only": True},
+            "weekly_point": {"read_only": True},
+            "weekly_ai_turn": {"read_only": True},
+            "bonus_ai_turn": {"read_only": True},
+            "completed_test": {"read_only": True},
+            "qualified_test": {"read_only": True},
+            "last_attempt_at": {"read_only": True},
+            "streak_count": {"read_only": True},
+            "max_streak": {"read_only": True},
+            "level": {"read_only": True},
+            "title": {"read_only": True},
+            "created_at": {"read_only": True},
+            "updated_at": {"read_only": True},
+        }
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):

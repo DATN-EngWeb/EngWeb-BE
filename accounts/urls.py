@@ -15,17 +15,17 @@ from .views.password import (
     ForgotPasswordVerifyOTPAPIView,
     ResetPasswordAPIView,
     ResendForgotPasswordOTPAPIView,
+    ChangePasswordAPIView
 )
-from .views.users import (
-    UserListAPIView,
-    UserRetrieveUpdateDestroyAPIView,
+from .views.admin import (
+    AdminListUserAPIView,
+    AdminRetrieveUpdateDestroyUserAPIView,
 )
-from .views.teachers import TeacherRetrieveUpdateAPIView
-from .views.students import StudentRetrieveUpdateAPIView
+from .views.teacher import TeacherRetrieveUpdateAPIView
+from .views.student import StudentRetrieveUpdateAPIView
 
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
-
 
 urlpatterns = [
     # Authentication endpoints
@@ -46,10 +46,11 @@ urlpatterns = [
     path("verify-otp/forgot-password", ForgotPasswordVerifyOTPAPIView.as_view(), name="verify-otp-forgot-password"),
     path("resend-otp/forgot-password", ResendForgotPasswordOTPAPIView.as_view(), name="resend-otp-forgot-password"),
     path("reset-password", ResetPasswordAPIView.as_view(), name="reset-password"),
+    path("change-password", ChangePasswordAPIView.as_view(), name="change-password"),
 
     # Admin manage user endpoints
-    path("users", UserListAPIView.as_view(), name="user-list"),
-    path("users/<int:pk>", UserRetrieveUpdateDestroyAPIView.as_view(), name="user-retrieve-update-destroy"),
+    path("admin-users", AdminListUserAPIView.as_view(), name="admin-list-user"),
+    path("admin-users/<int:pk>", AdminRetrieveUpdateDestroyUserAPIView.as_view(), name="admin-retrieve-update-destroy-user"),
 
     # Teacher endpoints
     path("teachers/<int:pk>", TeacherRetrieveUpdateAPIView.as_view(), name="teacher-retrieve-update"),

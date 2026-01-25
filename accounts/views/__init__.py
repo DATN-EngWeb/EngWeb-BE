@@ -17,9 +17,9 @@ from .password import (
     ResetPasswordAPIView,
     ResendForgotPasswordOTPAPIView,
 )
-from .users import (
-    UserListAPIView,
-    UserRetrieveUpdateDestroyAPIView,
+from .admin import (
+    AdminListUserAPIView,
+    AdminRetrieveUpdateDestroyUserAPIView,
 )
 
 __all__ = [
@@ -39,6 +39,6 @@ __all__ = [
     "ResetPasswordAPIView",
     "ResendForgotPasswordOTPAPIView",
     # Users
-    "UserListAPIView",
-    "UserRetrieveUpdateDestroyAPIView",
+    "AdminListUserAPIView",
+    "AdminRetrieveUpdateDestroyUserAPIView",
 ]
