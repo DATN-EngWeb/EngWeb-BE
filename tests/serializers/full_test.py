@@ -8,6 +8,8 @@ from ..models import (
     ReceptiveAnswer,
 )
 
+from django.db import transaction
+
 
 class ReceptiveAnswerSerializer(serializers.ModelSerializer):
     class Meta:
@@ -121,3 +123,45 @@ class ProductiveTestRetrieveSerializer(serializers.ModelSerializer):
             "productive_test",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class ProductiveTestUpdateSerializer(serializers.ModelSerializer):
+    productive_test = ProductiveTestSerializer(required=False)
+
+    class Meta:
+        model = Test
+        fields = [
+            "id",
+            "title",
+            "type",
+            "level",
+            "skill",
+            "time",
+            "description",
+            "status",
+            "created_at",
+            "updated_at",
+            "productive_test",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        productive_test_data = validated_data.pop("productive_test", None)
+
+        instance = super().update(instance, validated_data)
+
+        if productive_test_data:
+            productive_test = getattr(instance, "productive_test", None)
+            if productive_test is None:
+                return instance
+
+            serializer = ProductiveTestSerializer(
+                productive_test,
+                data=productive_test_data,
+                partial=True,
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+
+        return instance

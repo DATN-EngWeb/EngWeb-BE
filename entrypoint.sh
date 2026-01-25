@@ -70,4 +70,9 @@ for sql_file in /app/init/*.sql; do
 done
 echo "✓ SQL seed files executed."
 
+# Update database sequences after seeding
+echo "Updating database sequences..."
+PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT setval('test_id_seq', (SELECT COALESCE(MAX(id), 1) FROM test));"
+echo "✓ Sequences updated."
+
 exec python manage.py runserver 0.0.0.0:8000

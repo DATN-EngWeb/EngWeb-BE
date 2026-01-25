@@ -61,9 +61,11 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         """
-        Override to handle 'mine' filter parameter.
+        Override to handle 'mine' filter parameter and status filtering.
         If mine=true, filter tests by current teacher.
         Raises PermissionDenied if non-teacher uses mine=true.
+        For non-admin users, exclude tests with status='R' (Removed).
+        Raises PermissionDenied if non-admin tries to filter by status='R'.
         """
         queryset = super().get_queryset()
         mine = self.request.query_params.get("mine", "").lower()
@@ -84,12 +86,26 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                     detail="Only teachers can use 'mine' parameter to filter their own tests."
                 )
 
+        # Filter out removed tests for non-admin users
+        if self.request.user.is_authenticated and not self.request.user.is_staff:
+            queryset = queryset.exclude(status="R")
+
+            # Check if trying to filter by status=R
+            status_filter = self.request.query_params.get("status", "")
+            if status_filter == "R":
+                raise PermissionDenied(
+                    detail="Only admin users can filter by status 'R' (Removed)."
+                )
+
         return queryset
 
     @extend_schema(
         summary="Danh sách bài kiểm tra (tổng quan)",
         description=(
             "Lấy danh sách tất cả bài kiểm tra (tổng quan) với hỗ trợ lọc, sắp xếp và phân trang.\n\n"
+            "**Lưu ý về quyền truy cập:**\n"
+            "- User thường (không phải admin): Không thấy bài kiểm tra có trạng thái 'R' (Removed). Không được phép filter theo status='R'.\n"
+            "- Admin: Thấy tất cả bài kiểm tra, bao gồm 'R'. Được phép filter theo status='R'.\n\n"
             "**Tham số lọc (Query Parameters):**\n"
             "- `type`: Loại bài kiểm tra - R (Receptive: Reading/Listening), P (Productive: Speaking/Writing)\n"
             "- `level`: Cấp độ (A1, A2, B1, B2)\n"
@@ -221,7 +237,7 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "- `time`: Thời gian làm bài (phút, tối thiểu 1)\n"
             "- `description`: Mô tả bài kiểm tra (không được để trống)\n\n"
             "**Tham số tùy chọn:**\n"
-            "- `status`: Trạng thái - D (Draft), I (In Review), P (Published) (mặc định: D)\n"
+            "- `status`: Trạng thái - D (Draft), I (In Review), P (Published) (mặc định: D)\n\n"
             "**Lưu ý:**\n"
             "- `type` và `skill` phải tương thích:\n"
             "  - type=R chỉ dùng với skill=R hoặc skill=L\n"
