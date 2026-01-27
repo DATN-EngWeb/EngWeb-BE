@@ -1,75 +1,47 @@
+from .models import User
+
+from django.core.cache import cache
+from django.core.mail import EmailMessage
+from django.conf import settings
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+from django.utils import timezone
+
+from datetime import timedelta
+from email.mime.image import MIMEImage
+
 import random
 import os
 import uuid
 import requests
-from django.core.cache import cache
-from django.core.mail import EmailMessage
-from django.conf import settings
-from datetime import datetime, timedelta
 import json
 import time
-from email.mime.image import MIMEImage
-from django.core.files.storage import default_storage
-from django.core.files.base import ContentFile
 
-
-# get or create file storage uuid for user
-def get_or_create_file_storage_uuid(user):
-    """
-    Get the file storage UUID for a user. UUID is auto-generated and stored in User model.
-    This UUID is used for organizing file storage (avatars, credentials).
-
-    Args:
-        user: User instance
-
-    Returns:
-        uuid.UUID: The file storage UUID
-    """
-    if not user.file_storage_uuid:
-        user.file_storage_uuid = uuid.uuid4()
-        user.save(update_fields=["file_storage_uuid"])
-    return user.file_storage_uuid
-
-
-# create otp code
 def create_otp_code():
     digits = "0123456789"
     otp = "".join(random.choice(digits) for i in range(6))
 
     return otp
 
-
-# cache for 5 minutes
 def cache_register_otp(user_id, otp_code, email):
-    """
-    Cache OTP data for registration verification
-    Args:
-        user_id: Primary key of User (int)
-        otp_code: 6-digit OTP code (str)
-        email: User's email for resending OTP (str)
-    """
     cache_key = f"register_{user_id}"
     cache_data = {
         "otp_code": otp_code,
         "email": email,
-        "last_sent": datetime.now().isoformat(),
+        "last_sent": timezone.now().isoformat(),
     }
 
     cache.set(cache_key, json.dumps(cache_data), timeout=300)
 
-
-# get logo bytes for email embedding (attached image)
 def get_logo_bytes():
-    """Read logo file and return raw bytes for inline attachment"""
     logo_path = os.path.join(settings.BASE_DIR, "static", "logo.png")
+
     try:
         with open(logo_path, "rb") as logo_file:
             return logo_file.read()
     except FileNotFoundError:
         return None
 
-
-# send otp code to email
 def send_registration_otp_email(email, otp_code):
     logo_data = get_logo_bytes()
     logo_cid = "nens-logo"
@@ -78,7 +50,6 @@ def send_registration_otp_email(email, otp_code):
         if logo_data
         else ""
     )
-
     subject = "Your NENS verification code"
     html_body = f"""
     <!DOCTYPE html>
@@ -199,24 +170,25 @@ def send_registration_otp_email(email, otp_code):
     """
     from_email = settings.EMAIL_HOST_USER
     email_message = EmailMessage(
-        subject=subject, body=html_body, from_email=from_email, to=[email]
+        subject=subject, 
+        body=html_body, 
+        from_email=from_email, 
+        to=[email]
     )
     email_message.content_subtype = "html"
+
     if logo_data:
         image = MIMEImage(logo_data)
         image.add_header("Content-ID", f"<{logo_cid}>")
         image.add_header("Content-Disposition", "inline", filename="logo.png")
         email_message.attach(image)
+
     email_message.send(fail_silently=False)
 
-
-# verify registration otp
 def verify_registration_otp(user_id, otp_code):
-    # Validate input
     if not user_id or not otp_code:
         raise ValueError("user_id and otp_code are required.")
 
-    # Get OTP from cache
     cache_key = f"register_{user_id}"
     cache_data = cache.get(cache_key)
 
@@ -225,73 +197,49 @@ def verify_registration_otp(user_id, otp_code):
 
     cache_data = json.loads(cache_data)
 
-    # Verify OTP code
     if cache_data["otp_code"] != otp_code:
         raise ValueError("Invalid OTP code.")
 
     return cache_data
 
-
-# delete registration otp from cache
 def delete_registration_otp_cache(user_id):
     cache_key = f"register_{user_id}"
     cache.delete(cache_key)
 
-
-# resend registration otp
 def resend_registration_otp_email(user_id):
-    """
-    Resend OTP code for registration
-    Args:
-        user_id: Primary key of User (int)
-    """
     cache_key = f"register_{user_id}"
     cache_data = cache.get(cache_key)
 
     if not cache_data:
-        raise ValueError(
-            "Account does not exist or the verification process has expired (over 5 minutes)."
-        )
+        raise ValueError("Account does not exist or the verification process has expired (over 5 minutes).")
 
     cache_data = json.loads(cache_data)
-    last_sent = datetime.fromisoformat(cache_data["last_sent"])
+    last_sent = timezone.datetime.fromisoformat(cache_data["last_sent"])
 
-    # Check if 1 minute has passed
-    if datetime.now() - last_sent < timedelta(minutes=1):
-        raise ValueError(
-            "Please wait at least 1 minute before requesting a new OTP code."
-        )
+    if timezone.now() - last_sent < timedelta(minutes=1):
+        raise ValueError("Please wait at least 1 minute before requesting a new OTP code.")
 
-    # Generate new OTP
     new_otp_code = create_otp_code()
     email = cache_data["email"]
-
-    # Update cache
     cache_data["otp_code"] = new_otp_code
-    cache_data["last_sent"] = datetime.now().isoformat()
-    cache.set(cache_key, json.dumps(cache_data), timeout=300)
+    cache_data["last_sent"] = timezone.now().isoformat()
 
-    # Resend email
+    cache.set(cache_key, json.dumps(cache_data), timeout=300)
     send_registration_otp_email(email, new_otp_code)
 
+def get_or_create_file_storage_uuid(user):
+    """Folder name with uuid for user's file storage."""
+    if not user.file_storage_uuid:
+        user.file_storage_uuid = uuid.uuid4()
+        user.save(update_fields=["file_storage_uuid"])
 
-# Validate file signature/magic numbers to prevent spoofed uploads
+    return user.file_storage_uuid
+
 def validate_file_signature(file_obj_or_bytes):
-    """
-    Validate file by checking its magic number (file signature).
-    Prevents malicious users from uploading executables disguised as PDFs/images.
-
-    Args:
-        file_obj_or_bytes: Django UploadedFile object or bytes content
-
-    Returns:
-        str: File type if valid ('pdf', 'jpeg', 'png'), None if invalid
-    """
-    # Handle both file objects and bytes
+    """Validate file signature (magic numbers) to determine file type."""
     if isinstance(file_obj_or_bytes, bytes):
         header = file_obj_or_bytes[:12]
     else:
-        # Django UploadedFile object
         file_obj_or_bytes.seek(0)
         header = file_obj_or_bytes.read(12)
         file_obj_or_bytes.seek(0)
@@ -299,103 +247,61 @@ def validate_file_signature(file_obj_or_bytes):
     if not header:
         return None
 
-    # Magic number validation (file signatures)
-    # PDF: %PDF (0x25 0x50 0x44 0x46)
     if header.startswith(b"%PDF"):
         return "pdf"
 
-    # JPEG: FF D8 FF (all JPEG variants)
     if header[:3] == b"\xff\xd8\xff":
         return "jpeg"
 
-    # PNG: 89 50 4E 47
     if header[:4] == b"\x89PNG":
         return "png"
 
     return None
 
-
-# Process and save credential files
-def process_credential_files(request_files, user):
-    """
-    Process multiple credential files from request and save them to media folder.
-    Returns a JSON structure with file metadata.
-
-    Args:
-        request_files: QueryDict from request.FILES containing 'credentials' files
-        user: User instance for getting file storage UUID
-
-    Returns:
-        dict: JSON structure with credentials metadata
-        {
-            "certificates": [
-                {
-                    "url": "credentials/{file_storage_uuid}/cert_0.pdf",
-                    "name": "certificate.pdf",
-                    "type": "application/pdf",
-                    "size": 12345
-                },
-                ...
-            ]
-        }
-    """
-    credentials_data = {"certificates": []}
+def process_credential_files_upload(request_files, user):
+    """Process credential files upload and return list of credential data."""
+    credentials_data = []
 
     if not request_files:
-        return credentials_data
+        raise ValueError("No files provided")
 
-    # Get all files with key 'credentials'
-    credential_files = request_files.getlist("credentials")
+    credential_files = request_files.getlist("teacher.credentials")
 
     if not credential_files:
-        return credentials_data
+        raise ValueError("At least one credential file is required")
 
-    # Get or create file storage UUID for user
+    if len(credential_files) > 3:
+        raise ValueError("Maximum 3 credential files are allowed")
+
     file_storage_uuid = get_or_create_file_storage_uuid(user)
-
-    # Create directory for user's credentials
-    credentials_dir = os.path.join(
-        settings.MEDIA_ROOT, "credentials", str(file_storage_uuid)
-    )
-    os.makedirs(credentials_dir, exist_ok=True)
 
     for index, file_obj in enumerate(credential_files):
         if not file_obj:
-            continue
+            raise ValueError(f"Credential file at index {index} is missing")
 
-        # Validate file size first (5MB max)
         if file_obj.size > 5 * 1024 * 1024:
-            continue
+            raise ValueError(f"Credential file '{file_obj.name}' exceeds 5MB limit")
 
-        # Validate content type (header check - can be spoofed)
         valid_content_types = ["application/pdf", "image/jpeg", "image/png"]
+
         if file_obj.content_type not in valid_content_types:
-            continue
+            raise ValueError(f"Credential file '{file_obj.name}' has invalid content type: {file_obj.content_type}")
 
-        # Validate file signature (magic numbers - cannot be spoofed)
         file_type = validate_file_signature(file_obj)
+        
         if file_type not in ["pdf", "jpeg", "png"]:
-            # File signature doesn't match claimed content type
-            continue
+            raise ValueError(f"Credential file '{file_obj.name}' has invalid file signature")
 
-        # Generate filename
         extension_map = {"pdf": ".pdf", "jpeg": ".jpg", "png": ".png"}
-
         file_extension = extension_map[file_type]
-        filename = f"cert_{index}{file_extension}"
-        file_path = os.path.join(credentials_dir, filename)
+        filename = f"credential_{index}{file_extension}"
+        storage_relative_path = f"teachers/credentials/{file_storage_uuid}/{filename}"
+        saved_path = default_storage.save(storage_relative_path, file_obj)
+        relative_url = saved_path
 
-        # Save file
-        with open(file_path, "wb") as f:
-            for chunk in file_obj.chunks():
-                f.write(chunk)
-
-        # Create relative URL for database storage
-        relative_url = f"credentials/{file_storage_uuid}/{filename}"
-
-        # Add to credentials data
-        credentials_data["certificates"].append(
+        credentials_data.append(
             {
+                "id": index,
                 "url": relative_url,
                 "name": file_obj.name,
                 "type": file_obj.content_type,
@@ -405,17 +311,66 @@ def process_credential_files(request_files, user):
 
     return credentials_data
 
+def download_and_save_avatar(avatar_url, user):
+    try:
+        response = requests.get(avatar_url, stream=True, timeout=10)
+
+        if response.status_code == 200:
+            content_type = response.headers.get("Content-Type", "")
+
+            if "image/jpeg" not in content_type and "image/png" not in content_type:
+                return None
+
+            image_type = validate_file_signature(response.content)
+            if image_type not in ["jpeg", "png"]:
+                return None
+
+            file_extension = "jpg" if image_type == "jpeg" else "png"
+            file_storage_uuid = get_or_create_file_storage_uuid(user)
+            filename = f"{file_storage_uuid}.{file_extension}"
+            folder_path = f"users/avatars/{file_storage_uuid}"
+            file_path = f"{folder_path}/{filename}"
+            image_content = ContentFile(response.content)
+
+            default_storage.save(file_path, image_content)
+
+            return file_path
+        else:
+            return None
+    except Exception:
+        return None
+
+def generate_unique_username(base_username):
+    if not User.objects.filter(username=base_username).exists():
+        return base_username
+
+    timestamp = int(time.time())
+    random_uuid = str(uuid.uuid4()).replace("-", "")[:8]
+    unique_suffix = f"{timestamp}_{random_uuid}"
+    new_username = f"{base_username}_{unique_suffix}"
+
+    max_length = 50
+    if len(new_username) > max_length:
+        available_length = max_length - len(unique_suffix) - 1
+        base_username = base_username[:available_length]
+        new_username = f"{base_username}_{unique_suffix}"
+
+    return new_username
 
 def cache_forgot_password_otp(username, otp_code):
     cache_key = f"forgot_password_{username}"
-    cache_data = {"otp_code": otp_code, "last_sent": datetime.now().isoformat()}
+    cache_data = {"otp_code": otp_code, "last_sent": timezone.now().isoformat()}
 
-    cache.set(cache_key, json.dumps(cache_data), timeout=300)  # 5 minutes
-
+    cache.set(cache_key, json.dumps(cache_data), timeout=300)
 
 def send_forgot_password_otp_email(username, email, otp_code):
     logo_data = get_logo_bytes()
-
+    logo_cid = "nens-logo"
+    logo_html = (
+        f'<img src="cid:{logo_cid}" alt="NENS Logo" style="max-width: 120px; height: auto; margin-bottom: 20px;" />'
+        if logo_data
+        else ""
+    )
     subject = "Password Reset OTP - NENS"
     html_body = f"""
     <!DOCTYPE html>
@@ -491,7 +446,7 @@ def send_forgot_password_otp_email(username, email, otp_code):
     <body>
         <div class="container">
             <div class="header">
-                {'<img src="cid:logo" alt="NENS Logo" class="logo">' if logo_data else ''}
+                {logo_html}
             </div>
             <h1>Password Reset Request</h1>
             <p>Hello {username},</p>
@@ -523,7 +478,6 @@ def send_forgot_password_otp_email(username, email, otp_code):
     )
     email_message.content_subtype = "html"
 
-    # Attach logo if available
     if logo_data:
         logo_image = MIMEImage(logo_data)
         logo_image.add_header("Content-ID", "<logo>")
@@ -532,6 +486,26 @@ def send_forgot_password_otp_email(username, email, otp_code):
 
     email_message.send(fail_silently=False)
 
+def verify_forgot_password_otp(username, otp_code):
+    if not username or not otp_code:
+        raise ValueError("Username and OTP code are required.")
+
+    cache_key = f"forgot_password_{username}"
+    cache_data = cache.get(cache_key)
+
+    if not cache_data:
+        raise ValueError("OTP code has expired or is invalid.")
+
+    cache_data = json.loads(cache_data)
+
+    if cache_data["otp_code"] != otp_code:
+        raise ValueError("Invalid OTP code.")
+
+    return cache_data
+
+def delete_forgot_password_otp_cache(username):
+    cache_key = f"forgot_password_{username}"
+    cache.delete(cache_key)
 
 def resend_forgot_password_otp_email(username):
     cache_key = f"forgot_password_{username}"
@@ -544,24 +518,18 @@ def resend_forgot_password_otp_email(username):
         )
 
     cache_data = json.loads(cache_data)
-    last_sent = datetime.fromisoformat(cache_data["last_sent"])
+    last_sent = timezone.datetime.fromisoformat(cache_data["last_sent"])
 
-    # Rate limit: 1 minute between resends
-    if datetime.now() - last_sent < timedelta(minutes=1):
+    if timezone.now() - last_sent < timedelta(minutes=1):
         raise ValueError("Please wait 1 minute before requesting a new OTP code.")
 
-    # Delete old cache and create new OTP
     cache.delete(cache_key)
 
     new_otp_code = create_otp_code()
-
     cache_data["otp_code"] = new_otp_code
-    cache_data["last_sent"] = datetime.now().isoformat()
+    cache_data["last_sent"] = timezone.now().isoformat()
 
     cache.set(cache_key, json.dumps(cache_data), timeout=300)
-
-    # Get user email
-    from .models import User
 
     try:
         user = User.objects.get(username=username)
@@ -569,126 +537,57 @@ def resend_forgot_password_otp_email(username):
     except User.DoesNotExist:
         raise ValueError("User not found.")
 
-
-# download and save avatar from social account when user hasn't existed in database
-def download_and_save_avatar(avatar_url, user):
-    """
-    Download avatar image from URL and save to media/avatars/{file_storage_uuid}/{file_storage_uuid}.{ext}
-    Returns relative path to saved file or None if failed
-
-    Args:
-        avatar_url: URL of avatar image
-        user: User instance for getting file storage UUID
-
-    Returns:
-        str: Relative path to saved file or None if failed
-    """
-    try:
-        response = requests.get(avatar_url, stream=True, timeout=10)
-
-        if response.status_code == 200:
-            content_type = response.headers.get("Content-Type", "")
-
-            # Validate content type header (can be spoofed)
-            if "image/jpeg" not in content_type and "image/png" not in content_type:
-                return None
-
-            # Validate image signature (magic numbers - cannot be spoofed)
-            image_type = validate_file_signature(response.content)
-            if image_type not in ["jpeg", "png"]:
-                return None
-
-            # Map validated type to file extension
-            file_extension = "jpg" if image_type == "jpeg" else "png"
-
-            # Get or create file storage UUID for user
-            file_storage_uuid = get_or_create_file_storage_uuid(user)
-
-            # Directory and filename pattern: avatars/{file_storage_uuid}/{file_storage_uuid}.ext
-            filename = f"{file_storage_uuid}.{file_extension}"
-            folder_path = f"avatars/{file_storage_uuid}"
-            file_path = f"{folder_path}/{filename}"
-
-            image_content = ContentFile(response.content)
-            default_storage.save(file_path, image_content)
-
-            return file_path
-        else:
-            return None
-    except Exception:
-        return None
-
-
-def generate_unique_username(base_username):
-    """
-    Create a unique username by using UUID and timestamp
-    - base_username: base username (usually the part before @ of email)
-    - if username already exists, add an underscore and a string of UUID + timestamp to ensure uniqueness
-    """
-    from .models import User
-
-    # check if base username already exists
-    if not User.objects.filter(username=base_username).exists():
-        return base_username
-
-    # generate unique suffix
-    timestamp = int(time.time())
-    random_uuid = str(uuid.uuid4()).replace("-", "")[
-        :8
-    ]  # shorten UUID to avoid being too long
-
-    unique_suffix = f"{timestamp}_{random_uuid}"
-    new_username = f"{base_username}_{unique_suffix}"
-
-    # ensure username is not too long
-    max_length = 50
-    if len(new_username) > max_length:
-        # cut base_username if needed
-        available_length = max_length - len(unique_suffix) - 1  # -1 for underscore
-        base_username = base_username[:available_length]
-        new_username = f"{base_username}_{unique_suffix}"
-
-    return new_username
-
-
-def get_absolute_media_url(media_field, request=None):
-    """
-    Build absolute URL for any media file field (ImageField, FileField, etc.) or string path.
-
-    This function can be used for:
-    - Avatar images
-    - Credential files (PDFs, images)
-    - Any other media files
-    - String paths (e.g., from serializer)
-
-    Args:
-        media_field: ImageField/FileField instance OR string path (e.g., user.avatar or "avatars/default.jpg")
-        request: HttpRequest object (optional, for building absolute URL)
-
-    Returns:
-        str: Absolute URL if media field exists, None otherwise
-    """
+def get_absolute_media_url(media_field):
     if not media_field:
         return None
 
-    # Handle string path (from serializer)
+    # string path
     if isinstance(media_field, str):
-        # Check if already absolute URL
         if media_field.startswith("http"):
             return media_field
-        # Build absolute URL from relative path
-        if request:
-            return request.build_absolute_uri(f"/media/{media_field}")
-        return f"/media/{media_field}"
 
-    # Handle ImageField/FileField object
-    # Try to build absolute URL from request first
-    if request:
+        base = getattr(settings, "MEDIA_URL", "/media/") or "/media/"
+        
+        if not base.endswith("/"):
+            base = f"{base}/"
+
+        return f"{base}{media_field.lstrip('/')}"
+
+    # ImageField/FileField
+    try:
+        return media_field.url
+    except Exception:
+        return None
+
+def delete_user_storage_folder(user):
+    if not user.file_storage_uuid:
+        return
+    
+    # Delete credentials from teacher profile if exists
+    try:
+        if user.role == "T":
+            teacher = user.teacher
+            credentials = teacher.credentials if isinstance(teacher.credentials, list) else []
+            for cred in credentials:
+                if isinstance(cred, dict) and cred.get("url"):
+                    cred_url = cred.get("url")
+                    try:
+                        default_storage.delete(cred_url)
+                    except Exception:
+                        pass  # Ignore errors when deleting individual files
+    except Exception:
+        pass  # Teacher doesn't exist or not a teacher
+    
+    # Delete avatar if not default
+    if user.avatar and str(user.avatar) != "users/avatars/default-avatar.jpg":
         try:
-            return request.build_absolute_uri(media_field.url)
+            default_storage.delete(str(user.avatar))
         except Exception:
             pass
-
-    # Fallback: return relative path from field
-    # Frontend can handle it if needed
-    return media_field.url if media_field else None
+    
+    # Delete cover if not default
+    if user.cover and str(user.cover) != "users/covers/default-cover.jpg":
+        try:
+            default_storage.delete(str(user.cover))
+        except Exception:
+            pass
