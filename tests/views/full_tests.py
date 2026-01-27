@@ -1,16 +1,21 @@
 from rest_framework.generics import RetrieveUpdateDestroyAPIView
-from rest_framework import permissions, status
+from rest_framework import permissions, status, serializers
 from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
 from drf_spectacular.utils import extend_schema, OpenApiResponse
+from django.db import transaction
 
-from tests.models import Test
+from tests.models import Test, ReceptiveAnswer, ReceptivePart, ReceptiveQuestion
 from tests.serializers.full_test import (
     ProductiveTestRetrieveSerializer,
     ProductiveTestUpdateSerializer,
     ReceptiveTestRetrieveSerializer,
+    ReceptiveTestFullUpdateSerializer,
 )
 from tests.permissions import IsAdminOrOwner
+
+from tests.utils.renumber import renumber_receptive_test
+from tests.utils.scoring import calculate_scores
 
 
 @extend_schema(
@@ -51,7 +56,31 @@ from tests.permissions import IsAdminOrOwner
     },
 )
 @extend_schema(methods=["PUT"], exclude=True)
-class ReceptiveTestRetrieveAPIView(RetrieveUpdateDestroyAPIView):
+@extend_schema(
+    methods=["PATCH"],
+    summary="Cập nhật đề Receptive Test",
+    description=(
+        "API này cập nhật một đề Receptive Test theo test_id, bao gồm cập nhật/xóa parts, questions, answers.\n\n"
+        "Sử dụng 'action' trong nested objects để chỉ định update hoặc delete.\n\n"
+        "total_score và score của part không được phép patch vì được tính tự động.\n\n"
+        "Sau khi cập nhật, sẽ renumber lại order và question_number.\n\n"
+        "Chỉ admin hoặc chủ sở hữu mới có quyền thực hiện.\n\n"
+        "Chỉ cập nhật nếu type của đề là R."
+    ),
+    tags=["full-test"],
+    request=ReceptiveTestFullUpdateSerializer,
+    responses={
+        200: ReceptiveTestRetrieveSerializer,
+        400: OpenApiResponse(description="Bad request"),
+        403: OpenApiResponse(
+            description="Forbidden: Only admin or owner can update this test"
+        ),
+        404: OpenApiResponse(
+            description="Test type is not Receptive (R) or does not exist test_id"
+        ),
+    },
+)
+class ReceptiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
     queryset = Test.objects.select_related("receptive_test").prefetch_related(
         "receptive_test__receptive_parts__receptive_questions__receptive_answers"
     )
@@ -94,6 +123,154 @@ class ReceptiveTestRetrieveAPIView(RetrieveUpdateDestroyAPIView):
             },
             status=status.HTTP_200_OK,
         )
+
+    def patch(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = ReceptiveTestFullUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated_data = serializer.validated_data
+
+        # Prevent non-admin from setting status to 'R'
+        if (
+            "status" in validated_data
+            and validated_data["status"] == "R"
+            and not request.user.is_staff
+        ):
+            raise serializers.ValidationError(
+                {"status": "Only admin can set status to 'R' (Removed)."}
+            )
+
+        with transaction.atomic():
+            # Update Test fields
+            test_fields = [
+                "title",
+                "type",
+                "level",
+                "skill",
+                "time",
+                "description",
+                "status",
+            ]
+            for field in test_fields:
+                if field in validated_data:
+                    setattr(instance, field, validated_data[field])
+            instance.save()
+
+            # Update ReceptiveTest fields
+            receptive_test_data = validated_data.get("receptive_test", {})
+            receptive_test = instance.receptive_test
+            # total_score is not allowed to patch, it's calculated
+            if "base_qualified_bonus" in receptive_test_data:
+                receptive_test.base_qualified_bonus = receptive_test_data[
+                    "base_qualified_bonus"
+                ]
+            receptive_test.save()
+
+            # Process parts
+            parts_data = receptive_test_data.get("receptive_parts", [])
+            for part_data in parts_data:
+                action = part_data["action"]
+                part_id = part_data["id"]
+                try:
+                    part = ReceptivePart.objects.get(
+                        id=part_id, receptive_test=receptive_test
+                    )
+                except ReceptivePart.DoesNotExist:
+                    raise serializers.ValidationError(
+                        f"Part with id {part_id} does not exist."
+                    )
+
+                if action == "delete":
+                    part.delete()  # Cascade delete questions and answers
+                elif action == "update":
+                    part_fields = [
+                        "order",
+                        "format",
+                        "description",
+                        "content",
+                        "resources",
+                    ]
+                    for field in part_fields:
+                        if field in part_data:
+                            setattr(part, field, part_data[field])
+                    part.save()
+
+                    # Process questions in this part
+                    questions_data = part_data.get("receptive_questions", [])
+                    for question_data in questions_data:
+                        q_action = question_data["action"]
+                        q_id = question_data["id"]
+                        try:
+                            question = ReceptiveQuestion.objects.get(
+                                id=q_id, receptive_part=part
+                            )
+                        except ReceptiveQuestion.DoesNotExist:
+                            raise serializers.ValidationError(
+                                f"Question with id {q_id} does not exist in part {part_id}."
+                            )
+
+                        if q_action == "delete":
+                            question.delete()  # Cascade delete answers
+                        elif q_action == "update":
+                            q_fields = [
+                                "question_number",
+                                "content",
+                                "explanation",
+                                "score",
+                                "resources",
+                            ]
+                            for field in q_fields:
+                                if field in question_data:
+                                    setattr(question, field, question_data[field])
+                            question.save()
+
+                            # Process answers in this question
+                            answers_data = question_data.get("receptive_answers", [])
+                            for answer_data in answers_data:
+                                a_action = answer_data["action"]
+                                a_id = answer_data["id"]
+                                try:
+                                    answer = ReceptiveAnswer.objects.get(
+                                        id=a_id, receptive_question=question
+                                    )
+                                except ReceptiveAnswer.DoesNotExist:
+                                    raise serializers.ValidationError(
+                                        f"Answer with id {a_id} does not exist in question {q_id}."
+                                    )
+
+                                if a_action == "delete":
+                                    answer.delete()
+                                elif a_action == "update":
+                                    a_fields = [
+                                        "option_label",
+                                        "answer_text",
+                                        "is_correct",
+                                        "resources",
+                                    ]
+                                    for field in a_fields:
+                                        if field in answer_data:
+                                            setattr(answer, field, answer_data[field])
+                                    answer.save()
+
+            # Renumber after updates/deletes
+            renumber_receptive_test(receptive_test)
+
+            # Recalculate scores after changes
+            calculate_scores(receptive_test)
+
+        # Refetch instance with updated related data
+        instance = (
+            self.get_queryset()
+            .select_related("receptive_test")
+            .prefetch_related(
+                "receptive_test__receptive_parts__receptive_questions__receptive_answers"
+            )
+            .get(pk=instance.pk)
+        )
+
+        # Return updated data
+        retrieve_serializer = ReceptiveTestRetrieveSerializer(instance)
+        return Response(retrieve_serializer.data, status=status.HTTP_200_OK)
 
 
 @extend_schema(
@@ -154,7 +331,7 @@ class ReceptiveTestRetrieveAPIView(RetrieveUpdateDestroyAPIView):
     },
 )
 @extend_schema(methods=["PUT"], exclude=True)
-class ProductiveTestRetrieveAPIView(RetrieveUpdateDestroyAPIView):
+class ProductiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
     queryset = Test.objects.select_related("productive_test")
     serializer_class = ProductiveTestRetrieveSerializer
     lookup_field = "id"
@@ -200,3 +377,31 @@ class ProductiveTestRetrieveAPIView(RetrieveUpdateDestroyAPIView):
             },
             status=status.HTTP_200_OK,
         )
+
+    def patch(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = ProductiveTestUpdateSerializer(
+            instance, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        validated_data = serializer.validated_data
+
+        # Prevent non-admin from setting status to 'R'
+        if (
+            "status" in validated_data
+            and validated_data["status"] == "R"
+            and not request.user.is_staff
+        ):
+            raise serializers.ValidationError(
+                {"status": "Only admin can set status to 'R' (Removed)."}
+            )
+
+        # Update using serializer's update method
+        updated_instance = serializer.update(instance, validated_data)
+
+        # Refresh instance from DB
+        updated_instance.refresh_from_db()
+
+        # Return updated data
+        retrieve_serializer = ProductiveTestRetrieveSerializer(updated_instance)
+        return Response(retrieve_serializer.data, status=status.HTTP_200_OK)

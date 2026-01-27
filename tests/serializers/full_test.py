@@ -144,6 +144,15 @@ class ProductiveTestUpdateSerializer(serializers.ModelSerializer):
             "productive_test",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+        extra_kwargs = {
+            "title": {"required": False},
+            "type": {"required": False},
+            "level": {"required": False},
+            "skill": {"required": False},
+            "time": {"required": False},
+            "description": {"required": False},
+            "status": {"required": False},
+        }
 
     @transaction.atomic
     def update(self, instance, validated_data):
@@ -165,3 +174,53 @@ class ProductiveTestUpdateSerializer(serializers.ModelSerializer):
             serializer.save()
 
         return instance
+
+
+class ReceptiveAnswerUpdateSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["update", "delete"])
+    id = serializers.IntegerField()
+    option_label = serializers.CharField(max_length=1, required=False)
+    answer_text = serializers.CharField(required=False)
+    is_correct = serializers.BooleanField(required=False)
+    resources = serializers.JSONField(required=False)
+
+
+class ReceptiveQuestionUpdateSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["update", "delete"])
+    id = serializers.IntegerField()
+    question_number = serializers.IntegerField(required=False)
+    content = serializers.CharField(required=False)
+    explanation = serializers.CharField(required=False)
+    score = serializers.IntegerField(required=False)
+    resources = serializers.JSONField(required=False)
+    receptive_answers = ReceptiveAnswerUpdateSerializer(many=True, required=False)
+
+
+class ReceptivePartUpdateSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["update", "delete"])
+    id = serializers.IntegerField()
+    order = serializers.IntegerField(required=False)
+    format = serializers.CharField(max_length=1, required=False)
+    description = serializers.CharField(required=False)
+    content = serializers.CharField(required=False)
+    # score is calculated from questions, not allowed to patch
+    resources = serializers.JSONField(required=False)
+    receptive_questions = ReceptiveQuestionUpdateSerializer(many=True, required=False)
+
+
+class ReceptiveTestUpdateSerializer(serializers.Serializer):
+    # total_score is calculated automatically, not allowed to patch
+    base_qualified_bonus = serializers.IntegerField(required=False)
+    receptive_parts = ReceptivePartUpdateSerializer(many=True, required=False)
+
+
+class ReceptiveTestFullUpdateSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    title = serializers.CharField(required=False)
+    type = serializers.CharField(max_length=1, required=False)
+    level = serializers.CharField(max_length=2, required=False)
+    skill = serializers.CharField(max_length=1, required=False)
+    time = serializers.IntegerField(required=False)
+    description = serializers.CharField(required=False)
+    status = serializers.CharField(max_length=1, required=False)
+    receptive_test = ReceptiveTestUpdateSerializer(required=False)

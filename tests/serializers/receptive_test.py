@@ -1,7 +1,15 @@
 from rest_framework import serializers
 from django.db import transaction
 
-from ..models import ReceptiveTest, ReceptivePart, ReceptiveQuestion, ReceptiveAnswer, Test
+from ..models import (
+    ReceptiveTest,
+    ReceptivePart,
+    ReceptiveQuestion,
+    ReceptiveAnswer,
+    Test,
+)
+from ..utils.renumber import renumber_receptive_test
+from ..utils.scoring import calculate_scores
 
 # Valid format choices - support both Reading and Listening
 VALID_PART_FORMATS = {
@@ -269,17 +277,10 @@ class ReceptiveTestCreateSerializer(serializers.Serializer):
             # Bulk create answers
             ReceptiveAnswer.objects.bulk_create(answers_to_create)
 
-            # Update part scores and calculate total score
-            total_score = 0
-            for part_idx, part in enumerate(created_parts):
-                part.score = part_scores[part_idx]
-                total_score += part_scores[part_idx]
+            # Renumber parts and questions in ascending order
+            renumber_receptive_test(receptive_test)
 
-            # Bulk update part scores
-            ReceptivePart.objects.bulk_update(created_parts, ["score"])
-
-            # Update total score
-            receptive_test.total_score = total_score
-            receptive_test.save()
+            # Calculate scores for parts and total score
+            calculate_scores(receptive_test)
 
         return receptive_test

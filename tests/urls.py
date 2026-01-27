@@ -6,8 +6,8 @@ from .views.productive_tests import ProductiveTestCreateView
 from .views.writing_criteria import WritingCriteriaTemplateListView
 from .views.completed_bonus import CompletedBonusListView
 from .views.full_tests import (
-    ReceptiveTestRetrieveAPIView,
-    ProductiveTestRetrieveAPIView,
+    ReceptiveTestRetrieveUpdateDestroyAPIView,
+    ProductiveTestRetrieveUpdateDestroyAPIView,
 )
 
 urlpatterns = [
@@ -34,12 +34,12 @@ urlpatterns = [
     ),
     path(
         "full-test/receptive/<int:test_id>",
-        ReceptiveTestRetrieveAPIView.as_view(),
+        ReceptiveTestRetrieveUpdateDestroyAPIView.as_view(),
         name="receptive-test-retrieve",
     ),
     path(
         "full-test/productive/<int:test_id>",
-        ProductiveTestRetrieveAPIView.as_view(),
+        ProductiveTestRetrieveUpdateDestroyAPIView.as_view(),
         name="productive-test-retrieve",
     ),
 ]

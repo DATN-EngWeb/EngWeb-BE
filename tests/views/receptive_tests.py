@@ -254,7 +254,7 @@ class ReceptiveTestCreateView(generics.CreateAPIView):
             "message": "Receptive Test created successfully.",
             "test_id": receptive_test.test_id,
             "total_score": receptive_test.total_score,
-            "parts_count": receptive_test.receptive_parts.count()
+            "parts_count": receptive_test.receptive_parts.count(),
         }
 
         return Response(response_data, status=status.HTTP_201_CREATED)
