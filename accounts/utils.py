@@ -544,6 +544,13 @@ def get_absolute_media_url(media_field):
     # string path
     if isinstance(media_field, str):
         if media_field.startswith("http"):
+            # If using S3, replace backend endpoint with client endpoint for frontend access
+            from django.conf import settings
+            if getattr(settings, 'USE_S3', False):
+                backend_endpoint = getattr(settings, 'AWS_S3_ENDPOINT_URL', '')
+                client_endpoint = getattr(settings, 'AWS_S3_CLIENT_ENDPOINT_URL', '')
+                if backend_endpoint and client_endpoint and backend_endpoint in media_field:
+                    media_field = media_field.replace(backend_endpoint, client_endpoint)
             return media_field
 
         base = getattr(settings, "MEDIA_URL", "/media/") or "/media/"

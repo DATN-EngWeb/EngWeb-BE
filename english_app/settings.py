@@ -18,7 +18,6 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-
     # third-party apps
     "corsheaders",
     "rest_framework",
@@ -28,9 +27,10 @@ INSTALLED_APPS = [
     "storages",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
-
     # custom apps
     "accounts",
+    "tests",
+    "storage",
 ]
 
 MIDDLEWARE = [
@@ -42,7 +42,6 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-
     # third-party middleware
     "corsheaders.middleware.CorsMiddleware",
 ]

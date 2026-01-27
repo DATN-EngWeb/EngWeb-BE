@@ -53,4 +53,22 @@ else:
         print(f"Superuser '{username}' already exists with status=V. Skipping creation.")
 PY
 
+# Seed data from SQL files in init folder
+echo "Seeding data from init/*.sql files..."
+for sql_file in /app/init/*.sql; do
+  if [ -f "$sql_file" ]; then
+    echo "  Running $sql_file..."
+    PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U "${DB_USER}" -d "${DB_NAME}" -f "$sql_file"
+  fi
+done
+echo "✓ SQL seed files executed."
+
+# Update database sequences after seeding
+echo "Updating database sequences..."
+PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT setval('test_id_seq', (SELECT COALESCE(MAX(id), 1) FROM test));"
+PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT setval('receptive_part_id_seq', (SELECT COALESCE(MAX(id), 1) FROM receptive_part));"
+PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT setval('receptive_question_id_seq', (SELECT COALESCE(MAX(id), 1) FROM receptive_question));"
+PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT setval('receptive_answer_id_seq', (SELECT COALESCE(MAX(id), 1) FROM receptive_answer));"
+echo "✓ Sequences updated."
+
 exec python manage.py runserver 0.0.0.0:8000

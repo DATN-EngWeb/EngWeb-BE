@@ -1,0 +1,291 @@
+{
+  "test": {
+    "title": "Test 1",
+    "type": "R",
+    "level": "A1",
+    "skill": "L",
+    "time": 30,
+    "description": "This is a test for the A1 level",
+    "status": "D"
+  },
+  "parts": [
+    {
+      "order": 1,
+      "format": "A",
+      "description": "This part does not need ckeditor to be rendered.",
+      "questions": [
+        {
+          "question_number": 1,
+          "content": "Where does the man think he left his wallet?",
+          "explanation": "The man thinks he left his wallet in the bar.",
+          "score": 10,
+          "resources": {
+            "audio": "audio.mp3"
+          },
+          "answers": [
+            {
+              "option_label": "A",
+              "is_correct": true,
+              "resources": {
+                "image": "image1sfsdfsdf.png"
+              }
+            },
+            {
+              "option_label": "B",
+              "is_correct": false,
+              "resources": {
+                "image": "image2sfsdfsdf.png"
+              }
+            },
+            {
+              "option_label": "C",
+              "is_correct": false,
+              "resources": {
+                "image": "image3sfsdfsdf.png"
+              }
+            }
+          ]
+        },
+        {
+          "question_number": 2,
+          "content": "Where does the man think he left his wallet?",
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "resources": {
+            "audio": "audio.mp3"
+          },
+          "answers": [
+            {
+              "option_label": "A",
+              "is_correct": true,
+              "resources": {
+                "image": "image1sfsdfsdf.png"
+              }
+            },
+            {
+              "option_label": "B",
+              "is_correct": false,
+              "resources": {
+                "image": "image2sfsdfsdf.png"
+              }
+            },
+            {
+              "option_label": "C",
+              "is_correct": false,
+              "resources": {
+                "image": "image3sfsdfsdf.png"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 2,
+      "format": "B",
+      "description": "This part does not need ckeditor to be rendered.",
+      "questions": [
+        {
+          "question_number": 3,
+          "content": "Where does the man think he left his wallet?",
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "resources": {
+            "audio": "audio.mp3"
+          },
+          "answers": [
+            {
+              "option_label": "A",
+              "answer_text": "In the bar",
+              "is_correct": true
+            },
+            {
+              "option_label": "B",
+              "answer_text": "In the restaurant",
+              "is_correct": false
+            },
+            {
+              "option_label": "C",
+              "answer_text": "In the park",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 4,
+          "content": "Where does the man think he left his wallet?",
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "resources": {
+            "audio": "audio.mp3"
+          },
+          "answers": [
+            {
+              "option_label": "A",
+              "answer_text": "In the bar",
+              "is_correct": true
+            },
+            {
+              "option_label": "B",
+              "answer_text": "In the restaurant",
+              "is_correct": false
+            },
+            {
+              "option_label": "C",
+              "answer_text": "In the park",
+              "is_correct": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "format": "C",
+      "description": "This part needs ckeditor to be rendered.",
+      "content": "...<img src='base64...'/>...",
+      "resources": {
+        "audio": "audio.mp3"
+      },
+      "questions": [
+        {
+          "question_number": 5,
+          "content": "Where does the man think he left his wallet?",
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "option_label": "A",
+              "answer_text": "In the bar",
+              "is_correct": true
+            },
+            {
+              "option_label": "B",
+              "answer_text": "In the restaurant",
+              "is_correct": false
+            },
+            {
+              "option_label": "C",
+              "answer_text": "In the park",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 6,
+          "content": "Where does the man think he left his wallet?",
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "option_label": "A",
+              "answer_text": "In the bar",
+              "is_correct": true
+            },
+            {
+              "option_label": "B",
+              "answer_text": "In the restaurant",
+              "is_correct": false
+            },
+            {
+              "option_label": "C",
+              "answer_text": "In the park",
+              "is_correct": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 4,
+      "format": "D",
+      "description": "This part needs ckeditor to be rendered.",
+      "content": "...<img src='base64...'/>...",
+      "resources": {
+        "audio": "audio.mp3"
+      },
+      "questions": [
+        {
+          "question_number": 7,
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "answer_text": "In the bar",
+              "is_correct": true
+            }
+          ]
+        },
+        {
+          "question_number": 8,
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "answer_text": "In the restaurant",
+              "is_correct": true
+            }
+          ]
+        },
+        {
+          "question_number": 9,
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "answer_text": "In the park",
+              "is_correct": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 5,
+      "format": "E",
+      "description": "This part needs ckeditor to be rendered.",
+      "content": "...<img src='base64...'/>...",
+      "resources": {
+        "audio": "audio.mp3"
+      },
+      "questions": [
+        {
+          "question_number": 10,
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "option_label": "C",
+              "is_correct": true,
+              "answer_text": "In the park"
+            }
+          ]
+        },
+        {
+          "question_number": 11,
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "option_label": "A",
+              "is_correct": true,
+              "answer_text": "In the bar"
+            }
+          ]
+        },
+        {
+          "question_number": 12,
+          "explanation": "The man thinks he left his wallet in the restaurant.",
+          "score": 10,
+          "answers": [
+            {
+              "option_label": "B",
+              "is_correct": true,
+              "answer_text": "In the restaurant"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
