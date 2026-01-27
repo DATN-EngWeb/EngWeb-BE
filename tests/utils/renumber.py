@@ -7,8 +7,8 @@ def renumber_receptive_test(receptive_test):
 
     This function ensures that:
     - Parts are ordered sequentially starting from 1 based on their current order.
-    - Questions are numbered sequentially across the entire test starting from 1,
-      sorted by part order and then by current question_number.
+    - Questions are numbered sequentially within each part starting from 1,
+      sorted by current question_number.
 
     Args:
         receptive_test: The ReceptiveTest instance to renumber.
