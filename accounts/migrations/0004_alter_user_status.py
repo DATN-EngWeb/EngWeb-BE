@@ -6,13 +6,23 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0003_alter_teacher_credentials'),
+        ("accounts", "0003_alter_teacher_credentials"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='user',
-            name='status',
-            field=models.CharField(choices=[('P', 'Pending Verification'), ('I', 'Incomplete Profile'), ('W', 'Waiting Approval'), ('V', 'Verified'), ('D', 'Disabled')], default='P', max_length=1),
+            model_name="user",
+            name="status",
+            field=models.CharField(
+                choices=[
+                    ("P", "Pending Verification"),
+                    ("I", "Incomplete Profile"),
+                    ("W", "Waiting Approval"),
+                    ("V", "Verified"),
+                    ("D", "Disabled"),
+                ],
+                default="P",
+                max_length=1,
+            ),
         ),
     ]

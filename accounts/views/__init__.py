@@ -17,27 +17,28 @@ from .password import (
     ResetPasswordAPIView,
     ResendForgotPasswordOTPAPIView,
 )
-from .users import (
-    UserListAPIView,
-    UserRetrieveUpdateDestroyAPIView,
+from .admin import (
+    AdminListUserAPIView,
+    AdminRetrieveUpdateDestroyUserAPIView,
 )
+
 __all__ = [
     # Authentication
-    'CustomTokenObtainPairView',
-    'LogoutAPIView',
-    'GoogleLoginAPIView',
-    'FacebookLoginAPIView',
+    "CustomTokenObtainPairView",
+    "LogoutAPIView",
+    "GoogleLoginAPIView",
+    "FacebookLoginAPIView",
     # Registration
-    'UserRegistrationAPIView',
-    'VerifyRegistrationOTPAPIView',
-    'ResendRegistrationOTPAPIView',
-    'TeacherSubmitProfileAPIView',
+    "UserRegistrationAPIView",
+    "VerifyRegistrationOTPAPIView",
+    "ResendRegistrationOTPAPIView",
+    "TeacherSubmitProfileAPIView",
     # Password
-    'ForgotPasswordAPIView',
-    'ForgotPasswordVerifyOTPAPIView',
-    'ResetPasswordAPIView',
-    'ResendForgotPasswordOTPAPIView',
+    "ForgotPasswordAPIView",
+    "ForgotPasswordVerifyOTPAPIView",
+    "ResetPasswordAPIView",
+    "ResendForgotPasswordOTPAPIView",
     # Users
-    'UserListAPIView',
-    'UserRetrieveUpdateDestroyAPIView',
+    "AdminListUserAPIView",
+    "AdminRetrieveUpdateDestroyUserAPIView",
 ]

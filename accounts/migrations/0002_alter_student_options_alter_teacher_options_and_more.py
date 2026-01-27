@@ -7,63 +7,84 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0001_initial'),
+        ("accounts", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterModelOptions(
-            name='student',
+            name="student",
             options={},
         ),
         migrations.AlterModelOptions(
-            name='teacher',
+            name="teacher",
             options={},
         ),
         migrations.AlterModelOptions(
-            name='user',
+            name="user",
             options={},
         ),
         migrations.RemoveField(
-            model_name='teacher',
-            name='work_status',
+            model_name="teacher",
+            name="work_status",
         ),
         migrations.RemoveField(
-            model_name='user',
-            name='created_at',
+            model_name="user",
+            name="created_at",
         ),
         migrations.AddField(
-            model_name='teacher',
-            name='teacher_type',
-            field=models.CharField(choices=[('S', 'School Teacher'), ('C', 'Center Teacher'), ('F', 'Freelance Teacher')], default='F', max_length=1),
+            model_name="teacher",
+            name="teacher_type",
+            field=models.CharField(
+                choices=[
+                    ("S", "School Teacher"),
+                    ("C", "Center Teacher"),
+                    ("F", "Freelance Teacher"),
+                ],
+                default="F",
+                max_length=1,
+            ),
         ),
         migrations.AlterField(
-            model_name='student',
-            name='last_attempt_at',
+            model_name="student",
+            name="last_attempt_at",
             field=models.DateTimeField(blank=True, default=None, null=True),
         ),
         migrations.AlterField(
-            model_name='student',
-            name='title',
-            field=models.CharField(blank=True, default='Beginner', max_length=100, null=True),
+            model_name="student",
+            name="title",
+            field=models.CharField(
+                blank=True, default="Beginner", max_length=100, null=True
+            ),
         ),
         migrations.AlterField(
-            model_name='student',
-            name='weekly_ai_turn',
-            field=models.IntegerField(default=4, validators=[django.core.validators.MinValueValidator(0)]),
+            model_name="student",
+            name="weekly_ai_turn",
+            field=models.IntegerField(
+                default=4, validators=[django.core.validators.MinValueValidator(0)]
+            ),
         ),
         migrations.AlterField(
-            model_name='teacher',
-            name='credentials',
+            model_name="teacher",
+            name="credentials",
             field=models.JSONField(),
         ),
         migrations.AlterField(
-            model_name='teacher',
-            name='introduction',
-            field=models.TextField(blank=True, default='', null=True),
+            model_name="teacher",
+            name="introduction",
+            field=models.TextField(blank=True, default="", null=True),
         ),
         migrations.AlterField(
-            model_name='user',
-            name='status',
-            field=models.CharField(choices=[('P', 'Pending Verification'), ('V', 'Verified'), ('W', 'Waiting Approval'), ('D', 'Disabled')], default='P', max_length=1),
+            model_name="user",
+            name="status",
+            field=models.CharField(
+                choices=[
+                    ("P", "Pending Verification"),
+                    ("V", "Verified"),
+                    ("W", "Waiting Approval"),
+                    ("D", "Disabled"),
+                ],
+                default="P",
+                max_length=1,
+            ),
         ),
     ]
