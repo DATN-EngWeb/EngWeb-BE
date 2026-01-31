@@ -84,9 +84,6 @@ class ReceptiveTest(models.Model):
     )
 
     total_score = models.IntegerField(validators=[MinValueValidator(0)], default=0)
-    base_qualified_bonus = models.IntegerField(
-        validators=[MinValueValidator(0)], default=0
-    )
 
     def __str__(self):
         return f"Receptive Test for {self.test.title}"

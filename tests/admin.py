@@ -29,7 +29,7 @@ class TestAdmin(admin.ModelAdmin):
 
 @admin.register(ReceptiveTest)
 class ReceptiveTestAdmin(admin.ModelAdmin):
-    list_display = ("test", "total_score", "base_qualified_bonus")
+    list_display = ("test", "total_score")
 
 
 @admin.register(ProductiveTest)
