@@ -65,7 +65,6 @@ class ReceptiveTestSerializer(serializers.ModelSerializer):
         model = ReceptiveTest
         fields = [
             "total_score",
-            "base_qualified_bonus",
             "receptive_parts",
         ]
 
@@ -177,8 +176,8 @@ class ProductiveTestUpdateSerializer(serializers.ModelSerializer):
 
 
 class ReceptiveAnswerUpdateSerializer(serializers.Serializer):
-    action = serializers.ChoiceField(choices=["update", "delete"])
-    id = serializers.IntegerField()
+    action = serializers.ChoiceField(choices=["create", "update", "delete"])
+    id = serializers.IntegerField(required=False)
     option_label = serializers.CharField(max_length=1, required=False)
     answer_text = serializers.CharField(required=False)
     is_correct = serializers.BooleanField(required=False)
@@ -186,8 +185,8 @@ class ReceptiveAnswerUpdateSerializer(serializers.Serializer):
 
 
 class ReceptiveQuestionUpdateSerializer(serializers.Serializer):
-    action = serializers.ChoiceField(choices=["update", "delete"])
-    id = serializers.IntegerField()
+    action = serializers.ChoiceField(choices=["create", "update", "delete"])
+    id = serializers.IntegerField(required=False)
     question_number = serializers.IntegerField(required=False)
     content = serializers.CharField(required=False)
     explanation = serializers.CharField(required=False)
@@ -197,8 +196,8 @@ class ReceptiveQuestionUpdateSerializer(serializers.Serializer):
 
 
 class ReceptivePartUpdateSerializer(serializers.Serializer):
-    action = serializers.ChoiceField(choices=["update", "delete"])
-    id = serializers.IntegerField()
+    action = serializers.ChoiceField(choices=["create", "update", "delete"])
+    id = serializers.IntegerField(required=False)
     order = serializers.IntegerField(required=False)
     format = serializers.CharField(max_length=1, required=False)
     description = serializers.CharField(required=False)
@@ -210,7 +209,6 @@ class ReceptivePartUpdateSerializer(serializers.Serializer):
 
 class ReceptiveTestUpdateSerializer(serializers.Serializer):
     # total_score is calculated automatically, not allowed to patch
-    base_qualified_bonus = serializers.IntegerField(required=False)
     receptive_parts = ReceptivePartUpdateSerializer(many=True, required=False)
 
 

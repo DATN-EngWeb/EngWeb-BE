@@ -7,8 +7,8 @@ INSERT INTO test (id, title, type, level, skill, time, description, status, crea
 (1, 'aaaa', 'R', 'A1', 'R', 3, 'aaaaaa', 'D', '2026-01-06 15:15:43.261622+07', '2026-01-06 15:15:43.261644+07', 1015);
 
 -- Insert into receptive_test table
-INSERT INTO receptive_test (test_id, total_score, base_qualified_bonus) VALUES
-(1, 20, 0);
+INSERT INTO receptive_test (test_id, total_score) VALUES
+(1, 20);
 
 -- Insert into receptive_part table
 INSERT INTO receptive_part (id, receptive_test_id, "order", format, description, content, score, resources) VALUES
