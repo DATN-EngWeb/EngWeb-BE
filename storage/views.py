@@ -62,8 +62,7 @@ class RequestPresignedURLView(generics.CreateAPIView):
             "4. FE gửi confirmation sau khi tải xong\n\n"
             "**Giới hạn:**\n"
             "- Kích thước file: 50MB tối đa\n"
-            "- Hết hạn URL: 15 phút\n"
-            "- Rate limit: 10 yêu cầu/phút"
+            "- Hết hạn URL: 15 phút"
         ),
         tags=["storage"],
         request=RequestPresignedURLSerializer,
