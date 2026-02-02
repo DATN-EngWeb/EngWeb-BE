@@ -17,6 +17,7 @@ drf-spectacular-sidecar = "==2025.3.1"
 pillow = "==11.1.0"
 requests = "==2.32.5"
 django-storages = {version = "==1.14.3", extras = ["google"]}
+google-cloud-storage = "*"
 boto3 = "*"
 
 [dev-packages]

@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["*","http://localhost:3000", "http://localhost:8000", "https://nens-hcmus.vercel.app"],
+    "method": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    "responseHeader": ["Content-Type", "Authorization", "Content-Length", "ETag", "x-goog-hash"],
+    "maxAgeSeconds": 3600
+  }
+]

@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test Storage Upload - Presigned POST</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .container {
+        background: white;
+        border-radius: 12px;
+        padding: 40px;
+        max-width: 600px;
+        width: 100%;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      }
+
+      h1 {
+        color: #333;
+        margin-bottom: 10px;
+        font-size: 24px;
+      }
+
+      .subtitle {
+        color: #666;
+        margin-bottom: 30px;
+        font-size: 14px;
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        color: #333;
+        font-weight: 500;
+        font-size: 14px;
+      }
+
+      input[type="text"],
+      input[type="password"],
+      input[type="number"],
+      input[type="file"],
+      select {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+        font-family: inherit;
+        transition: border-color 0.2s;
+      }
+
+      input[type="text"]:focus,
+      input[type="password"]:focus,
+      input[type="number"]:focus,
+      input[type="file"]:focus,
+      select:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      }
+
+      .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+      }
+
+      button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 12px 24px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        width: 100%;
+      }
+
+      button:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .info-box {
+        background: #f0f4ff;
+        border-left: 4px solid #667eea;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+        font-size: 13px;
+        color: #333;
+        line-height: 1.6;
+      }
+
+      .progress-box {
+        margin-top: 20px;
+        padding: 15px;
+        border-radius: 6px;
+        display: none;
+      }
+
+      .progress-box.show {
+        display: block;
+      }
+
+      .progress-box.info {
+        background: #e3f2fd;
+        border: 1px solid #90caf9;
+      }
+
+      .progress-box.success {
+        background: #e8f5e9;
+        border: 1px solid #81c784;
+      }
+
+      .progress-box.error {
+        background: #ffebee;
+        border: 1px solid #e57373;
+      }
+
+      .progress-box.warning {
+        background: #fff3e0;
+        border: 1px solid #ffb74d;
+      }
+
+      .progress-box.info {
+        color: #1976d2;
+      }
+
+      .progress-box.success {
+        color: #388e3c;
+      }
+
+      .progress-box.error {
+        color: #d32f2f;
+      }
+
+      .progress-box.warning {
+        color: #f57c00;
+      }
+
+      .step {
+        margin: 10px 0;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.5);
+        border-radius: 4px;
+        font-size: 13px;
+      }
+
+      .step.done::before {
+        content: "✓ ";
+        color: #4caf50;
+        font-weight: bold;
+        margin-right: 5px;
+      }
+
+      .step.pending::before {
+        content: "⏳ ";
+        margin-right: 5px;
+      }
+
+      .step.error::before {
+        content: "✗ ";
+        color: #f44336;
+        font-weight: bold;
+        margin-right: 5px;
+      }
+
+      .url-link {
+        word-break: break-all;
+        padding: 8px;
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 4px;
+        margin-top: 8px;
+        font-size: 12px;
+        font-family: monospace;
+        color: #667eea;
+      }
+
+      .log-box {
+        margin-top: 20px;
+        padding: 15px;
+        border-radius: 6px;
+        background: #111827;
+        color: #e5e7eb;
+        font-size: 12px;
+        max-height: 600px;
+        overflow-y: auto;
+        display: none;
+      }
+
+      .log-box.show {
+        display: block;
+      }
+
+      .log-title {
+        font-weight: 600;
+        margin-bottom: 8px;
+        font-size: 13px;
+        color: #93c5fd;
+      }
+
+      #httpLogContent {
+        white-space: pre-wrap;
+        font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+          "Courier New", monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>📤 Test Presigned URL Upload (GCS)</h1>
+      <p class="subtitle">FE gửi file trực tiếp lên Google Cloud Storage với signed URL</p>
+
+      <div class="info-box">
+        <strong>Quy trình Signed URL (FE gửi trực tiếp lên GCS):</strong
+        ><br />
+        1️⃣ FE xin signed URL từ BE (request-presigned-url)<br />
+        2️⃣ BE trả về signed URL + required headers<br />
+        3️⃣ FE PUT file trực tiếp đến GCS với signed URL<br />
+        4️⃣ GCS kiểm tra signature và lưu file<br />
+        5️⃣ FE xác nhận upload với BE (confirm-upload)<br />
+        6️⃣ BE trả về file URL công khai
+      </div>
+
+      <form id="uploadForm">
+        <!-- Auth Section -->
+        <div class="form-group">
+          <label>Cách xác thực:</label>
+          <select id="authType" onchange="toggleAuthFields()">
+            <option value="basic">Basic Auth (username:password)</option>
+            <option value="token">Token Auth</option>
+          </select>
+        </div>
+
+        <!-- Basic Auth Fields -->
+        <div id="basicAuthFields">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Username</label>
+              <input
+                type="text"
+                id="username"
+                placeholder="teacher10"
+                value="teacher10"
+              />
+            </div>
+            <div class="form-group">
+              <label>Password</label>
+              <input
+                type="password"
+                id="password"
+                placeholder="123"
+                value="123"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Token Auth Fields -->
+        <div id="tokenAuthFields" style="display: none">
+          <div class="form-group">
+            <label>JWT Token</label>
+            <input
+              type="text"
+              id="token"
+              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            />
+          </div>
+        </div>
+
+        <!-- Server Config -->
+        <div class="form-group">
+          <label>Backend URL</label>
+          <input
+            type="text"
+            id="backendUrl"
+            placeholder="http://localhost:8000"
+            value="http://localhost:8000"
+          />
+        </div>
+
+        <!-- Upload Config -->
+        <div class="form-group">
+          <label>Category</label>
+          <select id="category" onchange="toggleTestFields()">
+            <option value="avatars">Avatars (JPEG, PNG)</option>
+            <option value="covers">Covers (JPEG, PNG)</option>
+            <option value="credentials">Credentials (PDF, JPEG, PNG)</option>
+            <option value="tests">Tests (JPEG, PNG, MP4, MPEG)</option>
+          </select>
+        </div>
+
+        <!-- Tests Config -->
+        <div id="testFields" style="display: none">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Test ID</label>
+              <input type="number" id="testId" placeholder="1" value="1" />
+            </div>
+            <div class="form-group">
+              <label>Part</label>
+              <input type="number" id="part" placeholder="1" value="1" />
+            </div>
+          </div>
+        </div>
+
+        <!-- File Input -->
+        <div class="form-group">
+          <label>Chọn file</label>
+          <input type="file" id="fileInput" required />
+          <div style="font-size: 12px; color: #666; margin-top: 5px">
+            Avatars: JPG, PNG (max 50MB)<br />
+            Tests: JPG, PNG, MP4, MP3 (max 50MB)
+          </div>
+        </div>
+
+        <button type="submit" id="uploadBtn">📤 Upload File</button>
+      </form>
+
+      <!-- Progress -->
+      <div id="progressBox" class="progress-box">
+        <div id="progressContent"></div>
+      </div>
+
+      <!-- HTTP Request/Response Log -->
+      <div id="logBox" class="log-box">
+        <div class="log-title">HTTP Requests / Responses</div>
+        <pre id="httpLogContent"></pre>
+      </div>
+    </div>
+
+    <script>
+      // Config
+      const API_ROUTES = {
+        requestPresigned: "/api/storage/presigned-urls",
+        confirmUpload: "/api/storage/confirmation",
+      };
+
+      // Toggle Auth Fields
+      function toggleAuthFields() {
+        const authType = document.getElementById("authType").value;
+        document.getElementById("basicAuthFields").style.display =
+          authType === "basic" ? "block" : "none";
+        document.getElementById("tokenAuthFields").style.display =
+          authType === "token" ? "block" : "none";
+      }
+
+      // Toggle Test Fields
+      function toggleTestFields() {
+        const category = document.getElementById("category").value;
+        document.getElementById("testFields").style.display =
+          category === "tests" ? "block" : "none";
+      }
+
+      // Show Progress
+      function showProgress(message, type = "info") {
+        const box = document.getElementById("progressBox");
+        const content = document.getElementById("progressContent");
+        box.classList.add("show", type);
+        box.classList.remove("info", "success", "error", "warning");
+        box.classList.add(type);
+
+        if (typeof message === "string") {
+          content.innerHTML = `<div class="step ${
+            type === "success" ? "done" : type === "error" ? "error" : "pending"
+          }">${message}</div>`;
+        } else {
+          content.innerHTML = message;
+        }
+      }
+
+      function addProgress(message, type = "info") {
+        const content = document.getElementById("progressContent");
+        const stepClass =
+          type === "success" ? "done" : type === "error" ? "error" : "pending";
+        content.innerHTML += `<div class="step ${stepClass}">${message}</div>`;
+      }
+
+      // Append HTTP request/response logs (persistent)
+      function appendHttpLog(title, payload) {
+        const box = document.getElementById("logBox");
+        const content = document.getElementById("httpLogContent");
+        if (!box || !content) return;
+
+        box.classList.add("show");
+
+        const time = new Date().toISOString();
+        const separator =
+          "------------------------------------------------------------";
+        const text =
+          `[#${time}] ${title}\n` +
+          JSON.stringify(payload, null, 2) +
+          `\n${separator}\n`;
+        content.textContent += text;
+        content.scrollTop = content.scrollHeight;
+      }
+
+      // Clear HTTP log at the start of each upload
+      function clearHttpLog() {
+        const box = document.getElementById("logBox");
+        const content = document.getElementById("httpLogContent");
+        if (!box || !content) return;
+
+        content.textContent = "";
+        box.classList.remove("show");
+      }
+
+      // Get Auth Headers
+      function getAuthHeaders() {
+        const authType = document.getElementById("authType").value;
+        const headers = { "Content-Type": "application/json" };
+
+        if (authType === "basic") {
+          const username = document.getElementById("username").value;
+          const password = document.getElementById("password").value;
+          const credentials = btoa(`${username}:${password}`);
+          headers["Authorization"] = `Basic ${credentials}`;
+        } else {
+          const token = document.getElementById("token").value;
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+
+        return headers;
+      }
+
+      // Form Submit - Presigned POST Flow
+      document
+        .getElementById("uploadForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+
+          // Reset HTTP log for this new upload run
+          clearHttpLog();
+
+          const backendUrl = document.getElementById("backendUrl").value;
+          const file = document.getElementById("fileInput").files[0];
+          const category = document.getElementById("category").value;
+          const testId =
+            category === "tests"
+              ? document.getElementById("testId").value
+              : null;
+          const part =
+            category === "tests" ? document.getElementById("part").value : null;
+
+          if (!file) {
+            showProgress("❌ Vui lòng chọn file", "error");
+            return;
+          }
+
+          showProgress("🚀 Bắt đầu upload...", "info");
+
+          try {
+            // Step 1: Request presigned URL from backend
+            addProgress("1️⃣ Yêu cầu presigned URL từ backend...", "pending");
+
+            const presignedRequest = {
+              filename: file.name,
+              file_size: file.size,
+              mime_type: file.type,
+              category: category,
+            };
+
+            if (category === "tests") {
+              presignedRequest.test_id = parseInt(testId);
+              presignedRequest.part = parseInt(part);
+            }
+
+            const presignedHeaders = {
+              "Content-Type": "application/json",
+              ...getAuthHeaders(),
+            };
+
+            appendHttpLog("Request: Presigned URL", {
+              url: backendUrl + API_ROUTES.requestPresigned,
+              method: "POST",
+              headers: presignedHeaders,
+              body: presignedRequest,
+            });
+
+            const presignedResponse = await fetch(
+              backendUrl + API_ROUTES.requestPresigned,
+              {
+                method: "POST",
+                headers: presignedHeaders,
+                body: JSON.stringify(presignedRequest),
+              }
+            );
+
+            if (!presignedResponse.ok) {
+              const error = await presignedResponse.json().catch(() => ({}));
+              appendHttpLog("Response: Presigned URL (ERROR)", {
+                status: presignedResponse.status,
+                body: error,
+              });
+              throw new Error(
+                `Request Presigned Error: ${
+                  error.detail || presignedResponse.statusText
+                }`
+              );
+            }
+
+            const presignedData = await presignedResponse.json();
+            appendHttpLog("Response: Presigned URL (OK)", {
+              status: presignedResponse.status,
+              body: presignedData,
+            });
+            addProgress(
+              `✓ Nhận presigned URL: ${presignedData.url}`,
+              "success"
+            );
+
+            // Step 2: Upload file directly to GCS using signed URL (PUT request)
+            addProgress("2️⃣ Upload file trực tiếp lên GCS...", "pending");
+
+            // For GCS, we use PUT with the signed URL
+            // The Content-Type header must match what was specified when generating the signed URL
+            const uploadHeaders = presignedData.fields || { "Content-Type": file.type };
+
+            appendHttpLog("Request: GCS Upload", {
+              url: presignedData.url,
+              method: "PUT",
+              headers: uploadHeaders,
+              file: {
+                name: file.name,
+                size: file.size,
+                type: file.type,
+              },
+            });
+
+            // Upload to GCS signed URL using PUT
+            // The signed URL already contains all the authentication parameters
+            let uploadResponse;
+            try {
+              uploadResponse = await fetch(presignedData.url, {
+                method: "PUT",
+                headers: uploadHeaders,
+                body: file,
+              });
+            } catch (fetchError) {
+              // Catch network/CORS errors
+              appendHttpLog("Response: GCS Upload (FETCH ERROR)", {
+                error: fetchError.message,
+                errorType: fetchError.name,
+                hint: "This is likely a CORS error. Make sure you're running this page from an allowed origin (http://localhost:3000 or http://localhost:8000), NOT from file://",
+                currentOrigin: window.location.origin,
+              });
+              throw new Error(
+                `GCS Upload Failed: ${fetchError.message}. ` +
+                `Current origin: ${window.location.origin}. ` +
+                `If origin is 'null' or 'file://', serve this HTML from localhost:8000 instead.`
+              );
+            }
+
+            const uploadText = await uploadResponse.text();
+
+            // GCS returns 200 on success for signed URL PUT
+            if (!uploadResponse.ok) {
+              appendHttpLog("Response: GCS Upload (ERROR)", {
+                status: uploadResponse.status,
+                body: uploadText,
+              });
+              throw new Error(
+                `GCS Upload Error (${uploadResponse.status}): ${uploadText}`
+              );
+            }
+
+            // Get ETag from response headers for integrity check
+            // GCS uses 'etag' or 'x-goog-hash' headers
+            const etag =
+              uploadResponse.headers.get("etag") ||
+              uploadResponse.headers.get("x-goog-hash") ||
+              "unknown";
+            appendHttpLog("Response: GCS Upload (OK)", {
+              status: uploadResponse.status,
+              headers: {
+                etag,
+                "x-goog-hash": uploadResponse.headers.get("x-goog-hash"),
+              },
+              body: uploadText,
+            });
+            addProgress(
+              `✓ File upload lên GCS thành công (Status: ${uploadResponse.status}, ETag: ${etag})`,
+              "success"
+            );
+
+            // Step 3: Confirm upload with backend
+            addProgress("3️⃣ Xác nhận upload với backend...", "pending");
+
+            const confirmRequest = {
+              key: presignedData.key,
+              file_size: file.size,
+              mime_type: file.type,
+              etag: etag,
+            };
+
+            const confirmHeaders = {
+              "Content-Type": "application/json",
+              ...getAuthHeaders(),
+            };
+
+            appendHttpLog("Request: Confirm Upload", {
+              url: backendUrl + API_ROUTES.confirmUpload,
+              method: "POST",
+              headers: confirmHeaders,
+              body: confirmRequest,
+            });
+
+            const confirmResponse = await fetch(
+              backendUrl + API_ROUTES.confirmUpload,
+              {
+                method: "POST",
+                headers: confirmHeaders,
+                body: JSON.stringify(confirmRequest),
+              }
+            );
+
+            if (!confirmResponse.ok) {
+              const error = await confirmResponse.json().catch(() => ({}));
+              appendHttpLog("Response: Confirm Upload (ERROR)", {
+                status: confirmResponse.status,
+                body: error,
+              });
+              throw new Error(
+                `Confirm Error: ${error.detail || confirmResponse.statusText}`
+              );
+            }
+
+            const confirmData = await confirmResponse.json();
+            appendHttpLog("Response: Confirm Upload (OK)", {
+              status: confirmResponse.status,
+              body: confirmData,
+            });
+            addProgress(`✓ Backend xác nhận thành công`, "success");
+            const fileUrl =
+              confirmData.file_url ||
+              presignedData.url + "/" + presignedData.key;
+            addProgress(
+              `🔗 File URL: <div class="url-link"><a href="${fileUrl}" target="_blank">${fileUrl}</a></div>`,
+              "success"
+            );
+
+            // Final Success
+            setTimeout(() => {
+              showProgress(
+                "🎉 Upload hoàn tất thành công! (FE→GCS signed URL flow)",
+                "success"
+              );
+            }, 100);
+          } catch (error) {
+            console.error("Upload Error:", error);
+            addProgress(`❌ Lỗi: ${error.message}`, "error");
+          }
+        });
+
+      // Initialize
+      toggleAuthFields();
+      toggleTestFields();
+    </script>
+  </body>
+</html>
