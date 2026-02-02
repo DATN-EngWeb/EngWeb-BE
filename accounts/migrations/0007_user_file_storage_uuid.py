@@ -7,13 +7,15 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0006_alter_teacher_experience_year'),
+        ("accounts", "0006_alter_teacher_experience_year"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='user',
-            name='file_storage_uuid',
-            field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
+            model_name="user",
+            name="file_storage_uuid",
+            field=models.UUIDField(
+                db_index=True, default=uuid.uuid4, editable=False, unique=True
+            ),
         ),
     ]

@@ -8,18 +8,30 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0007_user_file_storage_uuid'),
+        ("accounts", "0007_user_file_storage_uuid"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='student',
-            name='user',
-            field=models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, primary_key=True, related_name='student', serialize=False, to=settings.AUTH_USER_MODEL),
+            model_name="student",
+            name="user",
+            field=models.OneToOneField(
+                on_delete=django.db.models.deletion.CASCADE,
+                primary_key=True,
+                related_name="student",
+                serialize=False,
+                to=settings.AUTH_USER_MODEL,
+            ),
         ),
         migrations.AlterField(
-            model_name='teacher',
-            name='user',
-            field=models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, primary_key=True, related_name='teacher', serialize=False, to=settings.AUTH_USER_MODEL),
+            model_name="teacher",
+            name="user",
+            field=models.OneToOneField(
+                on_delete=django.db.models.deletion.CASCADE,
+                primary_key=True,
+                related_name="teacher",
+                serialize=False,
+                to=settings.AUTH_USER_MODEL,
+            ),
         ),
     ]

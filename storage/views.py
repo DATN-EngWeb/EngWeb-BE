@@ -1,4 +1,4 @@
-"""Views for storage/file endpoints with presigned URLs (S3/MinIO)"""
+"""Views for storage/file endpoints with signed URLs (GCS)"""
 
 from rest_framework import generics, status
 from rest_framework.response import Response
@@ -15,7 +15,7 @@ from .serializers import (
     PresignedURLResponseSerializer,
     UploadConfirmationResponseSerializer,
 )
-from .utils.s3_presigned import S3PresignedURLManager
+from .utils.gcs_presigned import GCSPresignedURLManager
 
 
 # class StorageRateThrottle(UserRateThrottle):
@@ -26,42 +26,43 @@ from .utils.s3_presigned import S3PresignedURLManager
 
 
 class RequestPresignedURLView(generics.CreateAPIView):
-    """Request presigned URL for direct S3 upload"""
+    """Request signed URL for direct GCS upload"""
 
     serializer_class = RequestPresignedURLSerializer
     permission_classes = [IsAuthenticated]
     # throttle_classes = [StorageRateThrottle]
 
-    def get_s3_manager(self):
-        """Lazy-load S3PresignedURLManager"""
-        if not hasattr(self, "_s3_manager"):
-            self._s3_manager = S3PresignedURLManager()
-        return self._s3_manager
+    def get_gcs_manager(self):
+        """Lazy-load GCSPresignedURLManager"""
+        if not hasattr(self, "_gcs_manager"):
+            self._gcs_manager = GCSPresignedURLManager()
+        return self._gcs_manager
 
     @extend_schema(
-        summary="Yêu cầu URL được ký trước (Presigned URL)",
+        summary="Yêu cầu URL được ký (Signed URL)",
         description=(
-            "Yêu cầu một URL được ký trước để tải file trực tiếp lên S3/MinIO.\n\n"
+            "Yêu cầu một URL được ký để tải file trực tiếp lên GCS.\n\n"
             "**Các trường yêu cầu (Required fields):**\n"
             "- `filename` - Tên file gốc (VD: avatar.jpg, listening.mp3)\n"
             "- `file_size` - Kích thước file (bytes, tối đa 50MB)\n"
             "- `mime_type` - Loại file MIME (VD: image/jpeg, audio/mpeg)\n"
-            "- `category` - Danh mục file ('avatars' hoặc 'tests')\n\n"
+            "- `category` - Danh mục file ('avatars', 'covers', 'credentials', hoặc 'tests')\n\n"
             "**Các trường tùy chọn (Optional fields):**\n"
             "- `test_id` - ID bài kiểm tra (tùy chọn, nhưng **bắt buộc** khi category = 'tests')\n"
             "- `part` - Phần bài kiểm tra (tùy chọn, nhưng **bắt buộc** khi category = 'tests')\n\n"
             "**Các danh mục (category):**\n"
             "- `avatars` - Ảnh đại diện người dùng (JPEG, PNG)\n"
+            "- `covers` - Ảnh bìa người dùng (JPEG, PNG)\n"
+            "- `credentials` - Chứng chỉ/bằng cấp giáo viên (PDF, JPEG, PNG)\n"
             "- `tests` - File kiểm tra (JPEG, PNG, MP4, MPEG)\n\n"
             "**Quy trình:**\n"
             "1. FE gửi yêu cầu với thông tin file\n"
-            "2. BE trả về presigned URL + form fields\n"
-            "3. FE upload file trực tiếp đến S3 bằng form data\n"
+            "2. BE trả về signed URL + headers cần thiết\n"
+            "3. FE upload file trực tiếp đến GCS bằng PUT request\n"
             "4. FE gửi confirmation sau khi tải xong\n\n"
             "**Giới hạn:**\n"
             "- Kích thước file: 50MB tối đa\n"
-            "- Hết hạn URL: 15 phút\n"
-            "- Rate limit: 10 yêu cầu/phút"
+            "- Hết hạn URL: 15 phút"
         ),
         tags=["storage"],
         request=RequestPresignedURLSerializer,
@@ -107,7 +108,7 @@ class RequestPresignedURLView(generics.CreateAPIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            s3_key = self.get_s3_manager().generate_file_key(
+            s3_key = self.get_gcs_manager().generate_file_key(
                 category=category,
                 user_id=request.user.file_storage_uuid,
                 filename=filename,
@@ -115,8 +116,8 @@ class RequestPresignedURLView(generics.CreateAPIView):
                 part=part,
             )
 
-            # Generate presigned URL
-            presigned_data = self.get_s3_manager().generate_presigned_post(
+            # Generate signed URL
+            presigned_data = self.get_gcs_manager().generate_presigned_post(
                 request=request, key=s3_key, file_size=file_size, mime_type=mime_type
             )
 
@@ -135,30 +136,30 @@ class RequestPresignedURLView(generics.CreateAPIView):
 
 class ConfirmUploadView(generics.CreateAPIView):
     """
-    Confirm file upload and validate metadata on S3
+    Confirm file upload and validate metadata on GCS
     """
 
     serializer_class = ConfirmUploadSerializer
     permission_classes = [IsAuthenticated]
-    throttle_classes = [StorageRateThrottle]
+    # throttle_classes = [StorageRateThrottle]
 
-    def get_s3_manager(self):
-        """Lazy-load S3PresignedURLManager to avoid issues during schema generation"""
-        if not hasattr(self, "_s3_manager"):
-            self._s3_manager = S3PresignedURLManager()
-        return self._s3_manager
+    def get_gcs_manager(self):
+        """Lazy-load GCSPresignedURLManager to avoid issues during schema generation"""
+        if not hasattr(self, "_gcs_manager"):
+            self._gcs_manager = GCSPresignedURLManager()
+        return self._gcs_manager
 
     @extend_schema(
         summary="Xác nhận tải file thành công",
         description=(
-            "Xác nhận file đã được tải lên S3 thành công và xác thực metadata.\n\n"
+            "Xác nhận file đã được tải lên GCS thành công và xác thực metadata.\n\n"
             "**Quy trình xác nhận:**\n"
-            "1. Kiểm tra file có tồn tại trên S3\n"
+            "1. Kiểm tra file có tồn tại trên GCS\n"
             "2. Xác thực kích thước file khớp với yêu cầu\n"
             "3. Xác thực MIME type hợp lệ\n"
             "4. Trả về URL công khai của file\n\n"
             "**Lỗi có thể xảy ra:**\n"
-            "- File không tìm thấy trên S3\n"
+            "- File không tìm thấy trên GCS\n"
             "- Kích thước file không khớp (upload chưa hoàn tất)\n"
             "- MIME type không được hỗ trợ"
         ),
@@ -197,12 +198,12 @@ class ConfirmUploadView(generics.CreateAPIView):
             mime_type = serializer.validated_data["mime_type"]
             etag = serializer.validated_data["etag"]
 
-            # Verify file exists on S3
-            metadata = self.get_s3_manager().get_object_metadata(s3_key)
+            # Verify file exists on GCS
+            metadata = self.get_gcs_manager().get_object_metadata(s3_key)
 
             if not metadata.get("exists"):
                 return Response(
-                    {"detail": "File not found on S3. Upload may have failed."},
+                    {"detail": "File not found on GCS. Upload may have failed."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -214,14 +215,14 @@ class ConfirmUploadView(generics.CreateAPIView):
                 )
 
             # Validate MIME type
-            if not self.get_s3_manager().validate_mime_type(mime_type):
+            if not self.get_gcs_manager().validate_mime_type(mime_type):
                 return Response(
                     {"detail": f"Invalid MIME type: {mime_type}"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Generate public URL (use CLIENT endpoint for browser access)
-            file_url = f"{settings.AWS_S3_CLIENT_ENDPOINT_URL}/{settings.AWS_STORAGE_BUCKET_NAME}/{s3_key}"
+            # Generate public URL
+            file_url = f"{self.get_gcs_manager().public_base_url}/{self.get_gcs_manager().bucket_name}/{s3_key}"
 
             # Response
             response_data = {

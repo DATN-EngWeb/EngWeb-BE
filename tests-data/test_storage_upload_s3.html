@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
@@ -12,7 +12,8 @@
       }
 
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
           "Helvetica Neue", Arial, sans-serif;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         min-height: 100vh;
@@ -94,7 +95,9 @@
         font-size: 14px;
         font-weight: 600;
         cursor: pointer;
-        transition: transform 0.2s, box-shadow 0.2s;
+        transition:
+          transform 0.2s,
+          box-shadow 0.2s;
         width: 100%;
       }
 
@@ -229,7 +232,8 @@
 
       #httpLogContent {
         white-space: pre-wrap;
-        font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+        font-family:
+          SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
           "Courier New", monospace;
       }
     </style>
@@ -509,7 +513,7 @@
                 method: "POST",
                 headers: presignedHeaders,
                 body: JSON.stringify(presignedRequest),
-              }
+              },
             );
 
             if (!presignedResponse.ok) {
@@ -521,7 +525,7 @@
               throw new Error(
                 `Request Presigned Error: ${
                   error.detail || presignedResponse.statusText
-                }`
+                }`,
               );
             }
 
@@ -532,7 +536,7 @@
             });
             addProgress(
               `✓ Nhận presigned URL: ${presignedData.url}`,
-              "success"
+              "success",
             );
 
             // Step 2: Upload file directly to MinIO using presigned form
@@ -575,7 +579,7 @@
                 body: uploadText,
               });
               throw new Error(
-                `MinIO Upload Error (${uploadResponse.status}): ${uploadText}`
+                `MinIO Upload Error (${uploadResponse.status}): ${uploadText}`,
               );
             }
 
@@ -593,7 +597,7 @@
             });
             addProgress(
               `✓ File upload lên MinIO thành công (Status: ${uploadResponse.status}, ETag: ${etag})`,
-              "success"
+              "success",
             );
 
             // Step 3: Confirm upload with backend
@@ -624,7 +628,7 @@
                 method: "POST",
                 headers: confirmHeaders,
                 body: JSON.stringify(confirmRequest),
-              }
+              },
             );
 
             if (!confirmResponse.ok) {
@@ -634,7 +638,7 @@
                 body: error,
               });
               throw new Error(
-                `Confirm Error: ${error.detail || confirmResponse.statusText}`
+                `Confirm Error: ${error.detail || confirmResponse.statusText}`,
               );
             }
 
@@ -649,14 +653,14 @@
               presignedData.url + "/" + presignedData.key;
             addProgress(
               `🔗 File URL: <div class="url-link"><a href="${fileUrl}" target="_blank">${fileUrl}</a></div>`,
-              "success"
+              "success",
             );
 
             // Final Success
             setTimeout(() => {
               showProgress(
                 "🎉 Upload hoàn tất thành công! (FE→MinIO presigned flow)",
-                "success"
+                "success",
               );
             }, 100);
           } catch (error) {

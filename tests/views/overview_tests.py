@@ -1,13 +1,14 @@
-from rest_framework import generics, status, permissions
-from rest_framework.response import Response
+from rest_framework import generics, permissions
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.filters import OrderingFilter
+from rest_framework.exceptions import PermissionDenied
 import django_filters
 
 from ..models import Test
-from ..serializers.serializers_test import TestSerializer
+from ..serializers.test import TestSerializer
 from ..permissions import IsTeacher
 from ..filters import TestFilter
+from accounts.models import Teacher
 
 from drf_spectacular.utils import (
     extend_schema,
@@ -28,19 +29,26 @@ class TestPagination(PageNumberPagination):
     max_page_size = 100
 
 
-class TestListCreateView(generics.ListCreateAPIView):
+class TestOverviewListCreateView(generics.ListCreateAPIView):
     """
-    GET: List all tests with filtering and pagination
+    GET: List all tests (overview) with filtering and pagination
     POST: Create a new test (Teacher only)
     """
 
-    queryset = Test.objects.all().order_by("-created_at")
+    queryset = (
+        Test.objects.all()
+        .select_related("created_by__user", "receptive_test", "productive_test")
+        .order_by("-created_at")
+    )
     serializer_class = TestSerializer
     pagination_class = TestPagination
-    filter_backends = [django_filters.rest_framework.DjangoFilterBackend, OrderingFilter]
+    filter_backends = [
+        django_filters.rest_framework.DjangoFilterBackend,
+        OrderingFilter,
+    ]
     filterset_class = TestFilter
-    ordering_fields = ['created_at', 'updated_at', 'title']
-    ordering = ['-created_at']
+    ordering_fields = ["created_at", "updated_at", "title"]
+    ordering = ["-created_at"]
 
     def get_permissions(self):
         """
@@ -51,14 +59,59 @@ class TestListCreateView(generics.ListCreateAPIView):
             return [IsTeacher()]
         return [permissions.AllowAny()]
 
+    def get_queryset(self):
+        """
+        Override to handle 'mine' filter parameter and status filtering.
+        If mine=true, filter tests by current teacher.
+        Raises PermissionDenied if non-teacher uses mine=true.
+        For non-admin users, exclude tests with status='R' (Removed).
+        Raises PermissionDenied if non-admin tries to filter by status='R'.
+        """
+        queryset = super().get_queryset()
+        mine = self.request.query_params.get("mine", "").lower()
+
+        if mine == "true":
+            # Check if user is authenticated
+            if not self.request.user.is_authenticated:
+                raise PermissionDenied(
+                    detail="Authentication required to use 'mine' parameter."
+                )
+
+            # Check if user is a teacher
+            try:
+                teacher = Teacher.objects.get(user=self.request.user)
+                queryset = queryset.filter(created_by=teacher)
+            except Teacher.DoesNotExist:
+                raise PermissionDenied(
+                    detail="Only teachers can use 'mine' parameter to filter their own tests."
+                )
+
+        # Filter out removed tests for non-admin users
+        if self.request.user.is_authenticated and not self.request.user.is_staff:
+            queryset = queryset.exclude(status="R")
+
+            # Check if trying to filter by status=R
+            status_filter = self.request.query_params.get("status", "")
+            if status_filter == "R":
+                raise PermissionDenied(
+                    detail="Only admin users can filter by status 'R' (Removed)."
+                )
+
+        return queryset
+
     @extend_schema(
-        summary="Danh sách bài kiểm tra",
+        summary="Danh sách bài kiểm tra (tổng quan)",
         description=(
-            "Lấy danh sách tất cả bài kiểm tra với hỗ trợ lọc, sắp xếp và phân trang.\n\n"
+            "Lấy danh sách tất cả bài kiểm tra (tổng quan) với hỗ trợ lọc, sắp xếp và phân trang.\n\n"
+            "**Lưu ý về quyền truy cập:**\n"
+            "- User thường (không phải admin): Không thấy bài kiểm tra có trạng thái 'R' (Removed). Không được phép filter theo status='R'.\n"
+            "- Admin: Thấy tất cả bài kiểm tra, bao gồm 'R'. Được phép filter theo status='R'.\n\n"
             "**Tham số lọc (Query Parameters):**\n"
+            "- `type`: Loại bài kiểm tra - R (Receptive: Reading/Listening), P (Productive: Speaking/Writing)\n"
             "- `level`: Cấp độ (A1, A2, B1, B2)\n"
             "- `skill`: Kỹ năng - R (Reading), L (Listening), S (Speaking), W (Writing)\n"
             "- `status`: Trạng thái - D (Draft), I (In Review), P (Published), R (Removed)\n"
+            "- `mine`: Lọc bài kiểm tra của giáo viên hiện tại (true/false) - **Yêu cầu đăng nhập và là giáo viên**\n"
             "- `page`: Số trang (mặc định: 1)\n"
             "- `page_size`: Số phần tử mỗi trang (mặc định: 10, tối đa: 100)\n\n"
             "**Tham số sắp xếp (Ordering):**\n"
@@ -69,14 +122,28 @@ class TestListCreateView(generics.ListCreateAPIView):
             "  - `-updated_at` - Ngày cập nhật (mới nhất trước)\n"
             "  - `title` - Tên (A-Z)\n"
             "  - `-title` - Tên (Z-A)\n\n"
+            "**Lưu ý về tham số `mine`:**\n"
+            "- Chỉ giáo viên đã đăng nhập mới được sử dụng `mine=true`\n"
+            "- Nếu chưa đăng nhập → 403 Forbidden\n"
+            "- Nếu không phải giáo viên → 403 Forbidden\n\n"
             "**Ví dụ:**\n"
+            "- `/api/tests/?type=R` - Lấy tất cả bài Receptive Test (Reading/Listening)\n"
+            "- `/api/tests/?type=P&level=B1` - Lấy bài Productive Test cấp B1\n"
             "- `/api/tests/?level=B1&skill=R` - Lấy bài Reading cấp B1\n"
             "- `/api/tests/?status=P&page=2&page_size=20` - Trang 2, 20 bài/trang, chỉ Published\n"
             "- `/api/tests/?ordering=title` - Sắp xếp theo tên A-Z\n"
-            "- `/api/tests/?ordering=-created_at&skill=R` - Bài Reading, mới nhất trước"
+            "- `/api/tests/?ordering=-created_at&skill=R` - Bài Reading, mới nhất trước\n"
+            "- `/api/tests/?mine=true` - Lấy tất cả bài kiểm tra của giáo viên hiện tại\n"
+            "- `/api/tests/?mine=true&status=D` - Lấy bài Draft của giáo viên hiện tại"
         ),
-        tags=["tests"],
+        tags=["tests (overview)"],
         parameters=[
+            OpenApiParameter(
+                name="type",
+                description="Loại bài kiểm tra (R: Receptive - Reading/Listening, P: Productive - Speaking/Writing)",
+                required=False,
+                type=str,
+            ),
             OpenApiParameter(
                 name="level",
                 description="Cấp độ (A1, A2, B1, B2)",
@@ -94,6 +161,16 @@ class TestListCreateView(generics.ListCreateAPIView):
                 description="Trạng thái (D: Draft, I: In Review, P: Published, R: Removed)",
                 required=False,
                 type=str,
+            ),
+            OpenApiParameter(
+                name="mine",
+                description=(
+                    "Lọc bài kiểm tra của giáo viên hiện tại (true/false). "
+                    "Yêu cầu: Phải đăng nhập và là giáo viên. "
+                    "Nếu không thỏa điều kiện sẽ trả về 403."
+                ),
+                required=False,
+                type=bool,
             ),
             OpenApiParameter(
                 name="page",
@@ -115,71 +192,15 @@ class TestListCreateView(generics.ListCreateAPIView):
             ),
         ],
         responses={
-            200: OpenApiResponse(
-                description="List of tests with pagination",
+            200: TestSerializer(many=True),
+            403: OpenApiResponse(
+                description="Forbidden - Using mine=true but not a teacher or not authenticated",
                 response={
                     "type": "object",
                     "properties": {
-                        "count": {"type": "integer", "example": 25},
-                        "next": {
+                        "detail": {
                             "type": "string",
-                            "nullable": True,
-                            "example": "http://localhost:8000/api/tests/?page=2&page_size=10",
-                        },
-                        "previous": {
-                            "type": "string",
-                            "nullable": True,
-                            "example": None,
-                        },
-                        "results": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "id": {"type": "integer", "example": 1},
-                                    "title": {
-                                        "type": "string",
-                                        "example": "IELTS Reading Test 1",
-                                    },
-                                    "level": {
-                                        "type": "string",
-                                        "enum": ["A1", "A2", "B1", "B2"],
-                                        "example": "B1",
-                                    },
-                                    "skill": {
-                                        "type": "string",
-                                        "enum": ["R", "L", "S", "W"],
-                                        "example": "R",
-                                    },
-                                    "time": {"type": "integer", "example": 60},
-                                    "description": {
-                                        "type": "string",
-                                        "example": "Test description...",
-                                    },
-                                    "completed_bonus": {
-                                        "type": "integer",
-                                        "example": 10,
-                                    },
-                                    "status": {
-                                        "type": "string",
-                                        "enum": ["D", "I", "P", "R"],
-                                        "example": "D",
-                                    },
-                                    "created_at": {
-                                        "type": "string",
-                                        "format": "date-time",
-                                    },
-                                    "updated_at": {
-                                        "type": "string",
-                                        "format": "date-time",
-                                    },
-                                    "created_by": {
-                                        "type": "integer",
-                                        "example": 1,
-                                        "nullable": True,
-                                    },
-                                },
-                            },
+                            "example": "Only teachers can use 'mine' parameter to filter their own tests.",
                         },
                     },
                 },
@@ -189,10 +210,11 @@ class TestListCreateView(generics.ListCreateAPIView):
     def get(self, request, *args, **kwargs):
         # Filter is handled by DjangoFilterBackend + TestFilter
         # Pagination is handled by TestPagination
+        # 'mine' filter is handled in get_queryset()
         return super().get(request, *args, **kwargs)
 
     @extend_schema(
-        summary="Tạo bài kiểm tra mới",
+        summary="Tạo bài kiểm tra mới (thông tin tổng quan)",
         description=(
             "Tạo một bài kiểm tra mới (chỉ giáo viên).\n\n"
             "**Quyền truy cập:**\n"
@@ -203,24 +225,35 @@ class TestListCreateView(generics.ListCreateAPIView):
             "- `created_by` tự động được set là teacher của người dùng\n\n"
             "**Tham số bắt buộc:**\n"
             "- `title`: Tên bài kiểm tra (không quá 255 ký tự, không được để trống)\n"
+            "- `type`: Loại bài kiểm tra - phải là một trong [R, P]:\n"
+            "  - R: Receptive (dành cho Reading/Listening)\n"
+            "  - P: Productive (dành cho Speaking/Writing)\n"
             "- `level`: Cấp độ - phải là một trong [A1, A2, B1, B2]\n"
             "- `skill`: Kỹ năng - phải là một trong [R, L, S, W]:\n"
-            "  - R: Reading (Đọc)\n"
-            "  - L: Listening (Nghe)\n"
-            "  - S: Speaking (Nói)\n"
-            "  - W: Writing (Viết)\n"
+            "  - R: Reading (Đọc) - yêu cầu type=R\n"
+            "  - L: Listening (Nghe) - yêu cầu type=R\n"
+            "  - S: Speaking (Nói) - yêu cầu type=P\n"
+            "  - W: Writing (Viết) - yêu cầu type=P\n"
             "- `time`: Thời gian làm bài (phút, tối thiểu 1)\n"
             "- `description`: Mô tả bài kiểm tra (không được để trống)\n\n"
             "**Tham số tùy chọn:**\n"
-            "- `status`: Trạng thái - D (Draft), I (In Review), P (Published) (mặc định: D)\n"
-            "- `completed_bonus`: Điểm thưởng hoàn thành (mặc định: 0, phải >= 0)"
+            "- `status`: Trạng thái - D (Draft), I (In Review), P (Published) (mặc định: D)\n\n"
+            "**Lưu ý:**\n"
+            "- `type` và `skill` phải tương thích:\n"
+            "  - type=R chỉ dùng với skill=R hoặc skill=L\n"
+            "  - type=P chỉ dùng với skill=S hoặc skill=W"
         ),
-        tags=["tests"],
+        tags=["tests (overview)"],
         request=inline_serializer(
             name="TestCreateRequest",
             fields={
                 "title": serializers.CharField(
                     required=True, help_text="Tên bài kiểm tra"
+                ),
+                "type": serializers.ChoiceField(
+                    choices=["R", "P"],
+                    required=True,
+                    help_text="Loại bài kiểm tra (R: Receptive - Reading/Listening, P: Productive - Speaking/Writing)",
                 ),
                 "level": serializers.ChoiceField(
                     choices=["A1", "A2", "B1", "B2"],
@@ -247,11 +280,6 @@ class TestListCreateView(generics.ListCreateAPIView):
                         "Nếu không gửi sẽ mặc định là D."
                     ),
                 ),
-                "completed_bonus": serializers.IntegerField(
-                    required=False,
-                    default=0,
-                    help_text="Điểm thưởng hoàn thành (mặc định: 0)",
-                ),
             },
         ),
         responses={
@@ -262,6 +290,12 @@ class TestListCreateView(generics.ListCreateAPIView):
                     "properties": {
                         "id": {"type": "integer", "example": 1},
                         "title": {"type": "string", "example": "IELTS Reading Test 1"},
+                        "type": {
+                            "type": "string",
+                            "enum": ["R", "P"],
+                            "example": "R",
+                            "description": "R: Receptive, P: Productive",
+                        },
                         "level": {
                             "type": "string",
                             "enum": ["A1", "A2", "B1", "B2"],
@@ -277,7 +311,6 @@ class TestListCreateView(generics.ListCreateAPIView):
                             "type": "string",
                             "example": "Test description...",
                         },
-                        "completed_bonus": {"type": "integer", "example": 10},
                         "status": {
                             "type": "string",
                             "enum": ["D", "I", "P"],
@@ -290,6 +323,7 @@ class TestListCreateView(generics.ListCreateAPIView):
                     "required": [
                         "id",
                         "title",
+                        "type",
                         "level",
                         "skill",
                         "time",

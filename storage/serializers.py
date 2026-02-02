@@ -17,6 +17,14 @@ class RequestPresignedURLSerializer(serializers.Serializer):
         "category": "avatars"
     }
 
+    Example for covers:
+    {
+        "filename": "cover.jpg",
+        "file_size": 3145728,
+        "mime_type": "image/jpeg",
+        "category": "covers"
+    }
+
     Example for tests:
     {
         "filename": "listening_part1.mp3",
@@ -40,7 +48,7 @@ class RequestPresignedURLSerializer(serializers.Serializer):
         max_length=100, help_text="MIME type (e.g., image/jpeg, audio/mpeg)"
     )
     category = serializers.ChoiceField(
-        choices=["avatars", "tests"], help_text="File category: 'avatars' or 'tests'"
+        choices=["avatars", "covers", "credentials", "tests"], help_text="File category: 'avatars', 'covers', 'credentials', or 'tests'"
     )
     test_id = serializers.IntegerField(
         required=False,
@@ -75,7 +83,7 @@ class ConfirmUploadSerializer(serializers.Serializer):
 
     Example for avatars:
     {
-        "key": "media/avatars/user_123/uuid.jpg",
+        "key": "media/users/avatars/user_123/uuid.jpg",
         "file_size": 2048576,
         "mime_type": "image/jpeg",
         "etag": "abc123def456"
@@ -110,7 +118,7 @@ class PresignedURLResponseSerializer(serializers.Serializer):
 
     Example:
     {
-        "key": "media/avatars/user_123/uuid.jpg",
+        "key": "media/users/avatars/user_123/uuid.jpg",
         "url": "http://minio:9000/englishapp",
         "fields": {
             "policy": "...",
@@ -136,7 +144,7 @@ class UploadConfirmationResponseSerializer(serializers.Serializer):
     {
         "success": true,
         "message": "File uploaded successfully",
-        "file_url": "http://minio:9000/englishapp/media/avatars/user_123/uuid.jpg"
+        "file_url": "http://minio:9000/englishapp/media/users/avatars/user_123/uuid.jpg"
     }
     """
 

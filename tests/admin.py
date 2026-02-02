@@ -6,6 +6,8 @@ from .models import (
     ReceptivePart,
     ReceptiveQuestion,
     ReceptiveAnswer,
+    WritingCriteriaTemplate,
+    CompletedBonus,
 )
 
 
@@ -19,7 +21,6 @@ class TestAdmin(admin.ModelAdmin):
         "skill",
         "time",
         "description",
-        "completed_bonus",
         "status",
         "created_at",
         "created_by",
@@ -28,12 +29,20 @@ class TestAdmin(admin.ModelAdmin):
 
 @admin.register(ReceptiveTest)
 class ReceptiveTestAdmin(admin.ModelAdmin):
-    list_display = ("test", "total_score", "base_qualified_bonus")
+    list_display = ("test", "total_score")
 
 
 @admin.register(ProductiveTest)
 class ProductiveTestAdmin(admin.ModelAdmin):
-    list_display = ("test", "format", "question_text", "resources", "criteria")
+    list_display = (
+        "test",
+        "format",
+        "topic",
+        "description",
+        "min_word",
+        "glue_text",
+        "glue_resources",
+    )
 
 
 @admin.register(ReceptivePart)
@@ -72,4 +81,27 @@ class ReceptiveAnswerAdmin(admin.ModelAdmin):
         "answer_text",
         "is_correct",
         "resources",
+    )
+
+
+@admin.register(WritingCriteriaTemplate)
+class WritingCriteriaTemplateAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "level",
+        "band",
+        "content",
+        "communicative_achievement",
+        "organisation",
+        "language",
+    )
+
+
+@admin.register(CompletedBonus)
+class CompletedBonusAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "skill",
+        "level",
+        "completed_bonus",
     )
