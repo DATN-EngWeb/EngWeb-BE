@@ -4,7 +4,7 @@ from .views.overview_tests import TestOverviewListCreateView
 from .views.receptive_tests import ReceptiveTestCreateView
 from .views.productive_tests import ProductiveTestCreateView
 from .views.writing_criteria import WritingCriteriaTemplateListView
-from .views.completed_bonus import CompletedBonusListView
+from .views.exp_bonus import CompletedBonusListView, EXPBonusCalculateView
 from .views.full_tests import (
     ReceptiveTestRetrieveUpdateDestroyAPIView,
     ProductiveTestRetrieveUpdateDestroyAPIView,
@@ -31,6 +31,11 @@ urlpatterns = [
         "completed-bonus",
         CompletedBonusListView.as_view(),
         name="completed-bonus",
+    ),
+    path(
+        "exp-bonus",
+        EXPBonusCalculateView.as_view(),
+        name="exp-bonus-calculate",
     ),
     path(
         "full-test/receptive/<int:test_id>",

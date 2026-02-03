@@ -69,6 +69,7 @@ PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U "${DB_USER}" -d "${DB_NAME}"
 PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT setval('receptive_part_id_seq', (SELECT COALESCE(MAX(id), 1) FROM receptive_part));"
 PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT setval('receptive_question_id_seq', (SELECT COALESCE(MAX(id), 1) FROM receptive_question));"
 PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT setval('receptive_answer_id_seq', (SELECT COALESCE(MAX(id), 1) FROM receptive_answer));"
+PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT setval('exp_bonus_rule_id_seq', (SELECT COALESCE(MAX(id), 1) FROM exp_bonus_rule));"
 echo "✓ Sequences updated."
 
 exec python manage.py runserver 0.0.0.0:8000
