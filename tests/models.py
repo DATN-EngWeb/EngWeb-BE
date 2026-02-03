@@ -1,5 +1,6 @@
 from django.db import models
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 
 
 # Create your models here.
@@ -256,3 +257,59 @@ class CompletedBonus(models.Model):
                 fields=["skill", "level"], name="unique_skill_level"
             )
         ]
+
+
+class EXPBonusRule(models.Model):
+    min_percentage = models.FloatField(
+        validators=[MinValueValidator(0.0), MaxValueValidator(100.0)],
+        help_text="Minimum required percentage",
+    )
+    max_percentage = models.FloatField(
+        validators=[MinValueValidator(0.0), MaxValueValidator(100.0)],
+        help_text="Maximum percentage achievable",
+    )
+    exp_percentage = models.FloatField(
+        validators=[MinValueValidator(0.0)],
+        help_text="EXP percentage awarded",
+    )
+    rating = models.TextField()
+    feedback_message = models.TextField()
+
+    def clean(self):
+        super().clean()
+
+        # Validate min_percentage < max_percentage
+        if self.min_percentage is not None and self.max_percentage is not None:
+            if self.min_percentage >= self.max_percentage:
+                raise ValidationError(
+                    {
+                        "min_percentage": "Min percentage must be less than max percentage."
+                    }
+                )
+
+            # Check for overlapping ranges with existing rules
+            # Using half-open intervals [min, max) - e.g., [0, 50) and [50, 100) are adjacent, not overlapping
+            # Two intervals [a, b) and [c, d) overlap iff: a < d AND c < b
+            overlapping = EXPBonusRule.objects.filter(
+                min_percentage__lt=self.max_percentage,
+                max_percentage__gt=self.min_percentage,
+            )
+
+            # Exclude current instance if updating
+            if self.pk:
+                overlapping = overlapping.exclude(pk=self.pk)
+
+            if overlapping.exists():
+                raise ValidationError(
+                    "This percentage range overlaps with an existing EXP Bonus Rule."
+                )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"EXP Bonus Rule: {self.min_percentage}% - {self.max_percentage}% => {self.exp_percentage}% EXP"
+
+    class Meta:
+        db_table = "exp_bonus_rule"
