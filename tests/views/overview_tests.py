@@ -18,6 +18,8 @@ from drf_spectacular.utils import (
 )
 from rest_framework import serializers
 
+from accounts.authentication import CustomBasicAuthentication, CustomTokenAuthentication
+
 
 class TestPagination(PageNumberPagination):
     """

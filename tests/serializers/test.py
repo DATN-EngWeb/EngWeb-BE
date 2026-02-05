@@ -6,7 +6,7 @@ from rest_framework import serializers
 class ReceptiveTestSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReceptiveTest
-        fields = ["total_score", "base_qualified_bonus"]
+        fields = ["total_score"]
 
 
 class ProductiveTestSerializer(serializers.ModelSerializer):
