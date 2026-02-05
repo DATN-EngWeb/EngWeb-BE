@@ -1,34 +1,62 @@
 from .models import User
 
-from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
-from rest_framework_simplejwt.tokens import AccessToken
 
-class CustomTokenAuthentication(BaseAuthentication):
+# class CustomTokenAuthentication(BaseAuthentication):
+#     def authenticate(self, request):
+#         auth_header = request.headers.get("Authorization")
+
+#         if not auth_header or not auth_header.startswith("Bearer "):
+#             return None
+
+#         token = auth_header.split(" ")[1]
+
+#         try:
+#             decoded_token = AccessToken(token)
+#             user_id = decoded_token.payload.get("user_id")
+
+#             if not user_id:
+#                 raise AuthenticationFailed("Token does not contain user_id")
+
+#             try:
+#                 user = User.objects.get(id=user_id)
+#             except User.DoesNotExist:
+#                 raise AuthenticationFailed("User does not exist")
+
+#             if user.status == "D":
+#                 raise AuthenticationFailed("Account has been disabled")
+
+#             return (user, None)
+
+#         except Exception as e:
+#             raise AuthenticationFailed(f"Token expired or invalid: {str(e)}")
+
+from rest_framework_simplejwt.authentication import JWTAuthentication
+
+
+class CustomTokenAuthentication(JWTAuthentication):
     def authenticate(self, request):
-        auth_header = request.headers.get("Authorization")
-
-        if not auth_header or not auth_header.startswith("Bearer "):
+        result = super().authenticate(request)
+        if not result:
             return None
 
-        token = auth_header.split(" ")[1]
+        user, token = result
 
-        try:
-            decoded_token = AccessToken(token)
-            user_id = decoded_token.payload.get("user_id")
+        if user.status == "D":
+            raise AuthenticationFailed("Account has been disabled")
 
-            if not user_id:
-                raise AuthenticationFailed("Token does not contain user_id")
+        return (user, token)
 
-            try:
-                user = User.objects.get(id=user_id)
-            except User.DoesNotExist:
-                raise AuthenticationFailed("User does not exist")
 
-            if user.status == "D":
-                raise AuthenticationFailed("Account has been disabled")
+from rest_framework.authentication import BasicAuthentication
 
-            return (user, None)
 
-        except Exception as e:
-            raise AuthenticationFailed(f"Token expired or invalid: {str(e)}")
+class CustomBasicAuthentication(BasicAuthentication):
+
+    def authenticate_credentials(self, userid, password, request=None):
+        user, _ = super().authenticate_credentials(userid, password, request)
+
+        if user.status == "D":
+            raise AuthenticationFailed("Account has been disabled")
+
+        return (user, None)
