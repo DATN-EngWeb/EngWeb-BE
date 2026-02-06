@@ -13,6 +13,15 @@ class ProductiveTestHistory(models.Model):
     )
     attempt = models.IntegerField(default=1)
 
+    type = models.CharField(
+        max_length=1,
+        choices=[
+            ("D", "Draft"),
+            ("S", "Submission"),
+        ],
+        default="D",
+    )
+
     start_time = models.DateTimeField()
     end_time = models.DateTimeField(null=True, blank=True)
     total_time = models.IntegerField(null=True, blank=True)  # in seconds
@@ -28,8 +37,17 @@ class ProductiveTestHistory(models.Model):
         if self.start_time and self.end_time:
             time_diff = self.end_time - self.start_time
             self.total_time = int(time_diff.total_seconds())
+
         super().save(*args, **kwargs)
+
+    def __str__(self):
+        type_label = "Draft" if self.type == "D" else f"Attempt {self.attempt}"
+        return f"{self.student.user.username} - {self.productive_test.test.title} ({type_label})"
 
     class Meta:
         db_table = "productive_test_history"
         unique_together = ("student", "productive_test", "attempt")
+        ordering = ["-start_time"]
+        indexes = [
+            models.Index(fields=["student", "productive_test", "attempt", "type"]),
+        ]

@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from test_histories.models import ProductiveTestHistory
 
+
 # Register your models here.
 @admin.register(ProductiveTestHistory)
 class ProductiveTestHistoryAdmin(admin.ModelAdmin):
@@ -9,6 +10,7 @@ class ProductiveTestHistoryAdmin(admin.ModelAdmin):
         "id",
         "student",
         "productive_test",
+        "type",
         "attempt",
         "start_time",
         "end_time",
