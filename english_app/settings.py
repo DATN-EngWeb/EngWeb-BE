@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "accounts",
     "tests",
     "storage",
+    "test_histories",
 ]
 
 MIDDLEWARE = [
