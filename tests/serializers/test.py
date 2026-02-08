@@ -18,6 +18,7 @@ class ProductiveTestSerializer(serializers.ModelSerializer):
 class TestSerializer(serializers.ModelSerializer):
     test_details = serializers.SerializerMethodField()
     created_by = serializers.SerializerMethodField()
+    progress_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Test
@@ -34,6 +35,7 @@ class TestSerializer(serializers.ModelSerializer):
             "updated_at",
             "test_details",
             "created_by",
+            "progress_status",
         ]
         extra_kwargs = {
             "id": {"read_only": True},
@@ -65,6 +67,63 @@ class TestSerializer(serializers.ModelSerializer):
                 "avatar": user.avatar.url if user.avatar else None,
             }
         return None
+
+    def get_progress_status(self, obj):
+        """
+        Calculate progress status for student.
+        Returns: "completed", "draft", "none", or None if not requested/not a student
+        """
+        # Check if progress_status was requested in context
+        request_progress = self.context.get("request_progress_status", False)
+        if not request_progress:
+            return None
+
+        # Get student from context
+        student = self.context.get("student")
+        if not student:
+            return None
+
+        # Import here to avoid circular import
+        from test_histories.models import ProductiveTestHistory
+
+        # Check history based on test type
+        if obj.type == "P":  # Productive test
+            try:
+                productive_test = obj.productive_test
+                # Check if student has any submission
+                has_submission = ProductiveTestHistory.objects.filter(
+                    student=student, productive_test=productive_test, type="S"
+                ).exists()
+
+                if has_submission:
+                    return "completed"
+
+                # Check if student has any draft
+                has_draft = ProductiveTestHistory.objects.filter(
+                    student=student, productive_test=productive_test, type="D"
+                ).exists()
+
+                if has_draft:
+                    return "draft"
+
+                return "none"
+            except:
+                return "none"
+        else:  # Receptive test - no history tracking yet
+            # For receptive tests, you may implement similar logic when ReceptiveTestHistory is available
+            return "none"
+
+    def to_representation(self, instance):
+        """
+        Override to remove progress_status field if it's None
+        """
+        representation = super().to_representation(instance)
+        
+        # Remove progress_status field if it's None (not requested)
+        if representation.get("progress_status") is None:
+            representation.pop("progress_status", None)
+        
+        return representation
 
     def validate(self, attrs):
         errors = {}
