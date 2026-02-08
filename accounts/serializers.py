@@ -89,32 +89,32 @@ class TeacherSerializer(serializers.ModelSerializer):
         # Only require these fields when creating (POST), not when updating (PATCH)
         if is_create:
             required_teacher_fields = ["current_workplace", "teacher_type", "introduction"]
-            
-            for field in required_teacher_fields:
-                value = attrs.get(field)
 
-                if isinstance(value, str):
-                    value = value.strip()
-                
-                if not value:
-                    errors[field] = "This field is required."
+        for field in required_teacher_fields:
+            value = attrs.get(field)
+
+            if isinstance(value, str):
+                value = value.strip()
+            
+            if not value:
+                errors[field] = "This field is required."
 
             # Validate experience_year - required only on create
-            experience_year = attrs.get("experience_year")
-            if experience_year is None:
-                errors["experience_year"] = "This field is required."
-            elif isinstance(experience_year, str):
-                try:
-                    attrs["experience_year"] = int(experience_year)
-                except ValueError:
-                    errors["experience_year"] = "Must be a valid integer."
-            elif not isinstance(experience_year, int) or experience_year < 0:
-                errors["experience_year"] = "Must be a non-negative integer."
+        experience_year = attrs.get("experience_year")
+        if experience_year is None:
+            errors["experience_year"] = "This field is required."
+        elif isinstance(experience_year, str):
+            try:
+                attrs["experience_year"] = int(experience_year)
+            except ValueError:
+                errors["experience_year"] = "Must be a valid integer."
+        elif not isinstance(experience_year, int) or experience_year < 0:
+            errors["experience_year"] = "Must be a non-negative integer."
 
             # Validate credentials - required only on create
-            credentials = attrs.get("credentials", None)
-            if not isinstance(credentials, list) or len(credentials) == 0 or len(credentials) > 3:
-                errors["credentials"] = "At least one credential is required and maximum 3 credentials are allowed."
+        credentials = attrs.get("credentials", None)
+        if not isinstance(credentials, list) or len(credentials) == 0 or len(credentials) > 3:
+            errors["credentials"] = "At least one credential is required and maximum 3 credentials are allowed."
         else:
             # When updating, validate only if fields are provided
             # Validate experience_year if provided
