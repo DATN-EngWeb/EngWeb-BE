@@ -189,8 +189,41 @@ class GCSPresignedURLManager:
         except Exception:
             return False
 
+    def delete_folder(self, prefix: str):
+        """
+        Delete all objects in a folder (with given prefix) from GCS
+        
+        Args:
+            prefix: Folder prefix (e.g., 'media/tests/1/part1/')
+        
+        Returns:
+            Tuple of (success_count, total_count)
+        """
+        try:
+            # Ensure prefix ends with /
+            if prefix and not prefix.endswith('/'):
+                prefix += '/'
+            
+            # List and delete all objects with this prefix
+            blobs = list(self.bucket.list_blobs(prefix=prefix))
+            total_count = len(blobs)
+            success_count = 0
+            
+            for blob in blobs:
+                try:
+                    blob.delete()
+                    success_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to delete blob {blob.name}: {e}")
+            
+            logger.info(f"Deleted {success_count}/{total_count} objects from folder: {prefix}")
+            return (success_count, total_count)
+        except Exception as e:
+            logger.error(f"Error deleting folder {prefix}: {e}")
+            return (0, 0)
+
     def generate_file_key(
-        self, category: str, user_id, filename: str, test_id=None, part=None
+        self, category: str, user_id, filename: str, test_id=None, part_id=None
     ) -> str:
         """
         Generate GCS object key with proper path structure
@@ -200,23 +233,27 @@ class GCSPresignedURLManager:
             user_id: User ID or UUID
             filename: Original filename
             test_id: Test ID (required if category='tests')
-            part: Test part number (required if category='tests')
+            part_id: Part ID (optional, if not provided file will be in test_id folder directly)
 
         Returns:
             GCS key:
             - avatars: media/users/avatars/user_id/unique_filename
             - covers: media/users/covers/user_id/unique_filename
             - credentials: media/teachers/credentials/user_id/unique_filename
-            - tests: media/tests/test_id/part{part}/unique_filename
+            - tests with part_id: media/tests/test_{test_id}/part_{part_id}/unique_filename
+            - tests without part_id: media/tests/test_{test_id}/unique_filename
         """
         # Generate unique name to avoid collisions
         name, ext = os.path.splitext(filename)
         unique_filename = f"{uuid.uuid4()}{ext}"
 
         if category == "tests":
-            if test_id is None or part is None:
-                raise ValueError("test_id and part are required for tests category")
-            return f"media/tests/{test_id}/part{part}/{unique_filename}"
+            if test_id is None:
+                raise ValueError("test_id is required for tests category")
+            if part_id is not None:
+                return f"media/tests/test_{test_id}/part_{part_id}/{unique_filename}"
+            else:
+                return f"media/tests/test_{test_id}/{unique_filename}"
         elif category == "avatars":
             # avatars category: use users/avatars path
             return f"media/users/avatars/{user_id}/{unique_filename}"

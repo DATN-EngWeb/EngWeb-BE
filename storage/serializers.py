@@ -25,14 +25,23 @@ class RequestPresignedURLSerializer(serializers.Serializer):
         "category": "covers"
     }
 
-    Example for tests:
+    Example for tests with part_id:
     {
         "filename": "listening_part1.mp3",
         "file_size": 5242880,
         "mime_type": "audio/mpeg",
         "category": "tests",
         "test_id": 5,
-        "part": 1
+        "part_id": 10
+    }
+
+    Example for tests without part_id:
+    {
+        "filename": "test_audio.mp3",
+        "file_size": 5242880,
+        "mime_type": "audio/mpeg",
+        "category": "tests",
+        "test_id": 5
     }
     """
 
@@ -55,24 +64,19 @@ class RequestPresignedURLSerializer(serializers.Serializer):
         allow_null=True,
         help_text="Test ID (required if category='tests')",
     )
-    part = serializers.IntegerField(
+    part_id = serializers.IntegerField(
         required=False,
         allow_null=True,
-        min_value=1,
-        help_text="Test part number (required if category='tests')",
+        help_text="Part ID (optional, if not provided file will be stored in test_id folder directly)",
     )
 
     def validate(self, data):
-        """Validate testid and part for tests category"""
+        """Validate test_id for tests category"""
         category = data.get("category")
         if category == "tests":
             if "test_id" not in data or data["test_id"] is None:
                 raise serializers.ValidationError(
                     {"test_id": "test_id is required when category is tests"}
-                )
-            if "part" not in data or data["part"] is None:
-                raise serializers.ValidationError(
-                    {"part": "part is required when category is tests"}
                 )
         return data
 
@@ -89,9 +93,17 @@ class ConfirmUploadSerializer(serializers.Serializer):
         "etag": "abc123def456"
     }
 
-    Example for tests:
+    Example for tests with part_id:
     {
-        "key": "media/tests/5/part1/uuid.mp3",
+        "key": "media/tests/test_5/part_10/uuid.mp3",
+        "file_size": 5242880,
+        "mime_type": "audio/mpeg",
+        "etag": "abc123def456"
+    }
+
+    Example for tests without part_id:
+    {
+        "key": "media/tests/test_5/uuid.mp3",
         "file_size": 5242880,
         "mime_type": "audio/mpeg",
         "etag": "abc123def456"

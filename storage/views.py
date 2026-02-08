@@ -7,7 +7,7 @@ from rest_framework.throttling import UserRateThrottle
 from django.conf import settings
 from drf_spectacular.utils import extend_schema, OpenApiResponse, inline_serializer
 from rest_framework import serializers
-from tests.models import Test
+from tests.models import Test, ReceptivePart
 
 from .serializers import (
     RequestPresignedURLSerializer,
@@ -49,12 +49,15 @@ class RequestPresignedURLView(generics.CreateAPIView):
             "- `category` - Danh mục file ('avatars', 'covers', 'credentials', hoặc 'tests')\n\n"
             "**Các trường tùy chọn (Optional fields):**\n"
             "- `test_id` - ID bài kiểm tra (tùy chọn, nhưng **bắt buộc** khi category = 'tests')\n"
-            "- `part` - Phần bài kiểm tra (tùy chọn, nhưng **bắt buộc** khi category = 'tests')\n\n"
+            "- `part_id` - Part ID (tùy chọn, nếu không cung cấp file sẽ được lưu trực tiếp trong folder test_id)\n\n"
             "**Các danh mục (category):**\n"
             "- `avatars` - Ảnh đại diện người dùng (JPEG, PNG)\n"
             "- `covers` - Ảnh bìa người dùng (JPEG, PNG)\n"
             "- `credentials` - Chứng chỉ/bằng cấp giáo viên (PDF, JPEG, PNG)\n"
             "- `tests` - File kiểm tra (JPEG, PNG, MP4, MPEG)\n\n"
+            "**Cấu trúc folder:**\n"
+            "- Với part_id: media/tests/test_{test_id}/part_{part_id}/filename\n"
+            "- Không part_id: media/tests/test_{test_id}/filename\n\n"
             "**Quy trình:**\n"
             "1. FE gửi yêu cầu với thông tin file\n"
             "2. BE trả về signed URL + headers cần thiết\n"
@@ -98,7 +101,7 @@ class RequestPresignedURLView(generics.CreateAPIView):
             mime_type = serializer.validated_data["mime_type"]
             category = serializer.validated_data["category"]
             test_id = serializer.validated_data.get("test_id")
-            part = serializer.validated_data.get("part")
+            part_id = serializer.validated_data.get("part_id")
 
             # Extra validation: For tests category, ensure the Test exists
             if category == "tests" and test_id is not None:
@@ -107,13 +110,32 @@ class RequestPresignedURLView(generics.CreateAPIView):
                         {"detail": f"Test with id={test_id} does not exist"},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
+                
+                # If part_id is provided, ensure it exists and belongs to the test
+                if part_id is not None:
+                    try:
+                        part = ReceptivePart.objects.select_related(
+                            'receptive_test__test'
+                        ).get(pk=part_id)
+                        
+                        # Check if part belongs to the test
+                        if part.receptive_test.test.id != test_id:
+                            return Response(
+                                {"detail": f"Part with id={part_id} does not belong to test with id={test_id}"},
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                    except ReceptivePart.DoesNotExist:
+                        return Response(
+                            {"detail": f"Part with id={part_id} does not exist"},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
 
             s3_key = self.get_gcs_manager().generate_file_key(
                 category=category,
                 user_id=request.user.file_storage_uuid,
                 filename=filename,
                 test_id=test_id,
-                part=part,
+                part_id=part_id,
             )
 
             # Generate signed URL
