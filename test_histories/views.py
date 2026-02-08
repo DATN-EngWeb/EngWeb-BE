@@ -1,5 +1,6 @@
 from rest_framework import generics, status
 from rest_framework.response import Response
+import django_filters
 
 
 from drf_spectacular.utils import (
@@ -7,12 +8,14 @@ from drf_spectacular.utils import (
     OpenApiResponse,
     OpenApiExample,
     inline_serializer,
+    OpenApiParameter,
 )
 from rest_framework import serializers as drf_serializers
 
 from .models import ProductiveTestHistory
 from .serializers import ProductiveTestHistorySerializer
 from .permissions import IsOwnerOrAdmin, IsStudent
+from .filters import ProductiveTestHistoryFilter
 
 
 class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
@@ -24,6 +27,8 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
 
     serializer_class = ProductiveTestHistorySerializer
     permission_classes = [IsOwnerOrAdmin]  # Default for GET
+    filter_backends = [django_filters.rest_framework.DjangoFilterBackend]
+    filterset_class = ProductiveTestHistoryFilter
 
     def get_permissions(self):
         """Different permissions for GET and POST"""
@@ -37,12 +42,12 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
 
         # Admin can see all
         if user.role == "A":
-            return ProductiveTestHistory.objects.order_by("-start_time")
+            return ProductiveTestHistory.objects.order_by("type", "-start_time")
 
         # Student can only see their own
         if user.role == "S" and hasattr(user, "student"):
             return ProductiveTestHistory.objects.filter(student=user.student).order_by(
-                "-start_time"
+                "type", "-start_time"
             )
 
         return ProductiveTestHistory.objects.none()
@@ -123,8 +128,19 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
             "**Quyền truy cập:**\n"
             "- **Học viên (Student)**: Chỉ xem được lịch sử của chính mình\n"
             "- **Admin**: Xem được toàn bộ lịch sử của tất cả học viên\n\n"
+            "**Lọc dữ liệu:**\n"
+            "- Có thể lọc theo `productive_test` (ID của bài test) thông qua query parameter\n"
         ),
         tags=["test-histories"],
+        parameters=[
+            OpenApiParameter(
+                name="productive_test",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                description="Lọc theo ID của Productive Test (Writing/Speaking test)",
+                required=False,
+            ),
+        ],
         responses={
             200: OpenApiResponse(
                 description="Danh sách lịch sử thành công",
