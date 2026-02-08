@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "tests",
     "storage",
     "feedback",
+    "test_histories",
 ]
 
 MIDDLEWARE = [

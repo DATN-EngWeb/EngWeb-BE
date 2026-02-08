@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import (
+    EXPBonusRule,
     Test,
     ReceptiveTest,
     ProductiveTest,
@@ -104,4 +105,16 @@ class CompletedBonusAdmin(admin.ModelAdmin):
         "skill",
         "level",
         "completed_bonus",
+    )
+
+
+@admin.register(EXPBonusRule)
+class EXPBonusRuleAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "min_percentage",
+        "max_percentage",
+        "exp_percentage",
+        "rating",
+        "feedback_message",
     )
