@@ -25,19 +25,9 @@ class RequestPresignedURLSerializer(serializers.Serializer):
         "category": "covers"
     }
 
-    Example for tests with part_id:
+    Example for tests:
     {
         "filename": "listening_part1.mp3",
-        "file_size": 5242880,
-        "mime_type": "audio/mpeg",
-        "category": "tests",
-        "test_id": 5,
-        "part_id": 10
-    }
-
-    Example for tests without part_id:
-    {
-        "filename": "test_audio.mp3",
         "file_size": 5242880,
         "mime_type": "audio/mpeg",
         "category": "tests",
@@ -57,17 +47,13 @@ class RequestPresignedURLSerializer(serializers.Serializer):
         max_length=100, help_text="MIME type (e.g., image/jpeg, audio/mpeg)"
     )
     category = serializers.ChoiceField(
-        choices=["avatars", "covers", "credentials", "tests"], help_text="File category: 'avatars', 'covers', 'credentials', or 'tests'"
+        choices=["avatars", "covers", "credentials", "tests"],
+        help_text="File category: 'avatars', 'covers', 'credentials', or 'tests'",
     )
     test_id = serializers.IntegerField(
         required=False,
         allow_null=True,
         help_text="Test ID (required if category='tests')",
-    )
-    part_id = serializers.IntegerField(
-        required=False,
-        allow_null=True,
-        help_text="Part ID (optional, if not provided file will be stored in test_id folder directly)",
     )
 
     def validate(self, data):
@@ -93,15 +79,7 @@ class ConfirmUploadSerializer(serializers.Serializer):
         "etag": "abc123def456"
     }
 
-    Example for tests with part_id:
-    {
-        "key": "media/tests/test_5/part_10/uuid.mp3",
-        "file_size": 5242880,
-        "mime_type": "audio/mpeg",
-        "etag": "abc123def456"
-    }
-
-    Example for tests without part_id:
+    Example for tests:
     {
         "key": "media/tests/test_5/uuid.mp3",
         "file_size": 5242880,

@@ -223,7 +223,7 @@ class GCSPresignedURLManager:
             return (0, 0)
 
     def generate_file_key(
-        self, category: str, user_id, filename: str, test_id=None, part_id=None
+        self, category: str, user_id, filename: str, test_id=None
     ) -> str:
         """
         Generate GCS object key with proper path structure
@@ -233,15 +233,13 @@ class GCSPresignedURLManager:
             user_id: User ID or UUID
             filename: Original filename
             test_id: Test ID (required if category='tests')
-            part_id: Part ID (optional, if not provided file will be in test_id folder directly)
 
         Returns:
             GCS key:
             - avatars: media/users/avatars/user_id/unique_filename
             - covers: media/users/covers/user_id/unique_filename
             - credentials: media/teachers/credentials/user_id/unique_filename
-            - tests with part_id: media/tests/test_{test_id}/part_{part_id}/unique_filename
-            - tests without part_id: media/tests/test_{test_id}/unique_filename
+            - tests: media/tests/test_{test_id}/unique_filename (all test files in one folder)
         """
         # Generate unique name to avoid collisions
         name, ext = os.path.splitext(filename)
@@ -250,10 +248,7 @@ class GCSPresignedURLManager:
         if category == "tests":
             if test_id is None:
                 raise ValueError("test_id is required for tests category")
-            if part_id is not None:
-                return f"media/tests/test_{test_id}/part_{part_id}/{unique_filename}"
-            else:
-                return f"media/tests/test_{test_id}/{unique_filename}"
+            return f"media/tests/test_{test_id}/{unique_filename}"
         elif category == "avatars":
             # avatars category: use users/avatars path
             return f"media/users/avatars/{user_id}/{unique_filename}"

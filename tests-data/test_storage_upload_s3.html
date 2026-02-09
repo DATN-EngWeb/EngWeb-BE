@@ -322,15 +322,9 @@
 
         <!-- Tests Config -->
         <div id="testFields" style="display: none">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Test ID</label>
-              <input type="number" id="testId" placeholder="1" value="1" />
-            </div>
-            <div class="form-group">
-              <label>Part</label>
-              <input type="number" id="part" placeholder="1" value="1" />
-            </div>
+          <div class="form-group">
+            <label>Test ID</label>
+            <input type="number" id="testId" placeholder="1" value="1" />
           </div>
         </div>
 
@@ -469,8 +463,6 @@
             category === "tests"
               ? document.getElementById("testId").value
               : null;
-          const part =
-            category === "tests" ? document.getElementById("part").value : null;
 
           if (!file) {
             showProgress("❌ Vui lòng chọn file", "error");
@@ -492,7 +484,6 @@
 
             if (category === "tests") {
               presignedRequest.test_id = parseInt(testId);
-              presignedRequest.part = parseInt(part);
             }
 
             const presignedHeaders = {

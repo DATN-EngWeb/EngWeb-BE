@@ -142,42 +142,42 @@ def delete_resources_from_dict(resources: dict) -> dict:
 
 def cleanup_receptive_part_on_delete(part):
     """
-    Clean up all GCS resources when deleting a ReceptivePart
-
-    Simply deletes the entire part folder on GCS: media/tests/{test_id}/part{order}/
-    This removes all resources (content, images, audio, etc.) in one operation.
-
+    Clean up GCS resources when deleting a ReceptivePart
+    
+    Deletes individual resource URLs from content, resources, and all questions/answers.
+    
     Args:
         part: ReceptivePart instance to cleanup
-
+    
     Returns:
         Dictionary with cleanup results
     """
     results = {
-        "folder_deleted": False,
-        "folder_stats": {"deleted": 0, "total": 0},
+        "content_cleaned": False,
+        "part_resources": {},
+        "questions_cleaned": 0,
     }
-
+    
     try:
-        # Delete entire part folder from GCS
-        # Folder structure: media/tests/test_{test_id}/part_{part_id}/
-        test_id = part.receptive_test.test.id
-        part_id = part.id
-        folder_prefix = f"media/tests/test_{test_id}/part_{part_id}/"
-
-        gcs_manager = GCSPresignedURLManager()
-        success_count, total_count = gcs_manager.delete_folder(folder_prefix)
-
-        results["folder_deleted"] = success_count > 0
-        results["folder_stats"] = {"deleted": success_count, "total": total_count}
-
-        logger.info(
-            f"Cleaned up ReceptivePart {part.id}: Deleted {success_count}/{total_count} files from {folder_prefix}"
-        )
-
+        # Clean up part's content (HTML or URL)
+        if part.content and part.content.startswith("http"):
+            if delete_gcs_resource(part.content):
+                results["content_cleaned"] = True
+        
+        # Clean up part's resources dict
+        if part.resources:
+            results["part_resources"] = delete_resources_from_dict(part.resources)
+        
+        # Clean up all questions in this part (which will cascade to answers)
+        for question in part.receptive_questions.all():
+            cleanup_receptive_question_on_delete(question)
+            results["questions_cleaned"] += 1
+        
+        logger.info(f"Cleaned up ReceptivePart {part.id}: {results}")
+        
     except Exception as e:
         logger.error(f"Error cleaning up ReceptivePart {part.id}: {e}")
-
+    
     return results
 
 

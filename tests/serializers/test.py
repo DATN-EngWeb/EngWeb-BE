@@ -118,11 +118,11 @@ class TestSerializer(serializers.ModelSerializer):
         Override to remove progress_status field if it's None
         """
         representation = super().to_representation(instance)
-        
+
         # Remove progress_status field if it's None (not requested)
         if representation.get("progress_status") is None:
             representation.pop("progress_status", None)
-        
+
         return representation
 
     def validate(self, attrs):
