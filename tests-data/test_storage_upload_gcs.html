@@ -247,7 +247,10 @@
         3️⃣ FE PUT file trực tiếp đến GCS với signed URL<br />
         4️⃣ GCS kiểm tra signature và lưu file<br />
         5️⃣ FE xác nhận upload với BE (confirm-upload)<br />
-        6️⃣ BE trả về file URL công khai
+        6️⃣ BE trả về file URL công khai<br />
+        <br />
+        <strong>Cấu trúc folder:</strong><br />
+        • Tất cả files của test: media/tests/test_{test_id}/
       </div>
 
       <form id="uploadForm">
@@ -320,15 +323,9 @@
 
         <!-- Tests Config -->
         <div id="testFields" style="display: none">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Test ID</label>
-              <input type="number" id="testId" placeholder="1" value="1" />
-            </div>
-            <div class="form-group">
-              <label>Part</label>
-              <input type="number" id="part" placeholder="1" value="1" />
-            </div>
+          <div class="form-group">
+            <label>Test ID</label>
+            <input type="number" id="testId" placeholder="1" value="1" />
           </div>
         </div>
 
@@ -467,8 +464,6 @@
             category === "tests"
               ? document.getElementById("testId").value
               : null;
-          const part =
-            category === "tests" ? document.getElementById("part").value : null;
 
           if (!file) {
             showProgress("❌ Vui lòng chọn file", "error");
@@ -490,7 +485,6 @@
 
             if (category === "tests") {
               presignedRequest.test_id = parseInt(testId);
-              presignedRequest.part = parseInt(part);
             }
 
             const presignedHeaders = {

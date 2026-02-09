@@ -31,8 +31,7 @@ class RequestPresignedURLSerializer(serializers.Serializer):
         "file_size": 5242880,
         "mime_type": "audio/mpeg",
         "category": "tests",
-        "test_id": 5,
-        "part": 1
+        "test_id": 5
     }
     """
 
@@ -48,31 +47,22 @@ class RequestPresignedURLSerializer(serializers.Serializer):
         max_length=100, help_text="MIME type (e.g., image/jpeg, audio/mpeg)"
     )
     category = serializers.ChoiceField(
-        choices=["avatars", "covers", "credentials", "tests"], help_text="File category: 'avatars', 'covers', 'credentials', or 'tests'"
+        choices=["avatars", "covers", "credentials", "tests"],
+        help_text="File category: 'avatars', 'covers', 'credentials', or 'tests'",
     )
     test_id = serializers.IntegerField(
         required=False,
         allow_null=True,
         help_text="Test ID (required if category='tests')",
     )
-    part = serializers.IntegerField(
-        required=False,
-        allow_null=True,
-        min_value=1,
-        help_text="Test part number (required if category='tests')",
-    )
 
     def validate(self, data):
-        """Validate testid and part for tests category"""
+        """Validate test_id for tests category"""
         category = data.get("category")
         if category == "tests":
             if "test_id" not in data or data["test_id"] is None:
                 raise serializers.ValidationError(
                     {"test_id": "test_id is required when category is tests"}
-                )
-            if "part" not in data or data["part"] is None:
-                raise serializers.ValidationError(
-                    {"part": "part is required when category is tests"}
                 )
         return data
 
@@ -91,7 +81,7 @@ class ConfirmUploadSerializer(serializers.Serializer):
 
     Example for tests:
     {
-        "key": "media/tests/5/part1/uuid.mp3",
+        "key": "media/tests/test_5/uuid.mp3",
         "file_size": 5242880,
         "mime_type": "audio/mpeg",
         "etag": "abc123def456"
