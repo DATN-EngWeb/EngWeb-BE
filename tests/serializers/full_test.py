@@ -9,6 +9,7 @@ from ..models import (
 )
 
 from django.db import transaction
+from ..utils.gcs_cleanup import cleanup_productive_test_on_update
 
 
 class ReceptiveAnswerSerializer(serializers.ModelSerializer):
@@ -101,6 +102,16 @@ class ProductiveTestSerializer(serializers.ModelSerializer):
             "glue_text",
             "glue_resources",
         ]
+    
+    def update(self, instance, validated_data):
+        """
+        Update ProductiveTest with GCS cleanup for changed resources
+        """
+        # Cleanup old GCS resources if description or glue_resources changed
+        cleanup_productive_test_on_update(instance, validated_data)
+        
+        # Perform the update
+        return super().update(instance, validated_data)
 
 
 class ProductiveTestRetrieveSerializer(serializers.ModelSerializer):

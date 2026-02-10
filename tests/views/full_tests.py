@@ -16,7 +16,13 @@ from tests.permissions import IsAdminOrOwner
 
 from tests.utils.renumber import renumber_receptive_test
 from tests.utils.scoring import calculate_scores
-
+from tests.utils.gcs_cleanup import (
+    cleanup_receptive_part_on_delete,
+    cleanup_receptive_question_on_delete,
+    cleanup_receptive_answer_on_delete,
+    cleanup_changed_resources,
+    delete_gcs_resource,
+)
 
 @extend_schema(
     methods=["GET"],
@@ -198,9 +204,17 @@ class ReceptiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
                         )
 
                     if action == "delete":
+                        # Clean up all GCS resources before deleting from DB
+                        cleanup_receptive_part_on_delete(part)
                         part.delete()  # Cascade delete questions and answers
                         continue  # Skip processing questions for deleted part
                     elif action == "update":
+                        # Store old values for cleanup before updating
+                        old_content = part.content if "content" in part_data else None
+                        old_resources = (
+                            part.resources.copy() if "resources" in part_data else None
+                        )
+
                         part_fields = [
                             "order",
                             "format",
@@ -211,6 +225,16 @@ class ReceptiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
                         for field in part_fields:
                             if field in part_data:
                                 setattr(part, field, part_data[field])
+
+                        # Clean up old GCS resources for updated fields only
+                        if "content" in part_data and old_content != part.content:
+                            if old_content and old_content.startswith("http"):
+                                delete_gcs_resource(old_content)
+
+                        if "resources" in part_data and old_resources != part.resources:
+                            if old_resources:
+                                cleanup_changed_resources(old_resources, part.resources)
+
                         part.save()
                 else:
                     raise serializers.ValidationError(
@@ -250,9 +274,14 @@ class ReceptiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
                             )
 
                         if q_action == "delete":
+                            # Clean up all GCS resources before deleting from DB
+                            cleanup_receptive_question_on_delete(question)
                             question.delete()  # Cascade delete answers
                             continue  # Skip processing answers for deleted question
                         elif q_action == "update":
+                            # Store old values for cleanup before updating
+                            old_resources = question.resources.copy() if "resources" in question_data else None
+                            
                             q_fields = [
                                 "question_number",
                                 "content",
@@ -263,6 +292,12 @@ class ReceptiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
                             for field in q_fields:
                                 if field in question_data:
                                     setattr(question, field, question_data[field])
+                            
+                            # Clean up old GCS resources for updated resources only
+                            if "resources" in question_data and old_resources != question.resources:
+                                if old_resources:
+                                    cleanup_changed_resources(old_resources, question.resources)
+                            
                             question.save()
                     else:
                         raise serializers.ValidationError(
@@ -301,8 +336,13 @@ class ReceptiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
                                 )
 
                             if a_action == "delete":
+                                # Clean up GCS resources before deleting from DB
+                                cleanup_receptive_answer_on_delete(answer)
                                 answer.delete()
                             elif a_action == "update":
+                                # Store old values for cleanup before updating
+                                old_resources = answer.resources.copy() if "resources" in answer_data else None
+                                
                                 a_fields = [
                                     "option_label",
                                     "answer_text",
@@ -312,6 +352,12 @@ class ReceptiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
                                 for field in a_fields:
                                     if field in answer_data:
                                         setattr(answer, field, answer_data[field])
+                                
+                                # Clean up old GCS resources for updated resources only
+                                if "resources" in answer_data and old_resources != answer.resources:
+                                    if old_resources:
+                                        cleanup_changed_resources(old_resources, answer.resources)
+                                
                                 answer.save()
                         else:
                             raise serializers.ValidationError(
