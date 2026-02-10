@@ -8,6 +8,17 @@ import environ
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ====================
+# Enviroment Variables
+# ====================
+env = environ.Env()
+environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
+
+# general
+SECRET_KEY = env("SECRET_KEY")
+DEBUG = env.bool("DEBUG", default=True)
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+
+# ====================
 # Basic Configurations
 # ====================
 INSTALLED_APPS = [
@@ -93,11 +104,18 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "static"
 
+if DEBUG:
+    DEFAULT_AUTH = [
+        "accounts.authentication.CustomTokenAuthentication",
+        "accounts.authentication.CustomBasicAuthentication",
+    ]
+else:
+    DEFAULT_AUTH = [
+        "accounts.authentication.CustomTokenAuthentication",
+    ]
+
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
-        "rest_framework.authentication.BasicAuthentication",
-    ),
+    "DEFAULT_AUTHENTICATION_CLASSES": DEFAULT_AUTH,
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
@@ -116,34 +134,12 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
-    "SECURITY_SCHEMES": {
-        "BearerAuth": {
-            "type": "http",
-            "scheme": "bearer",
-            "bearerFormat": "JWT",
-        },
-        "BasicAuth": {
-            "type": "http",
-            "scheme": "basic",
-        },
-    },
-    "SECURITY": [{"BearerAuth": []}, {"BasicAuth": []}],
+    "SECURITY": [{"CustomBearerAuth": []}, {"CustomBasicAuth": []}],
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "accounts.User"
-
-# ====================
-# Enviroment Variables
-# ====================
-env = environ.Env()
-environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
-
-# general
-SECRET_KEY = env("SECRET_KEY")
-DEBUG = env.bool("DEBUG", default=True)
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
 # database
 DATABASES = {
