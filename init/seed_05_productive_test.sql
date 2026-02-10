@@ -13,5 +13,5 @@ ON CONFLICT (id) DO NOTHING;
 -- Insert into productive_test table
 INSERT INTO productive_test (test_id, format, topic, description, min_word, glue_text, glue_resources) VALUES
 (2, 'A', 'topic of productive test', 'https://example.com/media/tests/2/part1/content.html', 250, 'glue text', '{}'::jsonb),
-(3, 'A', 'Email', 'https://storage.googleapis.com/dev-nens-english-app-test-vu/media/tests/3/part1/5e9c09a2-5f6c-4a17-8807-8dc00cbe9d8a.html', 0, '', '{"audio": null, "image": null}'::jsonb)
+(3, 'A', 'Email', 'https://storage.googleapis.com/dev-nens-english-app-test-vu/media/tests/3/part1/5e9c09a2-5f6c-4a17-8807-8dc00cbe9d8a.html', 100, '', '{"audio": null, "image": null}'::jsonb)
 ON CONFLICT (test_id) DO NOTHING;
