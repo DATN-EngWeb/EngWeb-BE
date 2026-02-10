@@ -8,7 +8,7 @@ from ..models import Test
 from ..serializers.test import TestSerializer
 from ..permissions import IsTeacher
 from ..filters import TestFilter
-from accounts.models import Teacher
+from accounts.models import Teacher, Student
 
 from drf_spectacular.utils import (
     extend_schema,
@@ -99,6 +99,31 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
 
         return queryset
 
+    def get_serializer_context(self):
+        """
+        Override to add progress_status request flag and student to context
+        """
+        context = super().get_serializer_context()
+
+        # Check if progress_status parameter is requested
+        progress_status_param = self.request.query_params.get(
+            "progress_status", ""
+        ).lower()
+        request_progress = progress_status_param == "true"
+        context["request_progress_status"] = request_progress
+
+        # If progress_status is requested and user is authenticated, check if user is student
+        if request_progress and self.request.user.is_authenticated:
+            try:
+                student = Student.objects.get(user=self.request.user)
+                context["student"] = student
+            except Student.DoesNotExist:
+                context["student"] = None
+        else:
+            context["student"] = None
+
+        return context
+
     @extend_schema(
         summary="Danh sách bài kiểm tra (tổng quan)",
         description=(
@@ -112,6 +137,7 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "- `skill`: Kỹ năng - R (Reading), L (Listening), S (Speaking), W (Writing)\n"
             "- `status`: Trạng thái - D (Draft), I (In Review), P (Published), R (Removed)\n"
             "- `mine`: Lọc bài kiểm tra của giáo viên hiện tại (true/false) - **Yêu cầu đăng nhập và là giáo viên**\n"
+            "- `progress_status`: Hiển thị trạng thái hoàn thành của student (true/false) - **Chỉ áp dụng cho student đã đăng nhập**\n"
             "- `page`: Số trang (mặc định: 1)\n"
             "- `page_size`: Số phần tử mỗi trang (mặc định: 10, tối đa: 100)\n\n"
             "**Tham số sắp xếp (Ordering):**\n"
@@ -126,6 +152,14 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "- Chỉ giáo viên đã đăng nhập mới được sử dụng `mine=true`\n"
             "- Nếu chưa đăng nhập → 403 Forbidden\n"
             "- Nếu không phải giáo viên → 403 Forbidden\n\n"
+            "**Lưu ý về tham số `progress_status`:**\n"
+            "- Khi `progress_status=true`, API sẽ trả về thêm trường `progress_status` cho mỗi test\n"
+            "- Chỉ áp dụng cho student đã đăng nhập\n"
+            "- Giá trị trả về:\n"
+            "  - `completed`: Student đã submit bài test (có ít nhất 1 submission)\n"
+            "  - `draft`: Student chỉ có bản nháp (draft), chưa submit\n"
+            "  - `none`: Student chưa làm bài test này\n"
+            "- Nếu không truyền `progress_status=true` hoặc user không phải student, trường `progress_status` sẽ không xuất hiện trong response\n\n"
             "**Ví dụ:**\n"
             "- `/api/tests/?type=R` - Lấy tất cả bài Receptive Test (Reading/Listening)\n"
             "- `/api/tests/?type=P&level=B1` - Lấy bài Productive Test cấp B1\n"
@@ -134,7 +168,9 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "- `/api/tests/?ordering=title` - Sắp xếp theo tên A-Z\n"
             "- `/api/tests/?ordering=-created_at&skill=R` - Bài Reading, mới nhất trước\n"
             "- `/api/tests/?mine=true` - Lấy tất cả bài kiểm tra của giáo viên hiện tại\n"
-            "- `/api/tests/?mine=true&status=D` - Lấy bài Draft của giáo viên hiện tại"
+            "- `/api/tests/?mine=true&status=D` - Lấy bài Draft của giáo viên hiện tại\n"
+            "- `/api/tests/?progress_status=true` - Lấy danh sách bài test kèm trạng thái hoàn thành của student\n"
+            "- `/api/tests/?progress_status=true&level=B1` - Lấy bài test cấp B1 kèm trạng thái hoàn thành"
         ),
         tags=["tests (overview)"],
         parameters=[
@@ -168,6 +204,17 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                     "Lọc bài kiểm tra của giáo viên hiện tại (true/false). "
                     "Yêu cầu: Phải đăng nhập và là giáo viên. "
                     "Nếu không thỏa điều kiện sẽ trả về 403."
+                ),
+                required=False,
+                type=bool,
+            ),
+            OpenApiParameter(
+                name="progress_status",
+                description=(
+                    "Hiển thị trạng thái hoàn thành của student (true/false). "
+                    "Chỉ áp dụng cho student đã đăng nhập. "
+                    "Trả về: completed (đã submit), draft (chỉ có nháp), none (chưa làm). "
+                    "Nếu không truyền tham số này hoặc user không phải student, trường progress_status sẽ không xuất hiện trong response."
                 ),
                 required=False,
                 type=bool,

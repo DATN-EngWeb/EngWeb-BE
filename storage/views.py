@@ -3,8 +3,6 @@
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.throttling import UserRateThrottle
-from django.conf import settings
 from drf_spectacular.utils import extend_schema, OpenApiResponse, inline_serializer
 from rest_framework import serializers
 from tests.models import Test
@@ -48,13 +46,14 @@ class RequestPresignedURLView(generics.CreateAPIView):
             "- `mime_type` - Loại file MIME (VD: image/jpeg, audio/mpeg)\n"
             "- `category` - Danh mục file ('avatars', 'covers', 'credentials', hoặc 'tests')\n\n"
             "**Các trường tùy chọn (Optional fields):**\n"
-            "- `test_id` - ID bài kiểm tra (tùy chọn, nhưng **bắt buộc** khi category = 'tests')\n"
-            "- `part` - Phần bài kiểm tra (tùy chọn, nhưng **bắt buộc** khi category = 'tests')\n\n"
+            "- `test_id` - ID bài kiểm tra (tùy chọn, nhưng **bắt buộc** khi category = 'tests')\n\n"
             "**Các danh mục (category):**\n"
             "- `avatars` - Ảnh đại diện người dùng (JPEG, PNG)\n"
             "- `covers` - Ảnh bìa người dùng (JPEG, PNG)\n"
             "- `credentials` - Chứng chỉ/bằng cấp giáo viên (PDF, JPEG, PNG)\n"
             "- `tests` - File kiểm tra (JPEG, PNG, MP4, MPEG)\n\n"
+            "**Cấu trúc folder:**\n"
+            "- Tất cả files của test: media/tests/test_{test_id}/filename\n\n"
             "**Quy trình:**\n"
             "1. FE gửi yêu cầu với thông tin file\n"
             "2. BE trả về signed URL + headers cần thiết\n"
@@ -98,13 +97,11 @@ class RequestPresignedURLView(generics.CreateAPIView):
             mime_type = serializer.validated_data["mime_type"]
             category = serializer.validated_data["category"]
             test_id = serializer.validated_data.get("test_id")
-            part = serializer.validated_data.get("part")
 
-            # Extra validation: For tests category, ensure the Test exists
             if category == "tests" and test_id is not None:
-                if not Test.objects.filter(pk=test_id).exists():
+                if not Test.objects.filter(id=test_id).exists():
                     return Response(
-                        {"detail": f"Test with id={test_id} does not exist"},
+                        {"detail": f"Test with id {test_id} does not exist."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -113,7 +110,6 @@ class RequestPresignedURLView(generics.CreateAPIView):
                 user_id=request.user.file_storage_uuid,
                 filename=filename,
                 test_id=test_id,
-                part=part,
             )
 
             # Generate signed URL
