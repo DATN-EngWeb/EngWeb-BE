@@ -110,7 +110,7 @@ class ReceptiveTestCreateView(generics.CreateAPIView):
                                 "order": 1,
                                 "format": "F",
                                 "description": "Description of this part",
-                                "content": "https://example.com/media/tests/1/part1/content.html",
+                                "content": "https://example.com/tests/1/part1/content.html",
                                 "questions": [
                                     {
                                         "question_number": 1,
@@ -118,7 +118,7 @@ class ReceptiveTestCreateView(generics.CreateAPIView):
                                         "explanation": "Explanation for the correct answer",
                                         "score": 10,
                                         "resources": {
-                                            "image": "https://example.com/media/tests/1/part1/image1.png"
+                                            "image": "https://example.com/tests/1/part1/image1.png"
                                         },
                                         "answers": [
                                             {
@@ -141,7 +141,7 @@ class ReceptiveTestCreateView(generics.CreateAPIView):
                                 "order": 2,
                                 "format": "F",
                                 "description": "Description of this part",
-                                "content": "https://example.com/media/tests/1/part2/content.html",
+                                "content": "https://example.com/tests/1/part2/content.html",
                                 "questions": [
                                     {
                                         "question_number": 1,
@@ -149,7 +149,7 @@ class ReceptiveTestCreateView(generics.CreateAPIView):
                                         "explanation": "Explanation for the correct answer",
                                         "score": 10,
                                         "resources": {
-                                            "image": "https://example.com/media/tests/1/part2/image2.png"
+                                            "image": "https://example.com/tests/1/part2/image2.png"
                                         },
                                         "answers": [
                                             {
@@ -157,7 +157,7 @@ class ReceptiveTestCreateView(generics.CreateAPIView):
                                                 "answer_text": "Option A",
                                                 "is_correct": True,
                                                 "resources": {
-                                                    "image": "https://example.com/media/tests/1/part2/answerA_image.png"
+                                                    "image": "https://example.com/tests/1/part2/answerA_image.png"
                                                 },
                                             },
                                             {

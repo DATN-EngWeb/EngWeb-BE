@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
@@ -12,7 +12,8 @@
       }
 
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
           "Helvetica Neue", Arial, sans-serif;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         min-height: 100vh;
@@ -94,7 +95,9 @@
         font-size: 14px;
         font-weight: 600;
         cursor: pointer;
-        transition: transform 0.2s, box-shadow 0.2s;
+        transition:
+          transform 0.2s,
+          box-shadow 0.2s;
         width: 100%;
       }
 
@@ -229,7 +232,8 @@
 
       #httpLogContent {
         white-space: pre-wrap;
-        font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+        font-family:
+          SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
           "Courier New", monospace;
       }
     </style>
@@ -237,11 +241,12 @@
   <body>
     <div class="container">
       <h1>📤 Test Presigned URL Upload (GCS)</h1>
-      <p class="subtitle">FE gửi file trực tiếp lên Google Cloud Storage với signed URL</p>
+      <p class="subtitle">
+        FE gửi file trực tiếp lên Google Cloud Storage với signed URL
+      </p>
 
       <div class="info-box">
-        <strong>Quy trình Signed URL (FE gửi trực tiếp lên GCS):</strong
-        ><br />
+        <strong>Quy trình Signed URL (FE gửi trực tiếp lên GCS):</strong><br />
         1️⃣ FE xin signed URL từ BE (request-presigned-url)<br />
         2️⃣ BE trả về signed URL + required headers<br />
         3️⃣ FE PUT file trực tiếp đến GCS với signed URL<br />
@@ -250,7 +255,7 @@
         6️⃣ BE trả về file URL công khai<br />
         <br />
         <strong>Cấu trúc folder:</strong><br />
-        • Tất cả files của test: media/tests/test_{test_id}/
+        • Tất cả files của test: tests/test_{test_id}/
       </div>
 
       <form id="uploadForm">
@@ -505,7 +510,7 @@
                 method: "POST",
                 headers: presignedHeaders,
                 body: JSON.stringify(presignedRequest),
-              }
+              },
             );
 
             if (!presignedResponse.ok) {
@@ -517,7 +522,7 @@
               throw new Error(
                 `Request Presigned Error: ${
                   error.detail || presignedResponse.statusText
-                }`
+                }`,
               );
             }
 
@@ -528,7 +533,7 @@
             });
             addProgress(
               `✓ Nhận presigned URL: ${presignedData.url}`,
-              "success"
+              "success",
             );
 
             // Step 2: Upload file directly to GCS using signed URL (PUT request)
@@ -536,7 +541,9 @@
 
             // For GCS, we use PUT with the signed URL
             // The Content-Type header must match what was specified when generating the signed URL
-            const uploadHeaders = presignedData.fields || { "Content-Type": file.type };
+            const uploadHeaders = presignedData.fields || {
+              "Content-Type": file.type,
+            };
 
             appendHttpLog("Request: GCS Upload", {
               url: presignedData.url,
@@ -568,8 +575,8 @@
               });
               throw new Error(
                 `GCS Upload Failed: ${fetchError.message}. ` +
-                `Current origin: ${window.location.origin}. ` +
-                `If origin is 'null' or 'file://', serve this HTML from localhost:8000 instead.`
+                  `Current origin: ${window.location.origin}. ` +
+                  `If origin is 'null' or 'file://', serve this HTML from localhost:8000 instead.`,
               );
             }
 
@@ -582,7 +589,7 @@
                 body: uploadText,
               });
               throw new Error(
-                `GCS Upload Error (${uploadResponse.status}): ${uploadText}`
+                `GCS Upload Error (${uploadResponse.status}): ${uploadText}`,
               );
             }
 
@@ -602,7 +609,7 @@
             });
             addProgress(
               `✓ File upload lên GCS thành công (Status: ${uploadResponse.status}, ETag: ${etag})`,
-              "success"
+              "success",
             );
 
             // Step 3: Confirm upload with backend
@@ -633,7 +640,7 @@
                 method: "POST",
                 headers: confirmHeaders,
                 body: JSON.stringify(confirmRequest),
-              }
+              },
             );
 
             if (!confirmResponse.ok) {
@@ -643,7 +650,7 @@
                 body: error,
               });
               throw new Error(
-                `Confirm Error: ${error.detail || confirmResponse.statusText}`
+                `Confirm Error: ${error.detail || confirmResponse.statusText}`,
               );
             }
 
@@ -658,14 +665,14 @@
               presignedData.url + "/" + presignedData.key;
             addProgress(
               `🔗 File URL: <div class="url-link"><a href="${fileUrl}" target="_blank">${fileUrl}</a></div>`,
-              "success"
+              "success",
             );
 
             // Final Success
             setTimeout(() => {
               showProgress(
                 "🎉 Upload hoàn tất thành công! (FE→GCS signed URL flow)",
-                "success"
+                "success",
               );
             }, 100);
           } catch (error) {

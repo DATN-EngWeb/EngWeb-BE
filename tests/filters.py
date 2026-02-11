@@ -58,9 +58,20 @@ class TestFilter(django_filters.FilterSet):
         help_text="Filter by status (D, I, P, R)",
     )
 
+    year = django_filters.NumberFilter(
+        field_name="created_at__year",
+        help_text="Filter by year created (e.g., 2024, 2025, 2026)",
+    )
+
+    teacher_name = django_filters.CharFilter(
+        field_name="created_by__user__full_name",
+        lookup_expr="icontains",
+        help_text="Filter by teacher's full name (case-insensitive partial match)",
+    )
+
     class Meta:
         model = Test
-        fields = ["type", "level", "skill", "status"]
+        fields = ["type", "level", "skill", "status", "year", "teacher_name"]
 
 
 class WritingCriteriaTemplateFilter(django_filters.FilterSet):

@@ -188,10 +188,10 @@ class S3PresignedURLManager:
 
         Returns:
             S3 key:
-            - avatars: media/users/avatars/user_id/unique_filename
-            - covers: media/users/covers/user_id/unique_filename
-            - credentials: media/teachers/credentials/user_id/unique_filename
-            - tests: media/tests/test_id/part{part}/unique_filename
+            - avatars: users/avatars/user_id/unique_filename
+            - covers: users/covers/user_id/unique_filename
+            - credentials: teachers/credentials/user_id/unique_filename
+            - tests: tests/test_id/part{part}/unique_filename
         """
         import uuid
         import os
@@ -203,16 +203,16 @@ class S3PresignedURLManager:
         if category == "tests":
             if test_id is None or part is None:
                 raise ValueError("test_id and part are required for tests category")
-            return f"media/tests/{test_id}/part{part}/{unique_filename}"
+            return f"tests/{test_id}/part{part}/{unique_filename}"
         elif category == "avatars":
             # avatars category: use users/avatars path
-            return f"media/users/avatars/{user_id}/{unique_filename}"
+            return f"users/avatars/{user_id}/{unique_filename}"
         elif category == "covers":
             # covers category: use users/covers path
-            return f"media/users/covers/{user_id}/{unique_filename}"
+            return f"users/covers/{user_id}/{unique_filename}"
         elif category == "credentials":
             # credentials category: use teachers/credentials path
-            return f"media/teachers/credentials/{user_id}/{unique_filename}"
+            return f"teachers/credentials/{user_id}/{unique_filename}"
         else:
             # other categories (if any in the future)
-            return f"media/{category}/{user_id}/{unique_filename}"
+            return f"{category}/{user_id}/{unique_filename}"

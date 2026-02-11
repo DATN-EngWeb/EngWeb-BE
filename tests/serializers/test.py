@@ -90,13 +90,6 @@ class TestSerializer(serializers.ModelSerializer):
         if obj.type == "P":  # Productive test
             try:
                 productive_test = obj.productive_test
-                # Check if student has any submission
-                has_submission = ProductiveTestHistory.objects.filter(
-                    student=student, productive_test=productive_test, type="S"
-                ).exists()
-
-                if has_submission:
-                    return "completed"
 
                 # Check if student has any draft
                 has_draft = ProductiveTestHistory.objects.filter(
@@ -105,6 +98,13 @@ class TestSerializer(serializers.ModelSerializer):
 
                 if has_draft:
                     return "draft"
+                # Check if student has any submission
+                has_submission = ProductiveTestHistory.objects.filter(
+                    student=student, productive_test=productive_test, type="S"
+                ).exists()
+
+                if has_submission:
+                    return "completed"
 
                 return "none"
             except:

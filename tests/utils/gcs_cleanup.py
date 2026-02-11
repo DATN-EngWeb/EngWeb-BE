@@ -15,10 +15,10 @@ def extract_key_from_url(url: str) -> str:
     Extract GCS object key from full URL
 
     Args:
-        url: Full GCS URL (e.g., https://storage.googleapis.com/bucket-name/media/tests/1/part1/file.png)
+        url: Full GCS URL (e.g., https://storage.googleapis.com/bucket-name/tests/test_1/file.png)
 
     Returns:
-        GCS key (e.g., media/tests/1/part1/file.png)
+        GCS key (e.g., tests/test_1/file.png)
     """
     if not url:
         return ""
