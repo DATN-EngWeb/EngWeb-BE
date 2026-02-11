@@ -61,7 +61,7 @@ class ProductiveTestCreateView(generics.CreateAPIView):
             '  "data": {\n'
             '    "format": "E",\n'
             '    "topic": "Describe a memorable trip",\n'
-            '    "description": "https://example.com/media/tests/1/content.html",\n'
+            '    "description": "https://example.com/tests/1/content.html",\n'
             '    "min_word": 150,\n'
             '    "glue_text": "Instructions for the test...",\n'
             '    "glue_resources": {\n'
@@ -103,7 +103,7 @@ class ProductiveTestCreateView(generics.CreateAPIView):
                     "data": {
                         "format": "E",
                         "topic": "Describe a memorable trip you have taken.",
-                        "description": "https://example.com/media/tests/1/content.html",
+                        "description": "https://example.com/tests/1/content.html",
                         "min_word": 150,
                         "glue_text": (
                             "You should write at least 150 words. "
@@ -127,7 +127,7 @@ class ProductiveTestCreateView(generics.CreateAPIView):
                     "data": {
                         "format": "G",
                         "topic": "Tell a story about a challenging experience.",
-                        "description": "https://example.com/media/tests/2/content.html",
+                        "description": "https://example.com/tests/2/content.html",
                         "min_word": 0,
                         "glue_text": (
                             "You have 2 minutes to prepare and 3 minutes to speak. "

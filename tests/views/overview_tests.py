@@ -62,15 +62,17 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         """
         Override to handle 'mine' filter parameter and status filtering.
-        If mine=true, filter tests by current teacher.
-        Raises PermissionDenied if non-teacher uses mine=true.
+        - mine=true: Filter tests created by current teacher
+        - mine=false: Filter tests NOT created by current teacher
+        - mine not provided: Show all tests
+        Raises PermissionDenied if non-teacher uses mine parameter.
         For non-admin users, exclude tests with status='R' (Removed).
         Raises PermissionDenied if non-admin tries to filter by status='R'.
         """
         queryset = super().get_queryset()
         mine = self.request.query_params.get("mine", "").lower()
 
-        if mine == "true":
+        if mine in ["true", "false"]:
             # Check if user is authenticated
             if not self.request.user.is_authenticated:
                 raise PermissionDenied(
@@ -80,10 +82,13 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             # Check if user is a teacher
             try:
                 teacher = Teacher.objects.get(user=self.request.user)
-                queryset = queryset.filter(created_by=teacher)
+                if mine == "true":
+                    queryset = queryset.filter(created_by=teacher)
+                else:  # mine == "false"
+                    queryset = queryset.exclude(created_by=teacher)
             except Teacher.DoesNotExist:
                 raise PermissionDenied(
-                    detail="Only teachers can use 'mine' parameter to filter their own tests."
+                    detail="Only teachers can use 'mine' parameter to filter tests."
                 )
 
         # Filter out removed tests for non-admin users
@@ -136,7 +141,12 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "- `level`: Cấp độ (A1, A2, B1, B2)\n"
             "- `skill`: Kỹ năng - R (Reading), L (Listening), S (Speaking), W (Writing)\n"
             "- `status`: Trạng thái - D (Draft), I (In Review), P (Published), R (Removed)\n"
-            "- `mine`: Lọc bài kiểm tra của giáo viên hiện tại (true/false) - **Yêu cầu đăng nhập và là giáo viên**\n"
+            "- `year`: Lọc theo năm tạo (VD: 2024, 2025, 2026)\n"
+            "- `teacher_name`: Lọc theo tên giáo viên (tìm kiếm không phân biệt hoa thường)\n"
+            "- `mine`: Lọc bài kiểm tra theo giáo viên hiện tại - **Yêu cầu đăng nhập và là giáo viên**\n"
+            "  - `true`: Lấy các bài test của chính mình\n"
+            "  - `false`: Lấy các bài test không phải của mình\n"
+            "  - Không truyền: Lấy tất cả bài test\n"
             "- `progress_status`: Hiển thị trạng thái hoàn thành của student (true/false) - **Chỉ áp dụng cho student đã đăng nhập**\n"
             "- `page`: Số trang (mặc định: 1)\n"
             "- `page_size`: Số phần tử mỗi trang (mặc định: 10, tối đa: 100)\n\n"
@@ -149,7 +159,10 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "  - `title` - Tên (A-Z)\n"
             "  - `-title` - Tên (Z-A)\n\n"
             "**Lưu ý về tham số `mine`:**\n"
-            "- Chỉ giáo viên đã đăng nhập mới được sử dụng `mine=true`\n"
+            "- Chỉ giáo viên đã đăng nhập mới được sử dụng tham số `mine` (true hoặc false)\n"
+            "- `mine=true`: Lấy các bài test do chính giáo viên hiện tại tạo\n"
+            "- `mine=false`: Lấy các bài test do giáo viên khác tạo (không phải của mình)\n"
+            "- Không truyền `mine`: Lấy tất cả bài test\n"
             "- Nếu chưa đăng nhập → 403 Forbidden\n"
             "- Nếu không phải giáo viên → 403 Forbidden\n\n"
             "**Lưu ý về tham số `progress_status`:**\n"
@@ -165,10 +178,14 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "- `/api/tests/?type=P&level=B1` - Lấy bài Productive Test cấp B1\n"
             "- `/api/tests/?level=B1&skill=R` - Lấy bài Reading cấp B1\n"
             "- `/api/tests/?status=P&page=2&page_size=20` - Trang 2, 20 bài/trang, chỉ Published\n"
+            "- `/api/tests/?year=2026` - Lấy tất cả bài test được tạo năm 2026\n"
+            "- `/api/tests/?teacher_name=Nguyen` - Lấy bài test của giáo viên có tên chứa 'Nguyen'\n"
             "- `/api/tests/?ordering=title` - Sắp xếp theo tên A-Z\n"
             "- `/api/tests/?ordering=-created_at&skill=R` - Bài Reading, mới nhất trước\n"
             "- `/api/tests/?mine=true` - Lấy tất cả bài kiểm tra của giáo viên hiện tại\n"
+            "- `/api/tests/?mine=false` - Lấy tất cả bài kiểm tra của giáo viên khác (không phải của mình)\n"
             "- `/api/tests/?mine=true&status=D` - Lấy bài Draft của giáo viên hiện tại\n"
+            "- `/api/tests/?year=2026&teacher_name=Vu` - Lấy bài test năm 2026 của giáo viên tên 'Vu'\n"
             "- `/api/tests/?progress_status=true` - Lấy danh sách bài test kèm trạng thái hoàn thành của student\n"
             "- `/api/tests/?progress_status=true&level=B1` - Lấy bài test cấp B1 kèm trạng thái hoàn thành"
         ),
@@ -199,9 +216,22 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                 type=str,
             ),
             OpenApiParameter(
+                name="year",
+                description="Lọc theo năm tạo (VD: 2024, 2025, 2026)",
+                required=False,
+                type=int,
+            ),
+            OpenApiParameter(
+                name="teacher_name",
+                description="Lọc theo tên giáo viên (tìm kiếm không phân biệt hoa thường, có thể tìm một phần tên)",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
                 name="mine",
                 description=(
-                    "Lọc bài kiểm tra của giáo viên hiện tại (true/false). "
+                    "Lọc bài kiểm tra theo giáo viên hiện tại (true/false). "
+                    "true: Lấy bài test của mình, false: Lấy bài test không phải của mình, không truyền: Lấy tất cả. "
                     "Yêu cầu: Phải đăng nhập và là giáo viên. "
                     "Nếu không thỏa điều kiện sẽ trả về 403."
                 ),

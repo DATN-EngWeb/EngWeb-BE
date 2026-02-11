@@ -109,7 +109,7 @@ class AdminListUserAPIView(generics.ListAPIView):
                             "file_storage_uuid": "8166784b-2c0a-4430-982a-0d13125b8cdb",
                             "full_name": "Nguyễn Hoàng Vũ",
                             "date_of_birth": "2004-09-03",
-                            "cover": "/media/users/covers/default-cover.jpg",
+                            "cover": "/users/covers/default-cover.jpg",
                             "status": "W",
                             "role": "T",
                             "updated_at": "2026-01-24T14:38:49.292474+07:00",

@@ -6,7 +6,7 @@
           "order": 10,
           "format": "F",
           "description": "part1",
-          "content": "https://example.com/media/tests/1/part1/content.html",
+          "content": "https://example.com/tests/1/part1/content.html",
           "questions": [
             {
               "question_number": 10,
@@ -14,7 +14,7 @@
               "explanation": "Explanation for the correct answer",
               "score": 10,
               "resources": {
-                "image": "https://example.com/media/tests/1/part1/image1.png"
+                "image": "https://example.com/tests/1/part1/image1.png"
               },
               "answers": [
                 {
@@ -37,7 +37,7 @@
               "explanation": "Explanation for the correct answer",
               "score": 10,
               "resources": {
-                "image": "https://example.com/media/tests/1/part1/image1.png"
+                "image": "https://example.com/tests/1/part1/image1.png"
               },
               "answers": [
                 {
@@ -60,7 +60,7 @@
           "order": 20,
           "format": "F",
           "description": "part2",
-          "content": "https://example.com/media/tests/1/part2/content.html",
+          "content": "https://example.com/tests/1/part2/content.html",
           "questions": [
             {
               "question_number": 20,
@@ -68,7 +68,7 @@
               "explanation": "Explanation for the correct answer",
               "score": 10,
               "resources": {
-                "image": "https://example.com/media/tests/1/part2/image2.png"
+                "image": "https://example.com/tests/1/part2/image2.png"
               },
               "answers": [
                 {
@@ -76,7 +76,7 @@
                   "answer_text": "Option A",
                   "is_correct": true,
                   "resources": {
-                    "image": "https://example.com/media/tests/1/part2/answerA_image.png"
+                    "image": "https://example.com/tests/1/part2/answerA_image.png"
                   }
                 },
                 {
@@ -112,7 +112,7 @@
           "order": 1,
           "format": "F",
           "description": "part1",
-          "content": "https://example.com/media/tests/1/part1/content.html",
+          "content": "https://example.com/tests/1/part1/content.html",
           "resources": {},
           "receptive_questions": [
             {
@@ -123,7 +123,7 @@
               "explanation": "Explanation for the correct answerrrrrrrrrrrr",
               "score": 10,
               "resources": {
-                "image": "https://example.com/media/tests/1/part1/image1.png"
+                "image": "https://example.com/tests/1/part1/image1.png"
               },
               "receptive_answers": [
                 {
@@ -180,7 +180,7 @@
               "explanation": "Explanation for the correct answerrrrrrrrrrrr",
               "score": 10,
               "resources": {
-                "image": "https://example.com/media/tests/1/part1/image1.png"
+                "image": "https://example.com/tests/1/part1/image1.png"
               },
               "receptive_answers": [
                 {
@@ -205,7 +205,7 @@
           "order": 1,
           "format": "F",
           "description": "part1",
-          "content": "https://example.com/media/tests/1/part1/content.html",
+          "content": "https://example.com/tests/1/part1/content.html",
           "resources": {},
           "receptive_questions": [
             {
@@ -215,7 +215,7 @@
               "explanation": "Explanation for the correct answerrrrrrrrrrrr",
               "score": 10,
               "resources": {
-                "image": "https://example.com/media/tests/1/part1/image1.png"
+                "image": "https://example.com/tests/1/part1/image1.png"
               },
               "receptive_answers": [
                 {
@@ -241,7 +241,7 @@
               "explanation": "Explanation for the correct answerrrrrrrrrrrr",
               "score": 10,
               "resources": {
-                "image": "https://example.com/media/tests/1/part1/image1.png"
+                "image": "https://example.com/tests/1/part1/image1.png"
               },
               "receptive_answers": [
                 {

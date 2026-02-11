@@ -73,7 +73,7 @@ class ConfirmUploadSerializer(serializers.Serializer):
 
     Example for avatars:
     {
-        "key": "media/users/avatars/user_123/uuid.jpg",
+        "key": "users/avatars/user_123/uuid.jpg",
         "file_size": 2048576,
         "mime_type": "image/jpeg",
         "etag": "abc123def456"
@@ -81,7 +81,7 @@ class ConfirmUploadSerializer(serializers.Serializer):
 
     Example for tests:
     {
-        "key": "media/tests/test_5/uuid.mp3",
+        "key": "tests/test_5/uuid.mp3",
         "file_size": 5242880,
         "mime_type": "audio/mpeg",
         "etag": "abc123def456"
@@ -108,7 +108,7 @@ class PresignedURLResponseSerializer(serializers.Serializer):
 
     Example:
     {
-        "key": "media/users/avatars/user_123/uuid.jpg",
+        "key": "users/avatars/user_123/uuid.jpg",
         "url": "http://minio:9000/englishapp",
         "fields": {
             "policy": "...",
@@ -134,7 +134,7 @@ class UploadConfirmationResponseSerializer(serializers.Serializer):
     {
         "success": true,
         "message": "File uploaded successfully",
-        "file_url": "http://minio:9000/englishapp/media/users/avatars/user_123/uuid.jpg"
+        "file_url": "http://minio:9000/englishapp/users/avatars/user_123/uuid.jpg"
     }
     """
 

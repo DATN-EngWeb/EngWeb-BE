@@ -53,7 +53,7 @@ class RequestPresignedURLView(generics.CreateAPIView):
             "- `credentials` - Chứng chỉ/bằng cấp giáo viên (PDF, JPEG, PNG)\n"
             "- `tests` - File kiểm tra (JPEG, PNG, MP4, MPEG)\n\n"
             "**Cấu trúc folder:**\n"
-            "- Tất cả files của test: media/tests/test_{test_id}/filename\n\n"
+            "- Tất cả files của test: tests/test_{test_id}/filename\n\n"
             "**Quy trình:**\n"
             "1. FE gửi yêu cầu với thông tin file\n"
             "2. BE trả về signed URL + headers cần thiết\n"

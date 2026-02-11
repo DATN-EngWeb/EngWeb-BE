@@ -194,7 +194,7 @@ class GCSPresignedURLManager:
         Delete all objects in a folder (with given prefix) from GCS
         
         Args:
-            prefix: Folder prefix (e.g., 'media/tests/1/part1/')
+            prefix: Folder prefix (e.g., 'tests/test_1/part1/')
         
         Returns:
             Tuple of (success_count, total_count)
@@ -236,10 +236,10 @@ class GCSPresignedURLManager:
 
         Returns:
             GCS key:
-            - avatars: media/users/avatars/user_id/unique_filename
-            - covers: media/users/covers/user_id/unique_filename
-            - credentials: media/teachers/credentials/user_id/unique_filename
-            - tests: media/tests/test_{test_id}/unique_filename (all test files in one folder)
+            - avatars: users/avatars/user_id/unique_filename
+            - covers: users/covers/user_id/unique_filename
+            - credentials: teachers/credentials/user_id/unique_filename
+            - tests: tests/test_{test_id}/unique_filename (all test files in one folder)
         """
         # Generate unique name to avoid collisions
         name, ext = os.path.splitext(filename)
@@ -248,16 +248,16 @@ class GCSPresignedURLManager:
         if category == "tests":
             if test_id is None:
                 raise ValueError("test_id is required for tests category")
-            return f"media/tests/test_{test_id}/{unique_filename}"
+            return f"tests/test_{test_id}/{unique_filename}"
         elif category == "avatars":
             # avatars category: use users/avatars path
-            return f"media/users/avatars/{user_id}/{unique_filename}"
+            return f"users/avatars/{user_id}/{unique_filename}"
         elif category == "covers":
             # covers category: use users/covers path
-            return f"media/users/covers/{user_id}/{unique_filename}"
+            return f"users/covers/{user_id}/{unique_filename}"
         elif category == "credentials":
             # credentials category: use teachers/credentials path
-            return f"media/teachers/credentials/{user_id}/{unique_filename}"
+            return f"teachers/credentials/{user_id}/{unique_filename}"
         else:
             # other categories (if any in the future)
-            return f"media/{category}/{user_id}/{unique_filename}"
+            return f"{category}/{user_id}/{unique_filename}"

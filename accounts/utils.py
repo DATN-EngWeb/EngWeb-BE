@@ -17,11 +17,13 @@ import requests
 import json
 import time
 
+
 def create_otp_code():
     digits = "0123456789"
     otp = "".join(random.choice(digits) for i in range(6))
 
     return otp
+
 
 def cache_register_otp(user_id, otp_code, email):
     cache_key = f"register_{user_id}"
@@ -33,6 +35,7 @@ def cache_register_otp(user_id, otp_code, email):
 
     cache.set(cache_key, json.dumps(cache_data), timeout=300)
 
+
 def get_logo_bytes():
     logo_path = os.path.join(settings.BASE_DIR, "static", "logo.png")
 
@@ -41,6 +44,7 @@ def get_logo_bytes():
             return logo_file.read()
     except FileNotFoundError:
         return None
+
 
 def send_registration_otp_email(email, otp_code):
     logo_data = get_logo_bytes()
@@ -170,10 +174,7 @@ def send_registration_otp_email(email, otp_code):
     """
     from_email = settings.EMAIL_HOST_USER
     email_message = EmailMessage(
-        subject=subject, 
-        body=html_body, 
-        from_email=from_email, 
-        to=[email]
+        subject=subject, body=html_body, from_email=from_email, to=[email]
     )
     email_message.content_subtype = "html"
 
@@ -184,6 +185,7 @@ def send_registration_otp_email(email, otp_code):
         email_message.attach(image)
 
     email_message.send(fail_silently=False)
+
 
 def verify_registration_otp(user_id, otp_code):
     if not user_id or not otp_code:
@@ -202,22 +204,28 @@ def verify_registration_otp(user_id, otp_code):
 
     return cache_data
 
+
 def delete_registration_otp_cache(user_id):
     cache_key = f"register_{user_id}"
     cache.delete(cache_key)
+
 
 def resend_registration_otp_email(user_id):
     cache_key = f"register_{user_id}"
     cache_data = cache.get(cache_key)
 
     if not cache_data:
-        raise ValueError("Account does not exist or the verification process has expired (over 5 minutes).")
+        raise ValueError(
+            "Account does not exist or the verification process has expired (over 5 minutes)."
+        )
 
     cache_data = json.loads(cache_data)
     last_sent = timezone.datetime.fromisoformat(cache_data["last_sent"])
 
     if timezone.now() - last_sent < timedelta(minutes=1):
-        raise ValueError("Please wait at least 1 minute before requesting a new OTP code.")
+        raise ValueError(
+            "Please wait at least 1 minute before requesting a new OTP code."
+        )
 
     new_otp_code = create_otp_code()
     email = cache_data["email"]
@@ -227,6 +235,7 @@ def resend_registration_otp_email(user_id):
     cache.set(cache_key, json.dumps(cache_data), timeout=300)
     send_registration_otp_email(email, new_otp_code)
 
+
 def get_or_create_file_storage_uuid(user):
     """Folder name with uuid for user's file storage."""
     if not user.file_storage_uuid:
@@ -234,6 +243,7 @@ def get_or_create_file_storage_uuid(user):
         user.save(update_fields=["file_storage_uuid"])
 
     return user.file_storage_uuid
+
 
 def validate_file_signature(file_obj_or_bytes):
     """Validate file signature (magic numbers) to determine file type."""
@@ -257,6 +267,7 @@ def validate_file_signature(file_obj_or_bytes):
         return "png"
 
     return None
+
 
 def process_credential_files_upload(request_files, user):
     """Process credential files upload and return list of credential data."""
@@ -285,12 +296,16 @@ def process_credential_files_upload(request_files, user):
         valid_content_types = ["application/pdf", "image/jpeg", "image/png"]
 
         if file_obj.content_type not in valid_content_types:
-            raise ValueError(f"Credential file '{file_obj.name}' has invalid content type: {file_obj.content_type}")
+            raise ValueError(
+                f"Credential file '{file_obj.name}' has invalid content type: {file_obj.content_type}"
+            )
 
         file_type = validate_file_signature(file_obj)
-        
+
         if file_type not in ["pdf", "jpeg", "png"]:
-            raise ValueError(f"Credential file '{file_obj.name}' has invalid file signature")
+            raise ValueError(
+                f"Credential file '{file_obj.name}' has invalid file signature"
+            )
 
         extension_map = {"pdf": ".pdf", "jpeg": ".jpg", "png": ".png"}
         file_extension = extension_map[file_type]
@@ -310,6 +325,7 @@ def process_credential_files_upload(request_files, user):
         )
 
     return credentials_data
+
 
 def download_and_save_avatar(avatar_url, user):
     try:
@@ -340,6 +356,7 @@ def download_and_save_avatar(avatar_url, user):
     except Exception:
         return None
 
+
 def generate_unique_username(base_username):
     if not User.objects.filter(username=base_username).exists():
         return base_username
@@ -357,11 +374,13 @@ def generate_unique_username(base_username):
 
     return new_username
 
+
 def cache_forgot_password_otp(username, otp_code):
     cache_key = f"forgot_password_{username}"
     cache_data = {"otp_code": otp_code, "last_sent": timezone.now().isoformat()}
 
     cache.set(cache_key, json.dumps(cache_data), timeout=300)
+
 
 def send_forgot_password_otp_email(username, email, otp_code):
     logo_data = get_logo_bytes()
@@ -486,6 +505,7 @@ def send_forgot_password_otp_email(username, email, otp_code):
 
     email_message.send(fail_silently=False)
 
+
 def verify_forgot_password_otp(username, otp_code):
     if not username or not otp_code:
         raise ValueError("Username and OTP code are required.")
@@ -503,9 +523,11 @@ def verify_forgot_password_otp(username, otp_code):
 
     return cache_data
 
+
 def delete_forgot_password_otp_cache(username):
     cache_key = f"forgot_password_{username}"
     cache.delete(cache_key)
+
 
 def resend_forgot_password_otp_email(username):
     cache_key = f"forgot_password_{username}"
@@ -537,6 +559,7 @@ def resend_forgot_password_otp_email(username):
     except User.DoesNotExist:
         raise ValueError("User not found.")
 
+
 def get_absolute_media_url(media_field):
     if not media_field:
         return None
@@ -546,8 +569,8 @@ def get_absolute_media_url(media_field):
         if media_field.startswith("http"):
             return media_field
 
-        base = getattr(settings, "MEDIA_URL", "/media/") or "/media/"
-        
+        base = getattr(settings, "MEDIA_URL", "")
+
         if not base.endswith("/"):
             base = f"{base}/"
 
@@ -559,15 +582,18 @@ def get_absolute_media_url(media_field):
     except Exception:
         return None
 
+
 def delete_user_storage_folder(user):
     if not user.file_storage_uuid:
         return
-    
+
     # Delete credentials from teacher profile if exists
     try:
         if user.role == "T":
             teacher = user.teacher
-            credentials = teacher.credentials if isinstance(teacher.credentials, list) else []
+            credentials = (
+                teacher.credentials if isinstance(teacher.credentials, list) else []
+            )
             for cred in credentials:
                 if isinstance(cred, dict) and cred.get("url"):
                     cred_url = cred.get("url")
@@ -577,14 +603,14 @@ def delete_user_storage_folder(user):
                         pass  # Ignore errors when deleting individual files
     except Exception:
         pass  # Teacher doesn't exist or not a teacher
-    
+
     # Delete avatar if not default
     if user.avatar and str(user.avatar) != "users/avatars/default-avatar.jpg":
         try:
             default_storage.delete(str(user.avatar))
         except Exception:
             pass
-    
+
     # Delete cover if not default
     if user.cover and str(user.cover) != "users/covers/default-cover.jpg":
         try:
