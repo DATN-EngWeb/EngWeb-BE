@@ -256,3 +256,58 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
+
+
+class ProductiveTestHistoryRetrieveView(generics.RetrieveAPIView):
+    """
+    Retrieve a single ProductiveTestHistory record by ID.
+    - Students can only retrieve their own history
+    - Admins can retrieve any history
+    """
+
+    serializer_class = ProductiveTestHistorySerializer
+    permission_classes = [IsOwnerOrAdmin]
+    lookup_field = "id"
+    lookup_url_kwarg = "history_id"
+
+    def get_queryset(self):
+        """Filter queryset based on user role"""
+        user = self.request.user
+
+        # Admin can see all
+        if user.role == "A":
+            return ProductiveTestHistory.objects.all()
+
+        # Student can only see their own
+        if user.role == "S" and hasattr(user, "student"):
+            return ProductiveTestHistory.objects.filter(student=user.student)
+
+        return ProductiveTestHistory.objects.none()
+
+    @extend_schema(
+        summary="Lấy chi tiết một bản ghi lịch sử làm bài",
+        description=(
+            "API cho phép xem chi tiết một bản ghi lịch sử làm bài Productive Test theo ID.\n\n"
+            "**Quyền truy cập:**\n"
+            "- **Học viên (Student)**: Chỉ xem được lịch sử của chính mình\n"
+            "- **Admin**: Xem được bất kỳ lịch sử nào\n\n"
+        ),
+        tags=["test-histories"],
+        responses={
+            200: OpenApiResponse(
+                description="Lấy chi tiết thành công",
+                response=ProductiveTestHistorySerializer,
+            ),
+            401: OpenApiResponse(
+                description="Chưa đăng nhập",
+            ),
+            403: OpenApiResponse(
+                description="Không có quyền truy cập (student cố gắng xem lịch sử của người khác)",
+            ),
+            404: OpenApiResponse(
+                description="Không tìm thấy bản ghi lịch sử với ID này",
+            ),
+        },
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)

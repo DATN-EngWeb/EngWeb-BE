@@ -3,12 +3,14 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.filters import OrderingFilter
 from rest_framework.exceptions import PermissionDenied
 import django_filters
+from django.db.models import Q, Exists, OuterRef
 
 from ..models import Test
 from ..serializers.test import TestSerializer
 from ..permissions import IsTeacher
 from ..filters import TestFilter
 from accounts.models import Teacher, Student
+from test_histories.models import ProductiveTestHistory
 
 from drf_spectacular.utils import (
     extend_schema,
@@ -91,6 +93,96 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                     detail="Only teachers can use 'mine' parameter to filter tests."
                 )
 
+        # Handle my_progress filter for students
+        my_progress = self.request.query_params.get("my_progress", "").lower()
+        if my_progress in ["completed", "draft", "none"]:
+            # Check if user is authenticated
+            if not self.request.user.is_authenticated:
+                raise PermissionDenied(
+                    detail="Authentication required to use 'my_progress' parameter."
+                )
+
+            # Check if user is a student
+            try:
+                student = Student.objects.get(user=self.request.user)
+
+                # Build Q objects for filtering tests by progress status
+                # Currently only Productive tests (type='P') have history tracking
+                # Receptive tests (type='R') will be added when ReceptiveTestHistory is implemented
+
+                if my_progress == "completed":
+                    # PRODUCTIVE TESTS: Tests with submission but NO draft (fully completed)
+                    productive_submission_exists = ProductiveTestHistory.objects.filter(
+                        student=student, productive_test__test=OuterRef("pk"), type="S"
+                    )
+                    productive_draft_exists = ProductiveTestHistory.objects.filter(
+                        student=student, productive_test__test=OuterRef("pk"), type="D"
+                    )
+                    productive_completed = Q(Exists(productive_submission_exists)) & ~Q(
+                        Exists(productive_draft_exists)
+                    )
+
+                    # TODO: RECEPTIVE TESTS - Add when ReceptiveTestHistory is available
+                    # receptive_submission_exists = ReceptiveTestHistory.objects.filter(
+                    #     student=student,
+                    #     receptive_test__test=OuterRef('pk'),
+                    #     type='S'  # or appropriate completion type
+                    # )
+                    # receptive_draft_exists = ReceptiveTestHistory.objects.filter(
+                    #     student=student,
+                    #     receptive_test__test=OuterRef('pk'),
+                    #     type='D'  # or appropriate draft type
+                    # )
+                    # receptive_completed = Q(Exists(receptive_submission_exists)) & ~Q(Exists(receptive_draft_exists))
+
+                    # Combine filters - returns both Productive and Receptive tests that match
+                    queryset = queryset.filter(productive_completed)
+                    # queryset = queryset.filter(productive_completed | receptive_completed)  # Enable when ready
+
+                elif my_progress == "draft":
+                    # PRODUCTIVE TESTS: Tests with draft (regardless of submission status)
+                    # If draft exists, it means student is still working on it
+                    productive_draft_exists = ProductiveTestHistory.objects.filter(
+                        student=student, productive_test__test=OuterRef("pk"), type="D"
+                    )
+                    productive_draft = Q(Exists(productive_draft_exists))
+
+                    # TODO: RECEPTIVE TESTS - Add when ReceptiveTestHistory is available
+                    # receptive_draft_exists = ReceptiveTestHistory.objects.filter(
+                    #     student=student,
+                    #     receptive_test__test=OuterRef('pk'),
+                    #     type='D'  # or appropriate draft type
+                    # )
+                    # receptive_draft = Q(Exists(receptive_draft_exists))
+
+                    # Combine filters - returns both Productive and Receptive tests that match
+                    queryset = queryset.filter(productive_draft)
+                    # queryset = queryset.filter(productive_draft | receptive_draft)  # Enable when ready
+
+                else:  # my_progress == "none"
+                    # PRODUCTIVE TESTS: Tests with no history at all
+                    productive_history_exists = ProductiveTestHistory.objects.filter(
+                        student=student, productive_test__test=OuterRef("pk")
+                    )
+                    productive_no_history = ~Q(Exists(productive_history_exists))
+
+                    # TODO: RECEPTIVE TESTS - Add when ReceptiveTestHistory is available
+                    # receptive_history_exists = ReceptiveTestHistory.objects.filter(
+                    #     student=student,
+                    #     receptive_test__test=OuterRef('pk')
+                    # )
+                    # receptive_no_history = ~Q(Exists(receptive_history_exists))
+
+                    # Combine filters - returns both Productive and Receptive tests that match
+                    # Currently: Productive tests with no history + ALL Receptive tests (since they have no history model yet)
+                    queryset = queryset.filter(productive_no_history)
+                    # queryset = queryset.filter(productive_no_history | receptive_no_history)  # Enable when ready
+
+            except Student.DoesNotExist:
+                raise PermissionDenied(
+                    detail="Only students can use 'my_progress' parameter to filter tests."
+                )
+
         # Filter out removed tests for non-admin users
         if self.request.user.is_authenticated and not self.request.user.is_staff:
             queryset = queryset.exclude(status="R")
@@ -147,6 +239,10 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "  - `true`: Lấy các bài test của chính mình\n"
             "  - `false`: Lấy các bài test không phải của mình\n"
             "  - Không truyền: Lấy tất cả bài test\n"
+            "- `my_progress`: Lọc theo trạng thái làm bài của student - **Yêu cầu đăng nhập và là student**\n"
+            "  - `completed`: Các bài test đã submit và không còn nháp (hoàn thành)\n"
+            "  - `draft`: Các bài test đang có nháp (đang làm dở, dù có submit hay chưa)\n"
+            "  - `none`: Các bài test chưa làm\n"
             "- `progress_status`: Hiển thị trạng thái hoàn thành của student (true/false) - **Chỉ áp dụng cho student đã đăng nhập**\n"
             "- `page`: Số trang (mặc định: 1)\n"
             "- `page_size`: Số phần tử mỗi trang (mặc định: 10, tối đa: 100)\n\n"
@@ -165,6 +261,11 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "- Không truyền `mine`: Lấy tất cả bài test\n"
             "- Nếu chưa đăng nhập → 403 Forbidden\n"
             "- Nếu không phải giáo viên → 403 Forbidden\n\n"
+            "**Lưu ý về tham số `my_progress`:**\n"
+            "- Chỉ student đã đăng nhập mới được sử dụng tham số này\n"
+            "- `my_progress=completed`: Lấy các bài đã submit VÀ không còn nháp (hoàn toàn xong)\n"
+            "- `my_progress=draft`: Lấy các bài đang có nháp (ưu tiên draft - dù có submit hay chưa, nếu còn draft thì vẫn đang làm)\n"
+            "- `my_progress=none`: Lấy các bài chưa làm (không có lịch sử)\n\n"
             "**Lưu ý về tham số `progress_status`:**\n"
             "- Khi `progress_status=true`, API sẽ trả về thêm trường `progress_status` cho mỗi test\n"
             "- Chỉ áp dụng cho student đã đăng nhập\n"
@@ -185,6 +286,10 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "- `/api/tests/?mine=true` - Lấy tất cả bài kiểm tra của giáo viên hiện tại\n"
             "- `/api/tests/?mine=false` - Lấy tất cả bài kiểm tra của giáo viên khác (không phải của mình)\n"
             "- `/api/tests/?mine=true&status=D` - Lấy bài Draft của giáo viên hiện tại\n"
+            "- `/api/tests/?my_progress=completed` - (Student) Lấy các bài test đã hoàn thành (có submission, không còn draft)\n"
+            "- `/api/tests/?my_progress=draft` - (Student) Lấy các bài test đang có nháp (đang làm dở, ưu tiên draft)\n"
+            "- `/api/tests/?my_progress=none` - (Student) Lấy các bài test chưa làm\n"
+            "- `/api/tests/?my_progress=completed&level=B1` - (Student) Bài test B1 đã hoàn thành\n"
             "- `/api/tests/?year=2026&teacher_name=Vu` - Lấy bài test năm 2026 của giáo viên tên 'Vu'\n"
             "- `/api/tests/?progress_status=true` - Lấy danh sách bài test kèm trạng thái hoàn thành của student\n"
             "- `/api/tests/?progress_status=true&level=B1` - Lấy bài test cấp B1 kèm trạng thái hoàn thành"
@@ -239,6 +344,16 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                 type=bool,
             ),
             OpenApiParameter(
+                name="my_progress",
+                description=(
+                    "Lọc theo trạng thái làm bài của student (completed/draft/none). "
+                    "completed: Đã submit và không còn nháp, draft: Đang có nháp (ưu tiên), none: Chưa làm. "
+                    "Yêu cầu: Phải đăng nhập và là student. "
+                ),
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
                 name="progress_status",
                 description=(
                     "Hiển thị trạng thái hoàn thành của student (true/false). "
@@ -271,13 +386,13 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
         responses={
             200: TestSerializer(many=True),
             403: OpenApiResponse(
-                description="Forbidden - Using mine=true but not a teacher or not authenticated",
+                description="Forbidden - Using mine parameter but not a teacher, or using my_progress parameter but not a student, or not authenticated",
                 response={
                     "type": "object",
                     "properties": {
                         "detail": {
                             "type": "string",
-                            "example": "Only teachers can use 'mine' parameter to filter their own tests.",
+                            "example": "Only teachers can use 'mine' parameter to filter tests.",
                         },
                     },
                 },
