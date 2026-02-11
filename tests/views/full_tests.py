@@ -74,13 +74,14 @@ from tests.utils.gcs_cleanup import (
         "total_score và score của part không được phép patch vì được tính tự động.\n\n"
         "Sau khi cập nhật, sẽ renumber lại order và question_number.\n\n"
         "Chỉ admin hoặc chủ sở hữu mới có quyền thực hiện.\n\n"
-        "Chỉ cập nhật nếu type của đề là R."
+        "Chỉ cập nhật nếu type của đề là R.\n\n"
+        "**Lưu ý**: Không thể cập nhật test đã Published (status='P')."
     ),
     tags=["full-test"],
     request=ReceptiveTestFullUpdateSerializer,
     responses={
         200: ReceptiveTestRetrieveSerializer,
-        400: OpenApiResponse(description="Bad request"),
+        400: OpenApiResponse(description="Bad request - Test is already Published (status='P') or invalid data"),
         403: OpenApiResponse(
             description="Forbidden: Only admin or owner can update this test"
         ),
@@ -135,6 +136,13 @@ class ReceptiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
 
     def patch(self, request, *args, **kwargs):
         instance = self.get_object()
+        
+        # Prevent updating Published tests
+        if instance.status == "P":
+            raise serializers.ValidationError(
+                {"detail": "Cannot update a Published test. Test status is 'P' (Published)."}
+            )
+        
         serializer = ReceptiveTestFullUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         validated_data = serializer.validated_data
@@ -406,13 +414,14 @@ class ReceptiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
     description=(
         "API này cập nhật một đề Productive Test theo test_id.\n\n"
         "Chỉ admin hoặc chủ sở hữu mới có quyền cập nhật.\n\n"
-        "Chỉ cập nhật nếu type của đề là P."
+        "Chỉ cập nhật nếu type của đề là P.\n\n"
+        "**Lưu ý**: Không thể cập nhật test đã Published (status='P')."
     ),
     tags=["full-test"],
     request=ProductiveTestUpdateSerializer,
     responses={
         200: ProductiveTestRetrieveSerializer,
-        400: OpenApiResponse(description="Bad request"),
+        400: OpenApiResponse(description="Bad request - Test is already Published (status='P') or invalid data"),
         403: OpenApiResponse(
             description="Forbidden: Only admin or owner can update this test"
         ),
@@ -492,6 +501,13 @@ class ProductiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
 
     def patch(self, request, *args, **kwargs):
         instance = self.get_object()
+        
+        # Prevent updating Published tests
+        if instance.status == "P":
+            raise serializers.ValidationError(
+                {"detail": "Cannot update a Published test. Test status is 'P' (Published)."}
+            )
+        
         serializer = ProductiveTestUpdateSerializer(
             instance, data=request.data, partial=True
         )
