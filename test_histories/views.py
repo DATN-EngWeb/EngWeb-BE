@@ -12,10 +12,14 @@ from drf_spectacular.utils import (
 )
 from rest_framework import serializers as drf_serializers
 
-from .models import ProductiveTestHistory
-from .serializers import ProductiveTestHistorySerializer
+from .models import ProductiveTestHistory, ReceptiveTestHistory
+from .serializers import (
+    ProductiveTestHistorySerializer,
+    ReceptiveTestHistorySerializer,
+    ReceptiveTestHistoryDetailSerializer,
+)
 from .permissions import IsOwnerOrAdmin, IsStudent
-from .filters import ProductiveTestHistoryFilter
+from .filters import ProductiveTestHistoryFilter, ReceptiveTestHistoryFilter
 
 
 class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
@@ -130,6 +134,7 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
             "- **Admin**: Xem được toàn bộ lịch sử của tất cả học viên\n\n"
             "**Lọc dữ liệu:**\n"
             "- Có thể lọc theo `productive_test` (ID của bài test) thông qua query parameter\n"
+            "- Có thể lọc theo `type` (D=Draft, S=Submission) thông qua query parameter\n"
         ),
         tags=["test-histories"],
         parameters=[
@@ -139,6 +144,14 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 location=OpenApiParameter.QUERY,
                 description="Lọc theo ID của Productive Test (Writing/Speaking test)",
                 required=False,
+            ),
+            OpenApiParameter(
+                name="type",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description="Lọc theo loại (D=Draft, S=Submission)",
+                required=False,
+                enum=["D", "S"],
             ),
         ],
         responses={
@@ -297,6 +310,423 @@ class ProductiveTestHistoryRetrieveView(generics.RetrieveAPIView):
             200: OpenApiResponse(
                 description="Lấy chi tiết thành công",
                 response=ProductiveTestHistorySerializer,
+            ),
+            401: OpenApiResponse(
+                description="Chưa đăng nhập",
+            ),
+            403: OpenApiResponse(
+                description="Không có quyền truy cập (student cố gắng xem lịch sử của người khác)",
+            ),
+            404: OpenApiResponse(
+                description="Không tìm thấy bản ghi lịch sử với ID này",
+            ),
+        },
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
+    """
+    List and Create ReceptiveTestHistory records.
+    - Students can only see/create their own history
+    - Admins can see all histories
+    """
+
+    serializer_class = ReceptiveTestHistorySerializer
+    permission_classes = [IsOwnerOrAdmin]  # Default for GET
+    filter_backends = [django_filters.rest_framework.DjangoFilterBackend]
+    filterset_class = ReceptiveTestHistoryFilter
+
+    def get_permissions(self):
+        """Different permissions for GET and POST"""
+        if self.request.method == "POST":
+            return [IsStudent()]
+        return [IsOwnerOrAdmin()]
+
+    def get_serializer_class(self):
+        """Use different serializer for list vs create"""
+        if self.request.method == "GET":
+            return ReceptiveTestHistoryDetailSerializer
+        return ReceptiveTestHistorySerializer
+
+    def get_queryset(self):
+        """Filter queryset based on user role"""
+        user = self.request.user
+
+        # Admin can see all
+        if user.role == "A":
+            return (
+                ReceptiveTestHistory.objects.select_related(
+                    "student__user", "receptive_test__test"
+                )
+                .prefetch_related(
+                    "answer_histories__receptive_question",
+                    "answer_histories__receptive_answer",
+                )
+                .order_by("type", "-start_time")
+            )
+
+        # Student can only see their own
+        if user.role == "S" and hasattr(user, "student"):
+            return (
+                ReceptiveTestHistory.objects.filter(student=user.student)
+                .select_related("student__user", "receptive_test__test")
+                .prefetch_related(
+                    "answer_histories__receptive_question",
+                    "answer_histories__receptive_answer",
+                )
+                .order_by("type", "-start_time")
+            )
+
+        return ReceptiveTestHistory.objects.none()
+
+    def _save_and_return_response(self, request, instance=None):
+        """
+        Helper method to save receptive test history and return detailed response.
+
+        Args:
+            request: DRF request object
+            instance: Existing ReceptiveTestHistory instance (for update) or None (for create)
+
+        Returns:
+            Response with detailed history data
+        """
+        student = request.user.student
+        context = {"student": student, "request": request}
+
+        if instance:
+            # Update existing instance
+            serializer = self.get_serializer(
+                instance, data=request.data, partial=True, context=context
+            )
+            status_code = status.HTTP_200_OK
+        else:
+            # Create new instance
+            serializer = self.get_serializer(data=request.data, context=context)
+            status_code = status.HTTP_201_CREATED
+
+        serializer.is_valid(raise_exception=True)
+        history = serializer.save()
+
+        # Return detailed response
+        detail_serializer = ReceptiveTestHistoryDetailSerializer(history)
+        return Response(detail_serializer.data, status=status_code)
+
+    def create(self, request, *args, **kwargs):
+        """
+        Create or update ReceptiveTestHistory with upsert logic:
+        - Draft (D): Override existing draft if any, or create new
+        - Submission (S): Convert draft to submission if exists, or create new
+        """
+        student = request.user.student
+        receptive_test_id = request.data.get("receptive_test")
+        type_value = request.data.get("type", "D")
+
+        # Find existing draft for this student and test
+        existing_draft = ReceptiveTestHistory.objects.filter(
+            student=student, receptive_test_id=receptive_test_id, type="D"
+        ).first()
+
+        if type_value == "D":
+            # Draft workflow: Override existing draft or create new
+            return self._save_and_return_response(request, instance=existing_draft)
+
+        elif type_value == "S":
+            # Submission workflow: Convert draft or create new
+            return self._save_and_return_response(request, instance=existing_draft)
+
+        return Response(
+            {"type": "Invalid type. Must be 'D' or 'S'."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    @extend_schema(
+        summary="Lấy danh sách lịch sử làm bài Receptive Test",
+        description=(
+            "API cho phép xem danh sách lịch sử làm bài Receptive Test (Reading/Listening).\n\n"
+            "**Quyền truy cập:**\n"
+            "- **Học viên (Student)**: Chỉ xem được lịch sử của chính mình\n"
+            "- **Admin**: Xem được toàn bộ lịch sử của tất cả học viên\n\n"
+            "**Lọc dữ liệu:**\n"
+            "- `receptive_test`: Lọc theo ID của Receptive Test\n"
+            "- `type`: Lọc theo loại (D=Draft, S=Submission)\n\n"
+            "**Response bao gồm:**\n"
+            "- Thông tin test history (attempt, times, scores)\n"
+            "- Chi tiết tất cả câu trả lời (answer_histories)\n"
+            "- Thông tin đúng/sai cho từng câu"
+        ),
+        tags=["test-histories"],
+        parameters=[
+            OpenApiParameter(
+                name="receptive_test",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                description="Lọc theo ID của Receptive Test (Reading/Listening test)",
+                required=False,
+            ),
+            OpenApiParameter(
+                name="type",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description="Lọc theo loại (D=Draft, S=Submission)",
+                required=False,
+                enum=["D", "S"],
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(
+                description="Danh sách lịch sử thành công",
+                response=ReceptiveTestHistoryDetailSerializer(many=True),
+            ),
+            401: OpenApiResponse(
+                description="Chưa đăng nhập",
+            ),
+            403: OpenApiResponse(
+                description="Không có quyền truy cập",
+            ),
+        },
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Tạo hoặc cập nhật bài làm Receptive Test (Draft/Submission)",
+        description=(
+            "API cho phép tạo hoặc cập nhật bản ghi lịch sử làm bài Receptive Test với tất cả câu trả lời.\n\n"
+            "**Quyền truy cập:**\n"
+            "- **Chỉ học viên (Student)** mới có thể tạo/cập nhật\n"
+            "- Admin không được phép tạo\n\n"
+            "**Logic Draft (type='D'):**\n"
+            "- Nếu đã có draft: Override (cập nhật) draft đó với attempt=0\n"
+            "- Nếu chưa có draft: Tạo draft mới với attempt=0\n"
+            "- Chỉ có 1 draft tại một thời điểm cho mỗi bài test\n"
+            "- Draft không tính vào lần làm bài chính thức\n\n"
+            "**Logic Submission (type='S'):**\n"
+            "- Nếu đã có draft: Chuyển draft đó thành submission (tính điểm, increment attempt)\n"
+            "- Nếu chưa có draft: Tạo submission mới với attempt tự động tăng\n"
+            "- Mỗi submission là 1 lần nộp bài hoàn chỉnh\n"
+            "- Backend tự động tính điểm dựa trên câu trả lời\n\n"
+            "**Format câu trả lời (answer_histories):**\n"
+            "- Multiple Choice (A,B,C,F,G,H): Gửi `receptive_answer` (ID của đáp án được chọn)\n"
+            "- Fill in Blanks (D,I): Gửi `user_answer_text` (text user nhập)\n"
+            "- Matching (E,J): Gửi `receptive_answer` (ID của answer mà user nối với question)\n\n"
+            "**Tính điểm tự động:**\n"
+            "- Backend tự động xác định format của từng câu hỏi\n"
+            "- So sánh câu trả lời với đáp án đúng\n"
+            "- Tính `total_score` và `is_correct` cho từng câu\n"
+            "- Tính `earned_bonus_point` (TODO: cần implement)\n\n"
+            "**Lưu ý:**\n"
+            "- `student` và `attempt` tự động được set\n"
+            "- `type` mặc định là 'D' (Draft) nếu không gửi\n"
+            "- `end_time` bắt buộc khi type='S' (Submission)\n"
+            "- `total_time` tự động tính từ start_time và end_time\n"
+            "- `total_score` tự động tính từ câu trả lời"
+        ),
+        tags=["test-histories"],
+        request=ReceptiveTestHistorySerializer,
+        examples=[
+            OpenApiExample(
+                "Tạo hoặc update Draft",
+                value={
+                    "receptive_test": 1,
+                    "type": "D",
+                    "start_time": "2026-02-25T10:00:00Z",
+                    "end_time": None,
+                    "answer_histories": [
+                        {
+                            "receptive_question": 1,
+                            "receptive_answer": 5,
+                        },
+                        {
+                            "receptive_question": 2,
+                            "user_answer_text": "Paris",
+                        },
+                        {
+                            "receptive_question": 3,
+                            "receptive_answer": 12,
+                        },
+                    ],
+                },
+                description="Lưu draft - nếu đã có draft thì override, nếu chưa có thì tạo mới",
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Submit bài làm (chuyển Draft → Submission hoặc tạo mới)",
+                value={
+                    "receptive_test": 1,
+                    "type": "S",
+                    "start_time": "2026-02-25T10:00:00Z",
+                    "end_time": "2026-02-25T10:45:00Z",
+                    "answer_histories": [
+                        {
+                            "receptive_question": 1,
+                            "receptive_answer": 5,
+                        },
+                        {
+                            "receptive_question": 2,
+                            "user_answer_text": "Paris",
+                        },
+                        {
+                            "receptive_question": 3,
+                            "receptive_answer": 12,
+                        },
+                    ],
+                },
+                description=(
+                    "Submit bài làm - Backend tự động:\n"
+                    "1. Tính điểm cho từng câu\n"
+                    "2. Tính tổng điểm\n"
+                    "3. Xác định câu nào đúng/sai\n"
+                    "4. Tăng attempt number nếu là submission mới"
+                ),
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Multiple Choice Question",
+                value={
+                    "receptive_question": 1,
+                    "receptive_answer": 5,
+                },
+                description="Câu hỏi Multiple Choice - gửi ID của answer được chọn",
+            ),
+            OpenApiExample(
+                "Fill in Blanks Question",
+                value={
+                    "receptive_question": 2,
+                    "user_answer_text": "Paris",
+                },
+                description="Câu hỏi Fill in the Blanks - gửi text user nhập vào",
+            ),
+            OpenApiExample(
+                "Matching Question",
+                value={
+                    "receptive_question": 3,
+                    "receptive_answer": 12,
+                },
+                description="Câu hỏi Matching - gửi ID của answer mà user nối với question này",
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(
+                description=(
+                    "Cập nhật thành công (override existing draft hoặc convert draft → submission)\n\n"
+                    "Response bao gồm:\n"
+                    "- Thông tin test history (id, attempt, times, scores)\n"
+                    "- Chi tiết tất cả câu trả lời với kết quả đúng/sai"
+                ),
+                response=ReceptiveTestHistoryDetailSerializer,
+            ),
+            201: OpenApiResponse(
+                description=(
+                    "Tạo mới thành công (draft mới hoặc submission mới)\n\n"
+                    "Response bao gồm:\n"
+                    "- Thông tin test history (id, attempt, times, scores)\n"
+                    "- Chi tiết tất cả câu trả lời với kết quả đúng/sai"
+                ),
+                response=ReceptiveTestHistoryDetailSerializer,
+            ),
+            400: OpenApiResponse(
+                description=(
+                    "Dữ liệu không hợp lệ:\n"
+                    "- Submission không có end_time\n"
+                    "- Type không hợp lệ\n"
+                    "- answer_histories không có receptive_answer hoặc user_answer_text\n"
+                    "- Question không tồn tại"
+                ),
+                response=inline_serializer(
+                    name="CreateReceptiveHistoryError",
+                    fields={
+                        "receptive_test": drf_serializers.ListField(
+                            child=drf_serializers.CharField()
+                        ),
+                        "type": drf_serializers.ListField(
+                            child=drf_serializers.CharField()
+                        ),
+                        "start_time": drf_serializers.ListField(
+                            child=drf_serializers.CharField()
+                        ),
+                        "end_time": drf_serializers.ListField(
+                            child=drf_serializers.CharField()
+                        ),
+                        "answer_histories": drf_serializers.ListField(
+                            child=drf_serializers.CharField()
+                        ),
+                        "non_field_errors": drf_serializers.ListField(
+                            child=drf_serializers.CharField()
+                        ),
+                    },
+                ),
+            ),
+            401: OpenApiResponse(
+                description="Chưa đăng nhập",
+            ),
+            403: OpenApiResponse(
+                description="Không có quyền truy cập (Admin không được phép tạo)",
+            ),
+        },
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
+
+class ReceptiveTestHistoryRetrieveView(generics.RetrieveAPIView):
+    """
+    Retrieve a single ReceptiveTestHistory record by ID.
+    - Students can only retrieve their own history
+    - Admins can retrieve any history
+    """
+
+    serializer_class = ReceptiveTestHistoryDetailSerializer
+    permission_classes = [IsOwnerOrAdmin]
+    lookup_field = "id"
+    lookup_url_kwarg = "history_id"
+
+    def get_queryset(self):
+        """Filter queryset based on user role"""
+        user = self.request.user
+
+        # Admin can see all
+        if user.role == "A":
+            return ReceptiveTestHistory.objects.select_related(
+                "student__user", "receptive_test__test"
+            ).prefetch_related(
+                "answer_histories__receptive_question",
+                "answer_histories__receptive_answer",
+            )
+
+        # Student can only see their own
+        if user.role == "S" and hasattr(user, "student"):
+            return (
+                ReceptiveTestHistory.objects.filter(student=user.student)
+                .select_related("student__user", "receptive_test__test")
+                .prefetch_related(
+                    "answer_histories__receptive_question",
+                    "answer_histories__receptive_answer",
+                )
+            )
+
+        return ReceptiveTestHistory.objects.none()
+
+    @extend_schema(
+        summary="Lấy chi tiết một bản ghi lịch sử làm bài Receptive Test",
+        description=(
+            "API cho phép xem chi tiết một bản ghi lịch sử làm bài Receptive Test theo ID.\n\n"
+            "**Quyền truy cập:**\n"
+            "- **Học viên (Student)**: Chỉ xem được lịch sử của chính mình\n"
+            "- **Admin**: Xem được bất kỳ lịch sử nào\n\n"
+            "**Response bao gồm:**\n"
+            "- Thông tin test history (attempt, times, scores, bonus points)\n"
+            "- Chi tiết tất cả câu trả lời (answer_histories)\n"
+            "- Kết quả đúng/sai cho từng câu\n"
+            "- Điểm của từng câu\n"
+            "- Nội dung câu hỏi và câu trả lời"
+        ),
+        tags=["test-histories"],
+        responses={
+            200: OpenApiResponse(
+                description="Lấy chi tiết thành công",
+                response=ReceptiveTestHistoryDetailSerializer,
             ),
             401: OpenApiResponse(
                 description="Chưa đăng nhập",
