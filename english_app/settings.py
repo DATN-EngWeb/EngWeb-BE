@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "storages",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
+    "django_ratelimit",
     # custom apps
     "accounts",
     "tests",
@@ -184,6 +185,12 @@ OAUTH2_FACEBOOK_SCOPE = env("OAUTH2_FACEBOOK_SCOPE")
 # gcs
 GCS_PUBLIC_BASE_URL = env("GCS_PUBLIC_BASE_URL")
 GCS_PROJECT_ID = env("GCS_PROJECT_ID")
+
+# vertex ai
+VERTEX_AI_PROJECT_ID = env("VERTEX_AI_PROJECT_ID")
+VERTEX_AI_LOCATION = env("VERTEX_AI_LOCATION")
+VERTEX_AI_MODEL = env("VERTEX_AI_MODEL")
+VERTEX_AI_TEMPERATURE = env.float("VERTEX_AI_TEMPERATURE")
 
 # dev vs prod
 if DEBUG:
