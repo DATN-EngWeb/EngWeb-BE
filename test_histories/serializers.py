@@ -35,7 +35,6 @@ class ProductiveTestHistorySerializer(serializers.ModelSerializer):
             "id",
             "student",
             "attempt",
-            "total_time",
             "earned_bonus_point",
         ]
 
@@ -194,7 +193,6 @@ class ReceptiveTestHistorySerializer(serializers.ModelSerializer):
             "id",
             "student",
             "attempt",
-            "total_time",
             "total_score",
             "earned_bonus_point",
         ]
