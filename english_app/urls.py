@@ -26,4 +26,6 @@ urlpatterns = [
     path("api/storage/", include("storage.urls")),
     # Test Histories API
     path("api/test-histories/", include("test_histories.urls")),
+    # Feedback API
+    path("api/feedback/", include("feedback.urls")),
 ]
