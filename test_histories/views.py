@@ -188,8 +188,7 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
             "**Lưu ý:**\n"
             "- `student` và `attempt` tự động được set\n"
             "- `type` mặc định là 'D' (Draft) nếu không gửi\n"
-            "- `end_time` bắt buộc khi type='S' (Submission)\n"
-            "- `total_time` tự động tính từ start_time và end_time"
+            "- `end_time` bắt buộc khi type='S' (Submission)"
         ),
         tags=["test-histories"],
         request=ProductiveTestHistorySerializer,
@@ -201,7 +200,7 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                     "type": "D",
                     "start_time": "2026-02-06T14:51:37.044Z",
                     "end_time": "2026-02-06T14:52:37.044Z",
-                    "total_time": 0,
+                    "total_time": 60,
                     "audio_path": "string",
                     "user_answer_text": "string",
                     "user_note_text": "string",
@@ -217,7 +216,7 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                     "type": "S",
                     "start_time": "2026-02-06T14:51:37.044Z",
                     "end_time": "2026-02-06T14:52:37.044Z",
-                    "total_time": 0,
+                    "total_time": 60,
                     "audio_path": "string",
                     "user_answer_text": "string",
                     "user_note_text": "string",
@@ -520,7 +519,6 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
             "- `student` và `attempt` tự động được set\n"
             "- `type` mặc định là 'D' (Draft) nếu không gửi\n"
             "- `end_time` bắt buộc khi type='S' (Submission)\n"
-            "- `total_time` tự động tính từ start_time và end_time\n"
             "- `total_score` tự động tính từ câu trả lời"
         ),
         tags=["test-histories"],
@@ -558,6 +556,7 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
                     "type": "S",
                     "start_time": "2026-02-25T10:00:00Z",
                     "end_time": "2026-02-25T10:45:00Z",
+                    "total_time": 2700,
                     "answer_histories": [
                         {
                             "receptive_question": 1,

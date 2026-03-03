@@ -33,14 +33,6 @@ class ProductiveTestHistory(models.Model):
     ai_feedback = models.TextField(null=True, blank=True)
     earned_bonus_point = models.IntegerField(default=0)
 
-    def save(self, *args, **kwargs):
-        # Auto-calculate total_time
-        if self.start_time and self.end_time:
-            time_diff = self.end_time - self.start_time
-            self.total_time = int(time_diff.total_seconds())
-
-        super().save(*args, **kwargs)
-
     def __str__(self):
         type_label = "Draft" if self.type == "D" else f"Attempt {self.attempt}"
         return f"{self.student.user.username} - {self.productive_test.test.title} ({type_label})"
@@ -83,14 +75,6 @@ class ReceptiveTestHistory(models.Model):
         validators=[MinValueValidator(0)], default=0, null=True, blank=True
     )
     earned_bonus_point = models.IntegerField(default=0)
-
-    def save(self, *args, **kwargs):
-        # Auto-calculate total_time
-        if self.start_time and self.end_time:
-            time_diff = self.end_time - self.start_time
-            self.total_time = int(time_diff.total_seconds())
-
-        super().save(*args, **kwargs)
 
     class Meta:
         db_table = "receptive_test_history"
