@@ -58,6 +58,7 @@ INSERT INTO productive_test_history (
     'https://storage.googleapis.com/dev-nens-english-app-test-vu/tests/test_4/756f3f7a-4ef5-4084-b40a-1b19fe6c8737.webm',
     NULL,
     NULL,
+    NULL,
     0
 ),
 (
@@ -69,6 +70,7 @@ INSERT INTO productive_test_history (
     '2026-03-03 15:54:29.246+00',
     11,
     'https://storage.googleapis.com/dev-nens-english-app-test-vu/tests/test_4/6c96222c-78fc-4f30-bfdc-d760f3d07752.webm',
+    NULL,
     NULL,
     NULL,
     0
