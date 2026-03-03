@@ -19,6 +19,7 @@ class TestSerializer(serializers.ModelSerializer):
     test_details = serializers.SerializerMethodField()
     created_by = serializers.SerializerMethodField()
     progress_status = serializers.SerializerMethodField()
+    submitted = serializers.SerializerMethodField()
 
     class Meta:
         model = Test
@@ -36,6 +37,7 @@ class TestSerializer(serializers.ModelSerializer):
             "test_details",
             "created_by",
             "progress_status",
+            "submitted",
         ]
         extra_kwargs = {
             "id": {"read_only": True},
@@ -112,6 +114,37 @@ class TestSerializer(serializers.ModelSerializer):
         else:  # Receptive test - no history tracking yet
             # For receptive tests, you may implement similar logic when ReceptiveTestHistory is available
             return "none"
+
+    def get_submitted(self, obj):
+        """
+        Calculate total number of submissions for this test.
+        Returns the count of all submission records (type='S') for both Productive and Receptive tests.
+        """
+        # Import here to avoid circular import
+        from test_histories.models import ProductiveTestHistory, ReceptiveTestHistory
+
+        total_submissions = 0
+
+        # Count Productive test submissions
+        if obj.type == "P":
+            try:
+                productive_test = obj.productive_test
+                total_submissions = ProductiveTestHistory.objects.filter(
+                    productive_test=productive_test, type="S"
+                ).count()
+            except:
+                total_submissions = 0
+        # Count Receptive test submissions
+        elif obj.type == "R":
+            try:
+                receptive_test = obj.receptive_test
+                total_submissions = ReceptiveTestHistory.objects.filter(
+                    receptive_test=receptive_test, type="S"
+                ).count()
+            except:
+                total_submissions = 0
+
+        return total_submissions
 
     def to_representation(self, instance):
         """
