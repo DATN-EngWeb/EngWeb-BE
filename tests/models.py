@@ -238,7 +238,7 @@ class SpeakingCriteriaTemplate(models.Model):
     grammar_and_vocabulary = models.TextField(null=True, blank=True)
     discourse_management = models.TextField(null=True, blank=True)
     pronunciation = models.TextField(null=True, blank=True)
-    interactive_communication = models.TextField(null=True, blank=True)
+    task_achievement = models.TextField(null=True, blank=True)
 
     def __str__(self):
         return f"Speaking - Level: {self.level}, Band: {self.band}"
