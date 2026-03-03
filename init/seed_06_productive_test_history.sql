@@ -45,6 +45,33 @@ INSERT INTO productive_test_history (
     NULL,
     NULL,
     0
+),
+-- Speaking submissions for Productive Test ID = 4 (Places to eat)
+(
+    1009,
+    4,
+    1,
+    'S',
+    '2026-03-03 15:51:42.286+00',
+    '2026-03-03 15:53:36.732+00',
+    114,
+    'https://storage.googleapis.com/dev-nens-english-app-test-vu/tests/test_4/756f3f7a-4ef5-4084-b40a-1b19fe6c8737.webm',
+    NULL,
+    NULL,
+    0
+),
+(
+    1010,
+    4,
+    1,
+    'S',
+    '2026-03-03 15:54:17.752+00',
+    '2026-03-03 15:54:29.246+00',
+    11,
+    'https://storage.googleapis.com/dev-nens-english-app-test-vu/tests/test_4/6c96222c-78fc-4f30-bfdc-d760f3d07752.webm',
+    NULL,
+    NULL,
+    0
 )
 ON CONFLICT (student_id, productive_test_id, attempt) DO NOTHING;
 
