@@ -224,6 +224,33 @@ class WritingCriteriaTemplate(models.Model):
         ]
 
 
+class SpeakingCriteriaTemplate(models.Model):
+    level = models.CharField(
+        max_length=2,
+        choices=[
+            ("B1", "B1"),
+            ("B2", "B2"),
+            ("A1", "A1"),
+            ("A2", "A2"),
+        ],
+    )
+    band = models.IntegerField(validators=[MinValueValidator(1)])
+    grammar_and_vocabulary = models.TextField(null=True, blank=True)
+    discourse_management = models.TextField(null=True, blank=True)
+    pronunciation = models.TextField(null=True, blank=True)
+    task_achievement = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Speaking - Level: {self.level}, Band: {self.band}"
+
+    class Meta:
+        db_table = "speaking_criteria_template"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["level", "band"], name="unique_speaking_level_band"
+            )
+        ]
+
 class CompletedBonus(models.Model):
     skill = models.CharField(
         max_length=1,
