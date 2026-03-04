@@ -136,6 +136,10 @@ class Teacher(models.Model):
     experience_year = models.IntegerField(validators=[MinValueValidator(0)])
     introduction = models.TextField()
     credentials = models.JSONField(default=dict)
+
+    # AI interaction turns for teacher
+    weekly_ai_turn = models.IntegerField(validators=[MinValueValidator(0)], default=2)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

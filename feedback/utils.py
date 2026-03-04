@@ -220,6 +220,28 @@ def build_vertex_parts(ai_prompt_text, prompt_images):
             continue
     return parts
 
+
+def build_speaking_vertex_parts(ai_prompt_text: str, audio_gcs_uri: str, mime_type: str):
+    """
+    Build multimodal parts (text + audio) for Vertex AI Gemini speaking evaluation.
+
+    The audio is provided as a GCS URI (gs://...) which Gemini can fetch directly.
+    """
+    parts = [ai_prompt_text]
+    if audio_gcs_uri:
+        try:
+            parts.append(
+                Part.from_uri(
+                    uri=audio_gcs_uri,
+                    mime_type=mime_type,
+                )
+            )
+        except Exception:
+            # If audio part construction fails, we still send text-only prompt
+            # so that the request does not break completely.
+            pass
+    return parts
+
 def extract_model_text(response):
     """
     Extract the first non-empty text from a Gemini model response.
