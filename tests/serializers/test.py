@@ -118,43 +118,58 @@ class TestSerializer(serializers.ModelSerializer):
     def get_submitted(self, obj):
         """
         Calculate total number of submissions for this test.
-        Returns the count of all submission records (type='S') for both Productive and Receptive tests.
+        Returns the count of all submission records (type='S') for Productive or Receptive tests.
+        Returns None if not requested via 'submitted' parameter.
+        
+        OPTIMIZATION: If 'submitted' was already annotated in queryset (for ordering),
+        reuse that value instead of querying again.
         """
+        # Check if submitted was requested in context
+        request_submitted = self.context.get("request_submitted", False)
+        if not request_submitted:
+            return None
+
+        # OPTIMIZATION: Check if 'submitted' was already annotated (from get_queryset for ordering)
+        # If yes, reuse that value to avoid duplicate query
+        if hasattr(obj, "submitted"):
+            return obj.submitted
+
+        # If not annotated, query manually (fallback for edge cases)
         # Import here to avoid circular import
         from test_histories.models import ProductiveTestHistory, ReceptiveTestHistory
 
-        total_submissions = 0
-
-        # Count Productive test submissions
         if obj.type == "P":
             try:
                 productive_test = obj.productive_test
-                total_submissions = ProductiveTestHistory.objects.filter(
+                return ProductiveTestHistory.objects.filter(
                     productive_test=productive_test, type="S"
                 ).count()
             except:
-                total_submissions = 0
-        # Count Receptive test submissions
+                return 0
         elif obj.type == "R":
             try:
                 receptive_test = obj.receptive_test
-                total_submissions = ReceptiveTestHistory.objects.filter(
+                return ReceptiveTestHistory.objects.filter(
                     receptive_test=receptive_test, type="S"
                 ).count()
             except:
-                total_submissions = 0
+                return 0
 
-        return total_submissions
+        return 0
 
     def to_representation(self, instance):
         """
-        Override to remove progress_status field if it's None
+        Override to remove progress_status and submitted fields if they're None
         """
         representation = super().to_representation(instance)
 
         # Remove progress_status field if it's None (not requested)
         if representation.get("progress_status") is None:
             representation.pop("progress_status", None)
+
+        # Remove submitted field if it's None (not requested)
+        if representation.get("submitted") is None:
+            representation.pop("submitted", None)
 
         return representation
 

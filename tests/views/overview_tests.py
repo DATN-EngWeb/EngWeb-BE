@@ -3,7 +3,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.filters import OrderingFilter
 from rest_framework.exceptions import PermissionDenied
 import django_filters
-from django.db.models import Q, Exists, OuterRef
+from django.db.models import Q, Exists, OuterRef, Count, Case, When, IntegerField, Value
 
 from ..models import Test
 from ..serializers.test import TestSerializer
@@ -49,7 +49,7 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
         OrderingFilter,
     ]
     filterset_class = TestFilter
-    ordering_fields = ["created_at", "updated_at", "title"]
+    ordering_fields = ["created_at", "updated_at", "title", "submitted"]
     ordering = ["-created_at"]
 
     def get_permissions(self):
@@ -194,11 +194,42 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                     detail="Only admin users can filter by status 'R' (Removed)."
                 )
 
+        # Add annotation for submitted count only when needed
+        # Annotate when:
+        # 1. submitted=true parameter is present (to display value without duplicate query)
+        # 2. ordering parameter contains 'submitted' (to enable ordering)
+        submitted_param = self.request.query_params.get("submitted", "").lower()
+        ordering_param = self.request.query_params.get("ordering", "")
+        
+        if submitted_param == "true" or "submitted" in ordering_param:
+            queryset = queryset.annotate(
+                submitted=Case(
+                    When(
+                        type="P",
+                        then=Count(
+                            "productive_test__histories",
+                            filter=Q(productive_test__histories__type="S"),
+                            distinct=True,
+                        ),
+                    ),
+                    When(
+                        type="R",
+                        then=Count(
+                            "receptive_test__histories",
+                            filter=Q(receptive_test__histories__type="S"),
+                            distinct=True,
+                        ),
+                    ),
+                    default=Value(0),
+                    output_field=IntegerField(),
+                )
+            )
+
         return queryset
 
     def get_serializer_context(self):
         """
-        Override to add progress_status request flag and student to context
+        Override to add progress_status and submitted request flags to context
         """
         context = super().get_serializer_context()
 
@@ -218,6 +249,11 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                 context["student"] = None
         else:
             context["student"] = None
+
+        # Check if submitted parameter is requested
+        submitted_param = self.request.query_params.get("submitted", "").lower()
+        request_submitted = submitted_param == "true"
+        context["request_submitted"] = request_submitted
 
         return context
 
@@ -244,6 +280,7 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "  - `draft`: Các bài test đang có nháp (đang làm dở, dù có submit hay chưa)\n"
             "  - `none`: Các bài test chưa làm\n"
             "- `progress_status`: Hiển thị trạng thái hoàn thành của student (true/false) - **Chỉ áp dụng cho student đã đăng nhập**\n"
+            "- `submitted`: Hiển thị số lượng học sinh đã submit bài test (true/false)\n"
             "- `page`: Số trang (mặc định: 1)\n"
             "- `page_size`: Số phần tử mỗi trang (mặc định: 10, tối đa: 100)\n\n"
             "**Tham số sắp xếp (Ordering):**\n"
@@ -253,7 +290,9 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "  - `updated_at` - Ngày cập nhật (cũ nhất trước)\n"
             "  - `-updated_at` - Ngày cập nhật (mới nhất trước)\n"
             "  - `title` - Tên (A-Z)\n"
-            "  - `-title` - Tên (Z-A)\n\n"
+            "  - `-title` - Tên (Z-A)\n"
+            "  - `submitted` - Số lượng submit (ít nhất trước)\n"
+            "  - `-submitted` - Số lượng submit (nhiều nhất trước)\n\n"
             "**Lưu ý về tham số `mine`:**\n"
             "- Chỉ giáo viên đã đăng nhập mới được sử dụng tham số `mine` (true hoặc false)\n"
             "- `mine=true`: Lấy các bài test do chính giáo viên hiện tại tạo\n"
@@ -274,6 +313,9 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "  - `draft`: Student chỉ có bản nháp (draft), chưa submit\n"
             "  - `none`: Student chưa làm bài test này\n"
             "- Nếu không truyền `progress_status=true` hoặc user không phải student, trường `progress_status` sẽ không xuất hiện trong response\n\n"
+            "**Lưu ý về tham số `submitted`:**\n"
+            "- Khi `submitted=true`, API sẽ trả về thêm trường `submitted` cho mỗi test\n"
+            "- Trường `submitted` cho biết tổng số lượng học sinh đã submit bài test đó (type='S')\n"
             "**Ví dụ:**\n"
             "- `/api/tests/?type=R` - Lấy tất cả bài Receptive Test (Reading/Listening)\n"
             "- `/api/tests/?type=P&level=B1` - Lấy bài Productive Test cấp B1\n"
@@ -292,7 +334,11 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "- `/api/tests/?my_progress=completed&level=B1` - (Student) Bài test B1 đã hoàn thành\n"
             "- `/api/tests/?year=2026&teacher_name=Vu` - Lấy bài test năm 2026 của giáo viên tên 'Vu'\n"
             "- `/api/tests/?progress_status=true` - Lấy danh sách bài test kèm trạng thái hoàn thành của student\n"
-            "- `/api/tests/?progress_status=true&level=B1` - Lấy bài test cấp B1 kèm trạng thái hoàn thành"
+            "- `/api/tests/?progress_status=true&level=B1` - Lấy bài test cấp B1 kèm trạng thái hoàn thành\n"
+            "- `/api/tests/?submitted=true` - Lấy danh sách bài test kèm số lượng submission\n"
+            "- `/api/tests/?submitted=true&ordering=-submitted` - Lấy bài test kèm số submission, sắp xếp theo nhiều nhất\n"
+            "- `/api/tests/?ordering=-submitted` - Sắp xếp theo nhiều submission (KHÔNG hiển thị field submitted)\n"
+            "- `/api/tests/?mine=true&submitted=true&ordering=-submitted` - Bài test của mình, xem bài nào được submit nhiều nhất"
         ),
         tags=["tests (overview)"],
         parameters=[
@@ -365,6 +411,16 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                 type=bool,
             ),
             OpenApiParameter(
+                name="submitted",
+                description=(
+                    "Hiển thị số lượng học sinh đã submit bài test (true/false). "
+                    "Khi submitted=true, API sẽ trả về thêm trường 'submitted' cho mỗi test, "
+                    "cho biết tổng số lượng submission (type='S') của bài test đó. "
+                ),
+                required=False,
+                type=bool,
+            ),
+            OpenApiParameter(
                 name="page",
                 description="Số trang (mặc định: 1)",
                 required=False,
@@ -378,7 +434,9 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             ),
             OpenApiParameter(
                 name="ordering",
-                description="Sắp xếp kết quả: created_at, -created_at, updated_at, -updated_at, title, -title",
+                description=(
+                    "Sắp xếp kết quả: created_at, -created_at, updated_at, -updated_at, title, -title, submitted, -submitted. "
+                ),
                 required=False,
                 type=str,
             ),
