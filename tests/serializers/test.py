@@ -86,7 +86,7 @@ class TestSerializer(serializers.ModelSerializer):
             return None
 
         # Import here to avoid circular import
-        from test_histories.models import ProductiveTestHistory
+        from test_histories.models import ProductiveTestHistory, ReceptiveTestHistory
 
         # Check history based on test type
         if obj.type == "P":  # Productive test
@@ -111,8 +111,29 @@ class TestSerializer(serializers.ModelSerializer):
                 return "none"
             except:
                 return "none"
-        else:  # Receptive test - no history tracking yet
-            # For receptive tests, you may implement similar logic when ReceptiveTestHistory is available
+        elif obj.type == "R":  # Receptive test
+            try:
+                receptive_test = obj.receptive_test
+
+                # Check if student has any draft
+                has_draft = ReceptiveTestHistory.objects.filter(
+                    student=student, receptive_test=receptive_test, type="D"
+                ).exists()
+
+                if has_draft:
+                    return "draft"
+                # Check if student has any submission
+                has_submission = ReceptiveTestHistory.objects.filter(
+                    student=student, receptive_test=receptive_test, type="S"
+                ).exists()
+
+                if has_submission:
+                    return "completed"
+
+                return "none"
+            except:
+                return "none"
+        else:
             return "none"
 
     def get_submitted(self, obj):

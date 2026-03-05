@@ -10,7 +10,7 @@ from ..serializers.test import TestSerializer
 from ..permissions import IsTeacher
 from ..filters import TestFilter
 from accounts.models import Teacher, Student
-from test_histories.models import ProductiveTestHistory
+from test_histories.models import ProductiveTestHistory, ReceptiveTestHistory
 
 from drf_spectacular.utils import (
     extend_schema,
@@ -122,22 +122,21 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                         Exists(productive_draft_exists)
                     )
 
-                    # TODO: RECEPTIVE TESTS - Add when ReceptiveTestHistory is available
-                    # receptive_submission_exists = ReceptiveTestHistory.objects.filter(
-                    #     student=student,
-                    #     receptive_test__test=OuterRef('pk'),
-                    #     type='S'  # or appropriate completion type
-                    # )
-                    # receptive_draft_exists = ReceptiveTestHistory.objects.filter(
-                    #     student=student,
-                    #     receptive_test__test=OuterRef('pk'),
-                    #     type='D'  # or appropriate draft type
-                    # )
-                    # receptive_completed = Q(Exists(receptive_submission_exists)) & ~Q(Exists(receptive_draft_exists))
+                    # RECEPTIVE TESTS: Tests with submission but NO draft (fully completed)
+                    receptive_submission_exists = ReceptiveTestHistory.objects.filter(
+                        student=student,
+                        receptive_test__test=OuterRef('pk'),
+                        type='S'
+                    )
+                    receptive_draft_exists = ReceptiveTestHistory.objects.filter(
+                        student=student,
+                        receptive_test__test=OuterRef('pk'),
+                        type='D'
+                    )
+                    receptive_completed = Q(Exists(receptive_submission_exists)) & ~Q(Exists(receptive_draft_exists))
 
                     # Combine filters - returns both Productive and Receptive tests that match
-                    queryset = queryset.filter(productive_completed)
-                    # queryset = queryset.filter(productive_completed | receptive_completed)  # Enable when ready
+                    queryset = queryset.filter(productive_completed | receptive_completed)
 
                 elif my_progress == "draft":
                     # PRODUCTIVE TESTS: Tests with draft (regardless of submission status)
@@ -147,17 +146,16 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                     )
                     productive_draft = Q(Exists(productive_draft_exists))
 
-                    # TODO: RECEPTIVE TESTS - Add when ReceptiveTestHistory is available
-                    # receptive_draft_exists = ReceptiveTestHistory.objects.filter(
-                    #     student=student,
-                    #     receptive_test__test=OuterRef('pk'),
-                    #     type='D'  # or appropriate draft type
-                    # )
-                    # receptive_draft = Q(Exists(receptive_draft_exists))
+                    # RECEPTIVE TESTS: Tests with draft (regardless of submission status)
+                    receptive_draft_exists = ReceptiveTestHistory.objects.filter(
+                        student=student,
+                        receptive_test__test=OuterRef('pk'),
+                        type='D'
+                    )
+                    receptive_draft = Q(Exists(receptive_draft_exists))
 
                     # Combine filters - returns both Productive and Receptive tests that match
-                    queryset = queryset.filter(productive_draft)
-                    # queryset = queryset.filter(productive_draft | receptive_draft)  # Enable when ready
+                    queryset = queryset.filter(productive_draft | receptive_draft)
 
                 else:  # my_progress == "none"
                     # PRODUCTIVE TESTS: Tests with no history at all
@@ -166,17 +164,15 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                     )
                     productive_no_history = ~Q(Exists(productive_history_exists))
 
-                    # TODO: RECEPTIVE TESTS - Add when ReceptiveTestHistory is available
-                    # receptive_history_exists = ReceptiveTestHistory.objects.filter(
-                    #     student=student,
-                    #     receptive_test__test=OuterRef('pk')
-                    # )
-                    # receptive_no_history = ~Q(Exists(receptive_history_exists))
+                    # RECEPTIVE TESTS: Tests with no history at all
+                    receptive_history_exists = ReceptiveTestHistory.objects.filter(
+                        student=student,
+                        receptive_test__test=OuterRef('pk')
+                    )
+                    receptive_no_history = ~Q(Exists(receptive_history_exists))
 
                     # Combine filters - returns both Productive and Receptive tests that match
-                    # Currently: Productive tests with no history + ALL Receptive tests (since they have no history model yet)
-                    queryset = queryset.filter(productive_no_history)
-                    # queryset = queryset.filter(productive_no_history | receptive_no_history)  # Enable when ready
+                    queryset = queryset.filter(productive_no_history | receptive_no_history)
 
             except Student.DoesNotExist:
                 raise PermissionDenied(
