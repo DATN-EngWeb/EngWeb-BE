@@ -19,6 +19,7 @@ class TestSerializer(serializers.ModelSerializer):
     test_details = serializers.SerializerMethodField()
     created_by = serializers.SerializerMethodField()
     progress_status = serializers.SerializerMethodField()
+    submitted = serializers.SerializerMethodField()
 
     class Meta:
         model = Test
@@ -36,6 +37,7 @@ class TestSerializer(serializers.ModelSerializer):
             "test_details",
             "created_by",
             "progress_status",
+            "submitted",
         ]
         extra_kwargs = {
             "id": {"read_only": True},
@@ -113,15 +115,61 @@ class TestSerializer(serializers.ModelSerializer):
             # For receptive tests, you may implement similar logic when ReceptiveTestHistory is available
             return "none"
 
+    def get_submitted(self, obj):
+        """
+        Calculate total number of submissions for this test.
+        Returns the count of all submission records (type='S') for Productive or Receptive tests.
+        Returns None if not requested via 'submitted' parameter.
+        
+        OPTIMIZATION: If 'submitted' was already annotated in queryset (for ordering),
+        reuse that value instead of querying again.
+        """
+        # Check if submitted was requested in context
+        request_submitted = self.context.get("request_submitted", False)
+        if not request_submitted:
+            return None
+
+        # OPTIMIZATION: Check if 'submitted' was already annotated (from get_queryset for ordering)
+        # If yes, reuse that value to avoid duplicate query
+        if hasattr(obj, "submitted"):
+            return obj.submitted
+
+        # If not annotated, query manually (fallback for edge cases)
+        # Import here to avoid circular import
+        from test_histories.models import ProductiveTestHistory, ReceptiveTestHistory
+
+        if obj.type == "P":
+            try:
+                productive_test = obj.productive_test
+                return ProductiveTestHistory.objects.filter(
+                    productive_test=productive_test, type="S"
+                ).count()
+            except:
+                return 0
+        elif obj.type == "R":
+            try:
+                receptive_test = obj.receptive_test
+                return ReceptiveTestHistory.objects.filter(
+                    receptive_test=receptive_test, type="S"
+                ).count()
+            except:
+                return 0
+
+        return 0
+
     def to_representation(self, instance):
         """
-        Override to remove progress_status field if it's None
+        Override to remove progress_status and submitted fields if they're None
         """
         representation = super().to_representation(instance)
 
         # Remove progress_status field if it's None (not requested)
         if representation.get("progress_status") is None:
             representation.pop("progress_status", None)
+
+        # Remove submitted field if it's None (not requested)
+        if representation.get("submitted") is None:
+            representation.pop("submitted", None)
 
         return representation
 
