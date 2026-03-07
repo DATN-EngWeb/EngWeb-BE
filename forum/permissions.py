@@ -11,9 +11,6 @@ class IsOwner(BasePermission):
         if request.user.status != "V":
             raise PermissionDenied("Your account need to be verified.")
 
-        if request.user.role != "S":
-            raise PermissionDenied("Only students can perform this action.")
-
         # Check if the history belongs to the requesting student for POST method
         if request.method == "POST":
             history_id = request.data.get("productive_test_history_id")
@@ -28,3 +25,17 @@ class IsOwner(BasePermission):
                     pass
 
         return True
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in ["GET", "HEAD", "OPTIONS"]:
+            return True
+
+        # Handle Post object (owned by a student via test history)
+        if hasattr(obj, 'productive_test_history'):
+            return obj.productive_test_history.student.user_id == request.user.id
+            
+        # Handle PostComment object (owned directly by any user)
+        if hasattr(obj, 'user'):
+            return obj.user_id == request.user.id
+            
+        return False

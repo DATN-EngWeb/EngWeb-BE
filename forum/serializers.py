@@ -57,6 +57,12 @@ class PostCreateSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class PostUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Post
+        fields = ["title", "description"]
+
+
 class PostCommentListSerializer(serializers.ModelSerializer):
     author_name = serializers.CharField(source="user.full_name", read_only=True)
     author_avatar = serializers.ImageField(source="user.avatar", read_only=True)
@@ -77,3 +83,9 @@ class PostCommentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = PostComment
         fields = ["id", "content"]
+
+
+class PostCommentUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PostComment
+        fields = ["content"]

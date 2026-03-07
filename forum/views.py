@@ -12,11 +12,105 @@ from rest_framework import status
 
 from accounts.authentication import CustomTokenAuthentication
 from .models import Post, PostComment, PostReaction
-from .serializers import PostListSerializer, PostCreateSerializer, PostCommentListSerializer, PostCommentCreateSerializer
+from .serializers import (
+    PostListSerializer, 
+    PostCreateSerializer, 
+    PostUpdateSerializer,
+    PostCommentListSerializer, 
+    PostCommentCreateSerializer,
+    PostCommentUpdateSerializer,
+)
 from .permissions import IsOwner
 
 from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse, inline_serializer
 from textwrap import dedent
+
+class UserUpdateDeleteCommentAPIView(generics.RetrieveUpdateDestroyAPIView):
+    authentication_classes = [CustomTokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated, IsOwner]
+    serializer_class = PostCommentUpdateSerializer
+    lookup_field = "id"
+    lookup_url_kwarg = "comment_id"
+
+    def get_queryset(self):
+        return PostComment.objects.select_related("user").all()
+
+    @extend_schema(
+        summary="Retrieve a comment",
+        description="Retrieves the details of a specific comment.",
+        tags=["comments"],
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Update a comment (Not Allowed)",
+        description="PUT method is not supported. Please use PATCH instead.",
+        tags=["comments"],
+        responses={
+            405: OpenApiResponse(description="Method not allowed"),
+        }
+    )
+    def put(self, request, *args, **kwargs):
+        return Response(
+            {"detail": "PUT method is not supported. Please use PATCH for updates."},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED
+        )
+
+    @extend_schema(
+        summary="Partially update a comment",
+        description=dedent("""\
+            Allows a user to partially update the content of a comment they own.
+            
+            ### Example Test Case (2.1)
+            * **URL:** `/api/forums/comments-update-delete/10`
+            * **Method:** `PATCH`
+            * **Auth:** Bearer Token (e.g., Student 4 owning Comment 10)
+            * **Body:** `{"content": "I changed my mind, this post is awesome!"}`
+            * **Result:** Returns `200 OK` and the comment's content is updated.
+        """),
+        tags=["comments"],
+        responses={
+            200: OpenApiResponse(description="Successfully updated the comment"),
+            400: OpenApiResponse(description="Bad request"),
+            403: OpenApiResponse(description="Forbidden (Not the owner)"),
+            404: OpenApiResponse(description="Comment not found"),
+        }
+    )
+    def patch(self, request, *args, **kwargs):
+        return super().patch(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Delete a comment",
+        description=dedent("""\
+            Allows a user to delete a comment they own. This will safely decrement the parent post's comment count.
+            
+            ### Example Test Case (2.3)
+            * **URL:** `/api/forums/comments-update-delete/10`
+            * **Method:** `DELETE`
+            * **Auth:** Bearer Token (e.g., Student 4 owning Comment 10)
+            * **Result:** Returns `204 No Content`. The comment is deleted and the parent post's `comment_count` decreases by 1.
+        """),
+        tags=["comments"],
+        responses={
+            204: OpenApiResponse(description="Successfully deleted the comment"),
+            403: OpenApiResponse(description="Forbidden (Not the owner)"),
+            404: OpenApiResponse(description="Comment not found"),
+        }
+    )
+    def delete(self, request, *args, **kwargs):
+        return super().delete(request, *args, **kwargs)
+
+    def perform_destroy(self, instance):
+        # Save reference to post before deleting comment
+        post = instance.post
+        
+        # Delete comment
+        super().perform_destroy(instance)
+        
+        # Safely decrement comment_count
+        post.comment_count = F('comment_count') - 1
+        post.save(update_fields=['comment_count'])
 
 class ForumPagination(PageNumberPagination):
     page_size = 2
@@ -31,7 +125,7 @@ class StudentCreatePostAPIView(generics.CreateAPIView):
     @extend_schema(
         summary="Create a new forum post",
         description="Allows a student to share their submitted productive test (Writing or Speaking) to the forum.",
-        tags=["forum"],
+        tags=["posts"],
         responses={
             201: OpenApiResponse(description="Post created successfully"),
             400: OpenApiResponse(description="Bad request, validation error"),
@@ -92,7 +186,7 @@ class UserRetrieveTestPostAPIView(generics.ListAPIView):
 
     @extend_schema(
         summary="Retrieve forum posts for a specific test",
-        tags=["forum"],
+        tags=["posts"],
         description=dedent("""\
             Retrieves a paginated list of forum posts shared for a particular test. 
             Returns additional `is_liked` metadata for authenticated viewers.
@@ -143,7 +237,7 @@ class UserCreatePostCommentAPIView(generics.CreateAPIView):
     @extend_schema(
         summary="Create a comment on a post",
         description="Allows any authenticated user to add a comment to a specific forum post.",
-        tags=["forum-comments"],
+        tags=["comments"],
         responses={
             201: OpenApiResponse(description="Comment created successfully"),
             400: OpenApiResponse(description="Bad request, validation error"),
@@ -188,7 +282,7 @@ class UserRetrievePostCommentAPIView(generics.ListAPIView):
 
     @extend_schema(
         summary="Retrieve comments for a specific post",
-        tags=["forum-comments"],
+        tags=["comments"],
         description=dedent("""\
             Retrieves a paginated list of comments for a given post, ordered oldest to newest by default.
 
@@ -234,7 +328,7 @@ class PostReactionAPIView(generics.GenericAPIView):
     @extend_schema(
         summary="Toggle like/unlike on a post",
         description="Creates or updates a user's reaction to a forum post. Returns the updated status ('L' for Like, 'U' for Unlike). Rate-limited to 3 requests per second per user.",
-        tags=["forum-reactions"],
+        tags=["reactions"],
         responses={
             200: OpenApiResponse(description="Successfully toggled reaction"),
             404: OpenApiResponse(description="Post not found"),
@@ -287,3 +381,79 @@ class PostReactionAPIView(generics.GenericAPIView):
                 post_obj.like_count = F('like_count') + 1
                 post_obj.save(update_fields=['like_count'])
                 return Response({"message": "Liked", "status": "L"}, status=status.HTTP_200_OK)
+
+class StudentUpdateDeletePostAPIView(generics.RetrieveUpdateDestroyAPIView):
+    authentication_classes = [CustomTokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated, IsOwner]
+    serializer_class = PostUpdateSerializer
+    lookup_field = "id"
+    lookup_url_kwarg = "post_id"
+
+    def get_queryset(self):
+        return Post.objects.select_related("productive_test_history__student").all()
+
+    @extend_schema(
+        summary="Retrieve a post",
+        description="Retrieves the details of a specific post. Note: This endpoint expects the same authorization schema since it shares the IsOwner permission.",
+        tags=["posts"],
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Update a post (Not Allowed)",
+        description="PUT method is not supported. Please use PATCH instead.",
+        tags=["posts"],
+        responses={
+            405: OpenApiResponse(description="Method not allowed"),
+        }
+    )
+    def put(self, request, *args, **kwargs):
+        return Response(
+            {"detail": "PUT method is not supported. Please use PATCH for updates."},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED
+        )
+
+    @extend_schema(
+        summary="Partially update a post",
+        description=dedent("""\
+            Allows a student to partially update (e.g., just the description) a post they own.
+            
+            ### Example Test Case (1.2)
+            * **URL:** `/api/forums/posts-update-delete/1`
+            * **Method:** `PATCH`
+            * **Auth:** Bearer Token (e.g., Student 4 owning Post 1)
+            * **Body:** `{"title": "Edited Title by Student 4"}`
+            * **Result:** Returns `200 OK` and the post's title is updated.
+        """),
+        tags=["posts"],
+        responses={
+            200: OpenApiResponse(description="Successfully updated the post"),
+            400: OpenApiResponse(description="Bad request"),
+            403: OpenApiResponse(description="Forbidden (Not the owner)"),
+            404: OpenApiResponse(description="Post not found"),
+        }
+    )
+    def patch(self, request, *args, **kwargs):
+        return super().patch(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Delete a post",
+        description=dedent("""\
+            Allows a student to delete a post they own.
+            
+            ### Example Test Case (1.4)
+            * **URL:** `/api/forums/posts-update-delete/1`
+            * **Method:** `DELETE`
+            * **Auth:** Bearer Token (e.g., Student 4 owning Post 1)
+            * **Result:** Returns `204 No Content`. The post is permanently deleted.
+        """),
+        tags=["posts"],
+        responses={
+            204: OpenApiResponse(description="Successfully deleted the post"),
+            403: OpenApiResponse(description="Forbidden (Not the owner)"),
+            404: OpenApiResponse(description="Post not found"),
+        }
+    )
+    def delete(self, request, *args, **kwargs):
+        return super().delete(request, *args, **kwargs)
