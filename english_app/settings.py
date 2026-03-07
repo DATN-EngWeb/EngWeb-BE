@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "storage",
     "feedback",
     "test_histories",
+    "forum",
 ]
 
 MIDDLEWARE = [
