@@ -25,7 +25,7 @@ from .permissions import IsOwner
 from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse, inline_serializer
 from textwrap import dedent
 
-class UserUpdateDeleteCommentAPIView(generics.RetrieveUpdateDestroyAPIView):
+class UserRetrieveUpdateDeleteCommentAPIView(generics.RetrieveUpdateDestroyAPIView):
     authentication_classes = [CustomTokenAuthentication]
     permission_classes = [permissions.IsAuthenticated, IsOwner]
     serializer_class = PostCommentUpdateSerializer
@@ -37,8 +37,16 @@ class UserUpdateDeleteCommentAPIView(generics.RetrieveUpdateDestroyAPIView):
 
     @extend_schema(
         summary="Retrieve a comment",
-        description="Retrieves the details of a specific comment.",
-        tags=["comments"],
+        description=dedent("""\
+            Retrieves the details of a specific comment.
+
+            ### Example Test Case (Success)
+            * **URL:** `/api/forums/comments/10`
+            * **Method:** `GET`
+            * **Auth:** Bearer Token (Any authenticated user)
+            * **Result:** Returns `200 OK` with the details of Comment ID 10 ("Thanks for sharing your work!").
+        """),
+        tags=["forum-comments"],
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -46,7 +54,7 @@ class UserUpdateDeleteCommentAPIView(generics.RetrieveUpdateDestroyAPIView):
     @extend_schema(
         summary="Update a comment (Not Allowed)",
         description="PUT method is not supported. Please use PATCH instead.",
-        tags=["comments"],
+        tags=["forum-comments"],
         responses={
             405: OpenApiResponse(description="Method not allowed"),
         }
@@ -62,14 +70,14 @@ class UserUpdateDeleteCommentAPIView(generics.RetrieveUpdateDestroyAPIView):
         description=dedent("""\
             Allows a user to partially update the content of a comment they own.
             
-            ### Example Test Case (2.1)
-            * **URL:** `/api/forums/comments-update-delete/10`
+            ### Example Test Case (Success)
+            * **URL:** `/api/forums/comments/10`
             * **Method:** `PATCH`
-            * **Auth:** Bearer Token (e.g., Student 4 owning Comment 10)
-            * **Body:** `{"content": "I changed my mind, this post is awesome!"}`
+            * **Auth:** Bearer Token for `student4@example.com` (Owner of Comment 10)
+            * **Body:** `{"content": "I changed my mind, this post is actually very awesome!"}`
             * **Result:** Returns `200 OK` and the comment's content is updated.
         """),
-        tags=["comments"],
+        tags=["forum-comments"],
         responses={
             200: OpenApiResponse(description="Successfully updated the comment"),
             400: OpenApiResponse(description="Bad request"),
@@ -85,13 +93,13 @@ class UserUpdateDeleteCommentAPIView(generics.RetrieveUpdateDestroyAPIView):
         description=dedent("""\
             Allows a user to delete a comment they own. This will safely decrement the parent post's comment count.
             
-            ### Example Test Case (2.3)
-            * **URL:** `/api/forums/comments-update-delete/10`
+            ### Example Test Case (Success)
+            * **URL:** `/api/forums/comments/10`
             * **Method:** `DELETE`
-            * **Auth:** Bearer Token (e.g., Student 4 owning Comment 10)
-            * **Result:** Returns `204 No Content`. The comment is deleted and the parent post's `comment_count` decreases by 1.
+            * **Auth:** Bearer Token for `student4@example.com` (Owner of Comment 10)
+            * **Result:** Returns `204 No Content`. The comment is deleted and the parent post's `comment_count` decreases by 1. If another user (like student5) attempts this, it returns `403 Forbidden`.
         """),
-        tags=["comments"],
+        tags=["forum-comments"],
         responses={
             204: OpenApiResponse(description="Successfully deleted the comment"),
             403: OpenApiResponse(description="Forbidden (Not the owner)"),
@@ -117,54 +125,37 @@ class ForumPagination(PageNumberPagination):
     page_size_query_param = "page_size"
     max_page_size = 10
 
-class StudentCreatePostAPIView(generics.CreateAPIView):
+class PostListCreateAPIView(generics.ListCreateAPIView):
     authentication_classes = [CustomTokenAuthentication]
-    permission_classes = [IsOwner]
-    serializer_class = PostCreateSerializer
-
-    @extend_schema(
-        summary="Create a new forum post",
-        description="Allows a student to share their submitted productive test (Writing or Speaking) to the forum.",
-        tags=["posts"],
-        responses={
-            201: OpenApiResponse(description="Post created successfully"),
-            400: OpenApiResponse(description="Bad request, validation error"),
-            403: OpenApiResponse(description="Permission denied, token expired or not a student"),
-        },
-        examples=[
-            OpenApiExample(
-                "Successful creation",
-                request_only=True,
-                value={
-                    "productive_test_history_id": 1,
-                    "title": "My Writing Task",
-                    "description": "Please give me feedback!"
-                }
-            )
-        ]
-    )
-    def post(self, request, *args, **kwargs):
-        return super().post(request, *args, **kwargs)
-
-class UserRetrieveTestPostAPIView(generics.ListAPIView):
-    authentication_classes = [CustomTokenAuthentication]
-    permission_classes = [permissions.AllowAny]
     pagination_class = ForumPagination
-    serializer_class = PostListSerializer
     
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["title"]
     ordering_fields = ["created_at", "like_count", "comment_count"]
     ordering = ["-created_at"]
 
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsOwner()]
+        return [permissions.IsAuthenticated()]
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return PostCreateSerializer
+        return PostListSerializer
+
     def get_queryset(self):
+        # We only need the complex queryset for GET requests
+        if self.request.method != "GET":
+            return Post.objects.all()
+            
         queryset = Post.objects.select_related(
             "productive_test_history",
             "productive_test_history__student__user",
             "productive_test_history__productive_test__test"
         )
         
-        test_id = self.kwargs.get("test_id")
+        test_id = self.request.query_params.get("test_id")
             
         if test_id:
             queryset = queryset.filter(productive_test_history__productive_test__test_id=test_id)
@@ -185,59 +176,140 @@ class UserRetrieveTestPostAPIView(generics.ListAPIView):
         return queryset
 
     @extend_schema(
-        summary="Retrieve forum posts for a specific test",
-        tags=["posts"],
+        summary="Create a new forum post",
+        description=dedent("""\
+            Allows a student to share their submitted productive test (Writing or Speaking) to the forum. Must be authenticated and verified.
+
+            ### Test Cases & Examples
+
+            **1. Successful Post Creation**
+            * **Method:** `POST`
+            * **Body:** `{"productive_test_history_id": 1, "title": "My Writing Task", "description": "Please give me feedback!"}`
+            * **Auth:** Bearer Token (Student who owns history_id=1)
+            * **Result:** `201 Created`
+
+            **2. Unauthorized Access (Sharing another student's test)**
+            * **Method:** `POST`
+            * **Body:** `{"productive_test_history_id": 2, "title": "Hacking your post"}`
+            * **Auth:** Bearer Token (Student who does NOT own history_id=2)
+            * **Result:** `403 Forbidden` (`"You can only share your own test histories."`)
+
+            **3. Duplicate Post Prevention**
+            * **Method:** `POST`
+            * **Body:** Same as Case 1, but sent a second time.
+            * **Result:** `400 Bad Request` (`"A post already exists for this test submission."`)
+        """),
+        tags=["forum-posts"],
+        responses={
+            201: OpenApiResponse(description="Post created successfully"),
+            400: OpenApiResponse(description="Bad request, validation error"),
+            403: OpenApiResponse(description="Permission denied, token expired or not a student"),
+        },
+        examples=[
+            OpenApiExample(
+                "Successful creation",
+                request_only=True,
+                value={
+                    "productive_test_history_id": 1,
+                    "title": "My Writing Task",
+                    "description": "Please give me feedback!"
+                }
+            )
+        ]
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="List forum posts",
+        tags=["forum-posts"],
         description=dedent("""\
             Retrieves a paginated list of forum posts shared for a particular test. 
             Returns additional `is_liked` metadata for authenticated viewers.
 
-            ### Test Cases & Examples
+            ### Test Cases & Examples (Based on System Seeds)
+            Note: The database contains test posts for ProductiveTest ID 3 and 4. `student4@example.com` and `student5@example.com` (password123) own these posts.
 
-            **1. Get all posts for a test (Unauthenticated)**
-            * **URL:** `/api/forums/posts/3`
-            * **Auth:** None
-            * **Result:** Returns all posts belonging to `ProductiveTest` history for test ID 3. The `is_liked` field defaults to `false`.
-
-            **2. View Like status (Authenticated)**
-            * **URL:** `/api/forums/posts/3`
+            **1. Get all posts for a test (Authenticated)**
+            * **URL:** `/api/forums/posts?test_id=3`
             * **Auth:** Bearer Token
-            * **Result:** Similar to Case 1, but `is_liked` dynamically returns `true` or `false` based on the current user's reactions.
+            * **Result:** Returns 2 posts for the Writing test (ID=3). The most recent post (Post 2) appears first.
 
-            **3. Filter by "Your Posts" tab**
-            * **URL:** `/api/forums/posts/3?filter=mine`
-            * **Auth:** Bearer Token (Must be a Student)
-            * **Result:** Returns only the posts shared by the currently logged-in student.
+            **2. Filter by "Your Posts" tab**
+            * **URL:** `/api/forums/posts?test_id=3&filter=mine`
+            * **Auth:** Bearer Token (e.g., `student4@example.com`)
+            * **Result:** Returns exactly 1 post (Post 1) authored by student4. Using student5's token returns Post 2.
 
-            **4. Search by title**
-            * **URL:** `/api/forums/posts/4?search=Short`
-            * **Auth:** Optional
-            * **Result:** Finds posts for test ID 4 where the title or description contains the word "Short".
+            **3. Search by title/description**
+            * **URL:** `/api/forums/posts?test_id=3&search=feedback`
+            * **Auth:** Bearer Token
+            * **Result:** Returns exactly 1 post (Post 2) containing the word "feedback".
 
-            **5. Ordering (Newest vs Most Liked)**
-            * **Newest (Default):** `/api/forums/posts/3` (ordered by `-created_at`)
-            * **Most Liked:** `/api/forums/posts/3?ordering=-like_count` (orders posts with the highest likes first)
-
-            **6. Pagination**
-            * **URL:** `/api/forums/posts/3?page=1&page_size=1`
-            * **Result:** Returns only 1 post per page, along with pagination metadata (`count`, `next`, `previous`).
+            **4. Ordering (Most Liked)**
+            * **URL:** `/api/forums/posts?test_id=3&ordering=-like_count`
+            * **Auth:** Bearer Token
+            * **Result:** Returns 2 posts, sorted by descending likes. Post 1 (11 likes) appears above Post 2 (8 likes).
         """),
         responses={
             200: OpenApiResponse(description="Successfully retrieved posts"),
             400: OpenApiResponse(description="Bad request, validation error"),
+            401: OpenApiResponse(description="Unauthorized"),
         }
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
-class UserCreatePostCommentAPIView(generics.CreateAPIView):
+class PostCommentListCreateAPIView(generics.ListCreateAPIView):
     authentication_classes = [CustomTokenAuthentication]
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = PostCommentCreateSerializer
+    pagination_class = ForumPagination
+    
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ["created_at"]
+    ordering = ["created_at"]
+    
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return PostCommentCreateSerializer
+        return PostCommentListSerializer
+
+    def get_queryset(self):
+        # We only need to filter for the GET list method
+        if self.request.method != "GET":
+            return PostComment.objects.all()
+            
+        post_id = self.request.query_params.get("post_id")
+        return PostComment.objects.select_related("user").filter(post_id=post_id)
+
+    def perform_create(self, serializer):
+        # The serializer validates that post_id exists and assigns the post instance to validated_data["post"]
+        post = serializer.validated_data.get("post")
+        serializer.save(user=self.request.user)
+        
+        # Increment comment count safely
+        post.comment_count = F("comment_count") + 1
+        post.save(update_fields=["comment_count"])
 
     @extend_schema(
         summary="Create a comment on a post",
-        description="Allows any authenticated user to add a comment to a specific forum post.",
-        tags=["comments"],
+        description=dedent("""\
+            Allows any authenticated user to add a comment to a specific forum post.
+            
+            ### Example Test Case (Success)
+            * **URL:** `/api/forums/comments`
+            * **Method:** `POST`
+            * **Auth:** Bearer Token (e.g., `student4@example.com`)
+            * **Body:** `{"post_id": 1, "content": "This is a new test comment!"}`
+            * **Result:** Returns `201 Created` and automatically updates the post's comment count safely.
+            
+            ### Example Test Case (Fail - Post Not Found)
+            * **URL:** `/api/forums/comments`
+            * **Method:** `POST`
+            * **Auth:** Bearer Token
+            * **Body:** `{"post_id": 999, "content": "Ghost comment"}`
+            * **Result:** Returns `400 Bad Request` with `{"non_field_errors": ["Valid post not found."]}`.
+        """),
+        tags=["forum-comments"],
         responses={
             201: OpenApiResponse(description="Comment created successfully"),
             400: OpenApiResponse(description="Bad request, validation error"),
@@ -247,65 +319,38 @@ class UserCreatePostCommentAPIView(generics.CreateAPIView):
             OpenApiExample(
                 "Successful comment",
                 request_only=True,
-                value={"content": "Great conclusion, but try to paraphrase the prompt more."}
+                value={
+                    "post_id": 1,
+                    "content": "Great conclusion, but try to paraphrase the prompt more."
+                }
             )
         ]
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
 
-    def perform_create(self, serializer):
-        post_id = self.kwargs.get("post_id")
-        post = get_object_or_404(Post, id=post_id)
-        
-        # Save comment
-        serializer.save(user=self.request.user, post=post)
-        
-        # Increment comment count safely
-        post.comment_count = F("comment_count") + 1
-        post.save(update_fields=["comment_count"])
-
-class UserRetrievePostCommentAPIView(generics.ListAPIView):
-    authentication_classes = [CustomTokenAuthentication]
-    permission_classes = [permissions.IsAuthenticated]
-    pagination_class = ForumPagination
-    serializer_class = PostCommentListSerializer
-    
-    # We only sort by created_at as requested, no search/filter required here
-    filter_backends = [filters.OrderingFilter]
-    ordering_fields = ["created_at"]
-    ordering = ["created_at"]
-
-    def get_queryset(self):
-        post_id = self.kwargs.get("post_id")
-        return PostComment.objects.select_related("user").filter(post_id=post_id)
-
     @extend_schema(
         summary="Retrieve comments for a specific post",
-        tags=["comments"],
+        tags=["forum-comments"],
         description=dedent("""\
             Retrieves a paginated list of comments for a given post, ordered oldest to newest by default.
 
-            ### Test Cases & Examples
+            ### Test Cases & Examples (Based on System Seeds)
+            Note: Post 1 initially has 10 seed comments in the DB.
 
             **1. Get comments list (Default)**
-            * **URL:** `/api/forums/comments/1`
+            * **URL:** `/api/forums/comments?post_id=1`
             * **Auth:** Bearer Token
-            * **Result:** Returns the first few comments of Post 1 (ordered by oldest first).
+            * **Result:** Returns comments for Post 1, ordered oldest to newest.
 
             **2. Reverse ordering (Newest first)**
-            * **URL:** `/api/forums/comments/1?ordering=-created_at`
+            * **URL:** `/api/forums/comments?post_id=1&ordering=-created_at`
             * **Auth:** Bearer Token
-            * **Result:** Returns comments for Post 1, but with the most recently created comments at the top.
 
             **3. Pagination (Custom page size)**
-            * **URL:** `/api/forums/comments/1?page=2&page_size=5`
+            * **URL:** `/api/forums/comments?post_id=1&page=2&page_size=5`
             * **Auth:** Bearer Token
-            * **Result:** Skips the first page and returns the next 5 comments (e.g., comments 6 to 10).
-
-            **4. Not Found / Unauthorized Handling**
-            * **URL (Not Found):** `/api/forums/comments/999` -> Returns empty list (post doesn't exist or has no comments).
-            * **Auth (Unauthorized):** Missing/Invalid Token -> Returns `401 Unauthorized`.
+            * **Result:** Skips the first 5 and returns comments 6 to 10.
         """),
         responses={
             200: OpenApiResponse(description="Successfully retrieved comments"),
@@ -328,7 +373,7 @@ class PostReactionAPIView(generics.GenericAPIView):
     @extend_schema(
         summary="Toggle like/unlike on a post",
         description="Creates or updates a user's reaction to a forum post. Returns the updated status ('L' for Like, 'U' for Unlike). Rate-limited to 3 requests per second per user.",
-        tags=["reactions"],
+        tags=["forum-reactions"],
         responses={
             200: OpenApiResponse(description="Successfully toggled reaction"),
             404: OpenApiResponse(description="Post not found"),
@@ -382,7 +427,7 @@ class PostReactionAPIView(generics.GenericAPIView):
                 post_obj.save(update_fields=['like_count'])
                 return Response({"message": "Liked", "status": "L"}, status=status.HTTP_200_OK)
 
-class StudentUpdateDeletePostAPIView(generics.RetrieveUpdateDestroyAPIView):
+class StudentRetrieveUpdateDeletePostAPIView(generics.RetrieveUpdateDestroyAPIView):
     authentication_classes = [CustomTokenAuthentication]
     permission_classes = [permissions.IsAuthenticated, IsOwner]
     serializer_class = PostUpdateSerializer
@@ -394,8 +439,16 @@ class StudentUpdateDeletePostAPIView(generics.RetrieveUpdateDestroyAPIView):
 
     @extend_schema(
         summary="Retrieve a post",
-        description="Retrieves the details of a specific post. Note: This endpoint expects the same authorization schema since it shares the IsOwner permission.",
-        tags=["posts"],
+        description=dedent("""\
+            Retrieves the details of a specific post. Note: This endpoint expects the same authorization schema since it shares the IsOwner permission.
+
+            ### Example Test Case (Success)
+            * **URL:** `/api/forums/posts/1`
+            * **Method:** `GET`
+            * **Auth:** Bearer Token (Any authenticated user)
+            * **Result:** Returns `200 OK` with the details of Post ID 1 ("My first Writing Test - Environmental Issues").
+        """),
+        tags=["forum-posts"],
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -403,7 +456,7 @@ class StudentUpdateDeletePostAPIView(generics.RetrieveUpdateDestroyAPIView):
     @extend_schema(
         summary="Update a post (Not Allowed)",
         description="PUT method is not supported. Please use PATCH instead.",
-        tags=["posts"],
+        tags=["forum-posts"],
         responses={
             405: OpenApiResponse(description="Method not allowed"),
         }
@@ -419,14 +472,14 @@ class StudentUpdateDeletePostAPIView(generics.RetrieveUpdateDestroyAPIView):
         description=dedent("""\
             Allows a student to partially update (e.g., just the description) a post they own.
             
-            ### Example Test Case (1.2)
-            * **URL:** `/api/forums/posts-update-delete/1`
+            ### Example Test Case (Success)
+            * **URL:** `/api/forums/posts/1`
             * **Method:** `PATCH`
-            * **Auth:** Bearer Token (e.g., Student 4 owning Post 1)
+            * **Auth:** Bearer Token for `student4@example.com` (Owner of Post 1)
             * **Body:** `{"title": "Edited Title by Student 4"}`
             * **Result:** Returns `200 OK` and the post's title is updated.
         """),
-        tags=["posts"],
+        tags=["forum-posts"],
         responses={
             200: OpenApiResponse(description="Successfully updated the post"),
             400: OpenApiResponse(description="Bad request"),
@@ -442,13 +495,13 @@ class StudentUpdateDeletePostAPIView(generics.RetrieveUpdateDestroyAPIView):
         description=dedent("""\
             Allows a student to delete a post they own.
             
-            ### Example Test Case (1.4)
-            * **URL:** `/api/forums/posts-update-delete/1`
+            ### Example Test Case (Success)
+            * **URL:** `/api/forums/posts/1`
             * **Method:** `DELETE`
-            * **Auth:** Bearer Token (e.g., Student 4 owning Post 1)
-            * **Result:** Returns `204 No Content`. The post is permanently deleted.
+            * **Auth:** Bearer Token for `student4@example.com` (Owner of Post 1)
+            * **Result:** Returns `204 No Content`. The post is permanently deleted. If another user (like student5) attempts this, it returns `403 Forbidden`.
         """),
-        tags=["posts"],
+        tags=["forum-posts"],
         responses={
             204: OpenApiResponse(description="Successfully deleted the post"),
             403: OpenApiResponse(description="Forbidden (Not the owner)"),
