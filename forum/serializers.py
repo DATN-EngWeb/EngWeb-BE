@@ -80,9 +80,25 @@ class PostCommentListSerializer(serializers.ModelSerializer):
 
 
 class PostCommentCreateSerializer(serializers.ModelSerializer):
+    post_id = serializers.IntegerField(write_only=True)
+
     class Meta:
         model = PostComment
-        fields = ["id", "content"]
+        fields = ["id", "post_id", "content"]
+
+    def validate(self, attrs):
+        post_id = attrs.get("post_id")
+        try:
+            post = Post.objects.get(id=post_id)
+        except Post.DoesNotExist:
+            raise serializers.ValidationError("Valid post not found.")
+
+        attrs["post"] = post
+        return attrs
+
+    def create(self, validated_data):
+        validated_data.pop("post_id", None)
+        return super().create(validated_data)
 
 
 class PostCommentUpdateSerializer(serializers.ModelSerializer):
