@@ -528,6 +528,7 @@ class AIFeedbackForSpeakingAPIView(generics.GenericAPIView):
             "6. Do not explain the JSON, do not add any extra text before or after it. Return ONLY the JSON object.\n"
             "7. Do not end any sentence halfway; always complete your thoughts.\n"
             "8. Do not invent missing prompt details; rely only on the provided task description and audio.\n"
+            "9. STRICT RULE: Always address the candidate directly as 'you' or 'your' (e.g., 'You pronounced words clearly', 'Your intonation needs work'). CRITICAL: NEVER use third-person pronouns like 'the student', 'he', 'she', or 'they' to refer to the candidate.\n"
         )
 
         # Infer MIME type from file extension (best-effort).
