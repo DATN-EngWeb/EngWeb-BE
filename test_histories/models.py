@@ -30,7 +30,7 @@ class ProductiveTestHistory(models.Model):
     audio_path = models.TextField(null=True, blank=True)
     user_answer_text = models.TextField(null=True, blank=True)
     user_note_text = models.TextField(null=True, blank=True)
-    ai_feedback = models.TextField(null=True, blank=True)
+    ai_feedback = models.JSONField(null=True, blank=True)
     earned_bonus_point = models.IntegerField(default=0)
 
     def __str__(self):
