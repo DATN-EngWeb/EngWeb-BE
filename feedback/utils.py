@@ -186,6 +186,7 @@ def build_ai_prompt_text(
         "5. Do not explain the JSON, do not add any extra text before or after it. Return ONLY the JSON object.\n"
         "6. Do not end any sentence halfway; always complete your thoughts.\n"
         "7. Do not invent missing prompt details; rely only on the provided HTML and images.\n"
+        "8. STRICT RULE: Always address the candidate directly as 'you' or 'your' (e.g., 'You used great vocabulary', 'Your grammar needs work'). CRITICAL: NEVER use third-person pronouns like 'the student', 'he', 'she', or 'they' to refer to the candidate.\n"
     )
 
 def load_prompt_html(prompt_source):
