@@ -43,18 +43,22 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         """Filter queryset based on user role"""
         user = self.request.user
-
-        # Admin can see all
+        
+        # Base queryset based on role
         if user.role == "A":
-            return ProductiveTestHistory.objects.order_by("type", "-start_time")
-
-        # Student can only see their own
-        if user.role == "S" and hasattr(user, "student"):
-            return ProductiveTestHistory.objects.filter(student=user.student).order_by(
+            queryset = ProductiveTestHistory.objects.order_by("type", "-start_time")
+        elif user.role == "S" and hasattr(user, "student"):
+            queryset = ProductiveTestHistory.objects.filter(student=user.student).order_by(
                 "type", "-start_time"
             )
-
-        return ProductiveTestHistory.objects.none()
+        else:
+            queryset = ProductiveTestHistory.objects.none()
+        
+        # Optimize query if is_shared is requested
+        if self.request.query_params.get('is_shared') == 'true':
+            queryset = queryset.prefetch_related('posts')
+        
+        return queryset
 
     def create(self, request, *args, **kwargs):
         """
@@ -121,6 +125,12 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    def get_serializer_context(self):
+        """Add include_is_shared flag to context"""
+        context = super().get_serializer_context()
+        context['include_is_shared'] = self.request.query_params.get('is_shared') == 'true'
+        return context
+
     def perform_create(self, serializer):
         """Automatically set student from request.user"""
         serializer.save(student=self.request.user.student)
@@ -152,6 +162,14 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 description="Lọc theo loại (D=Draft, S=Submission)",
                 required=False,
                 enum=["D", "S"],
+            ),
+            OpenApiParameter(
+                name="is_shared",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description="Bật để kiểm tra xem bài làm đã được chia sẻ lên forum chưa",
+                required=False,
+                enum=["true", "false"],
             ),
         ],
         responses={
@@ -286,15 +304,25 @@ class ProductiveTestHistoryRetrieveView(generics.RetrieveAPIView):
         """Filter queryset based on user role"""
         user = self.request.user
 
-        # Admin can see all
+        # Base queryset based on role
         if user.role == "A":
-            return ProductiveTestHistory.objects.all()
-
-        # Student can only see their own
-        if user.role == "S" and hasattr(user, "student"):
-            return ProductiveTestHistory.objects.filter(student=user.student)
-
-        return ProductiveTestHistory.objects.none()
+            queryset = ProductiveTestHistory.objects.all()
+        elif user.role == "S" and hasattr(user, "student"):
+            queryset = ProductiveTestHistory.objects.filter(student=user.student)
+        else:
+            queryset = ProductiveTestHistory.objects.none()
+        
+        # Optimize query if is_shared is requested
+        if self.request.query_params.get('is_shared') == 'true':
+            queryset = queryset.prefetch_related('posts')
+        
+        return queryset
+    
+    def get_serializer_context(self):
+        """Add include_is_shared flag to context"""
+        context = super().get_serializer_context()
+        context['include_is_shared'] = self.request.query_params.get('is_shared') == 'true'
+        return context
 
     @extend_schema(
         summary="Lấy chi tiết một bản ghi lịch sử làm bài",
@@ -305,6 +333,16 @@ class ProductiveTestHistoryRetrieveView(generics.RetrieveAPIView):
             "- **Admin**: Xem được bất kỳ lịch sử nào\n\n"
         ),
         tags=["test-histories"],
+        parameters=[
+            OpenApiParameter(
+                name="is_shared",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description="Bật để kiểm tra xem bài làm đã được chia sẻ lên forum chưa",
+                required=False,
+                enum=["true", "false"],
+            ),
+        ],
         responses={
             200: OpenApiResponse(
                 description="Lấy chi tiết thành công",
