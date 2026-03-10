@@ -9,10 +9,12 @@ from tests.models import (
     ReceptiveQuestion,
     ReceptiveAnswer,
 )
-
+import json
 
 class ProductiveTestHistorySerializer(serializers.ModelSerializer):
     """Serializer for list and create ProductiveTestHistory"""
+
+    ai_feedback = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductiveTestHistory
@@ -37,6 +39,16 @@ class ProductiveTestHistorySerializer(serializers.ModelSerializer):
             "attempt",
             "earned_bonus_point",
         ]
+
+    def get_ai_feedback(self, obj):
+        if not obj.ai_feedback:
+            return None
+        if isinstance(obj.ai_feedback, dict):
+            return obj.ai_feedback
+        try:
+            return json.loads(obj.ai_feedback)
+        except (TypeError, json.JSONDecodeError):
+            return obj.ai_feedback
 
     def validate(self, attrs):
         """Validate the data"""
