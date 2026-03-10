@@ -4,7 +4,11 @@ from test_histories.models import ProductiveTestHistory
 from django.db import models
 
 class Post(models.Model):
-    productive_test_history = models.ForeignKey(ProductiveTestHistory, on_delete=models.CASCADE)
+    productive_test_history = models.ForeignKey(
+        ProductiveTestHistory, 
+        on_delete=models.CASCADE,
+        related_name='posts'
+    )
     title = models.CharField(max_length=100)
     description = models.TextField()
     like_count = models.IntegerField(default=0)
