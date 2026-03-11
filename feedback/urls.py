@@ -1,4 +1,9 @@
-from .views import AIFeedbackForSpeakingAPIView, AIFeedbackForWritingAPIView
+from .views import (
+    AIFeedbackForSpeakingAPIView, 
+    AIFeedbackForWritingAPIView,
+    TeacherListCreateTestFeedbackAPIView,
+    TeacherRetrieveUpdateDestroyTestFeedbackAPIView,
+)
 
 from django.urls import path
 
@@ -12,5 +17,15 @@ urlpatterns = [
         "ai-feedback/speaking",
         AIFeedbackForSpeakingAPIView.as_view(),
         name="ai-feedback-speaking",
+    ),
+    path(
+        "test-feedbacks",
+        TeacherListCreateTestFeedbackAPIView.as_view(),
+        name="test-feedback-list-create",
+    ),
+    path(
+        "test-feedbacks/<int:feedback_id>",
+        TeacherRetrieveUpdateDestroyTestFeedbackAPIView.as_view(),
+        name="test-feedback-retrieve-update-delete",
     ),
 ]

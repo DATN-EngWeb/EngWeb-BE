@@ -1,5 +1,5 @@
 from accounts.authentication import CustomTokenAuthentication
-from accounts.models import Student
+from accounts.models import Student, Teacher
 from test_histories.models import ProductiveTestHistory
 from tests.models import SpeakingCriteriaTemplate, WritingCriteriaTemplate
 from .utils import (
@@ -13,9 +13,18 @@ from .utils import (
     parse_feedback_json,
     process_prompt_html_images,
 )
+from .models import TestFeedback
+from .serializers import (
+    TestFeedbackListSerializer, 
+    TeacherTestFeedbackCreateSerializer,
+    TeacherTestFeedbackUpdateSerializer,
+)
+from .permissions import IsTeacher
 
 from django.conf import settings
+from django.db.models import Case, When, Value, IntegerField
 from django.utils.decorators import method_decorator
+from django_filters.rest_framework import DjangoFilterBackend
 from django_ratelimit.decorators import ratelimit
 from drf_spectacular.utils import (
     OpenApiExample,
@@ -24,12 +33,15 @@ from drf_spectacular.utils import (
     inline_serializer,
 )
 
-from rest_framework import generics, serializers, status
+from rest_framework import generics, serializers, status, permissions
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError, PermissionDenied
 
 import vertexai
 from vertexai.generative_models import GenerativeModel
+from textwrap import dedent
 
 
 @method_decorator(
@@ -620,3 +632,250 @@ class AIFeedbackForSpeakingAPIView(generics.GenericAPIView):
             },
             status=status.HTTP_200_OK,
         )
+
+class FeedbackPagination(PageNumberPagination):
+    page_size = 5
+    page_size_query_param = "page_size"
+    max_page_size = 20
+
+class TeacherListCreateTestFeedbackAPIView(generics.ListCreateAPIView):
+    authentication_classes = [CustomTokenAuthentication]
+    pagination_class = FeedbackPagination
+    permission_classes = [IsTeacher]
+    
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["created_by"]
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return TeacherTestFeedbackCreateSerializer
+        return TestFeedbackListSerializer
+
+    def get_queryset(self):
+        # For list views, we enforce providing test_id
+        if self.request.method != "GET":
+            return TestFeedback.objects.all()
+            
+        test_id = self.request.query_params.get("test_id")
+        if not test_id:
+            raise ValidationError({"test_id": "This query parameter is required."})
+            
+        queryset = TestFeedback.objects.select_related("teacher__user").filter(test_id=test_id)
+        
+        # Sort AI feedback first, then by created_at descending
+        queryset = queryset.annotate(
+            is_ai_sort_tier=Case(
+                When(created_by="A", then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            )
+        ).order_by("is_ai_sort_tier", "-created_at")
+        
+        return queryset
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.role != "T":
+            raise PermissionDenied("Only teachers can submit feedback via this endpoint.")
+            
+        try:
+            teacher = Teacher.objects.get(user=user)
+        except Teacher.DoesNotExist:
+            raise PermissionDenied("Teacher profile not found for this user.")
+            
+        serializer.save(teacher=teacher, created_by="T")
+
+    @extend_schema(
+        summary="Create teacher feedback for a test",
+        description=dedent("""\
+            Allows an authenticated and verified Teacher to post feedback for a specific test.
+            
+            ### How to Test (Auth Required)
+            1. Go to `POST /api/accounts/login`
+            2. Login with a Verified Teacher account: 
+               - Username: `teacher10` (or 11, 12)
+               - Password: `123`
+            3. Copy the `access` token.
+            4. Click 'Authorize' at the top of Swagger and paste the token.
+
+            ### Test Cases
+            **1. Successful Feedback Creation**
+            * **Method:** `POST`
+            * **URL:** `/api/feedback/test-feedbacks`
+            * **Body:** `{"test_id": 1, "comment": "Good job, but re-evaluate question 4."}`
+            * **Result:** `201 Created`
+
+            **2. Test Not Found**
+            * **Method:** `POST`
+            * **URL:** `/api/feedback/test-feedbacks`
+            * **Body:** `{"test_id": 999, "comment": "Ghost test feedback"}`
+            * **Result:** `400 Bad Request` with `{"test_id": ["Valid test not found."]}`
+
+            **3. Forbidden Access (Student or Unverified Teacher)**
+            * **Result:** `403 Forbidden` (`{"detail": "Only teachers can access this resource."}`)
+        """),
+        tags=["test-feedback"],
+        examples=[
+            OpenApiExample(
+                "Successful Feedback",
+                request_only=True,
+                value={
+                    "test_id": 1,
+                    "comment": "The reading passage is a bit too challenging for B1 level. Please review question 4 again."
+                }
+            )
+        ],
+        responses={
+            201: OpenApiResponse(description="Feedback posted successfully"),
+            400: OpenApiResponse(description="Bad request, validation error"),
+            403: OpenApiResponse(description="Permission denied, user is not a teacher or not verified"),
+            404: OpenApiResponse(description="Test not found"),
+        }
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="List feedback for a specific test",
+        tags=["test-feedback"],
+        description=dedent("""\
+            Retrieves a paginated list of feedback comments for a given `test_id`.
+            
+            ### 🔑 How to Test (Auth Required)
+            1. Login (`POST /api/accounts/login`) with `teacher10@example.com` / `password123`.
+            2. Use the `access` token for Authorization.
+            
+            **Sorting Rules:**
+            - AI feedback (`created_by="A"`) is always pinned to the top.
+            - Teacher feedback (`created_by="T"`) appears below AI feedback, sorted from newest to oldest.
+
+            ### Test Cases
+            **1. Successful Listing (Default)**
+            * **URL:** `/api/feedback/test-feedbacks?test_id=1`
+            * **Result:** `200 OK` (AI Feedback is strictly the first item, followed by page 1 of Teacher feedback).
+
+            **2. Filter by Teacher Feedback Only**
+            * **URL:** `/api/feedback/test-feedbacks?test_id=1&created_by=T`
+            * **Result:** `200 OK` (Only shows feedback added by human teachers).
+
+            **3. Missing Required Parameter**
+            * **URL:** `/api/feedback/test-feedbacks`
+            * **Result:** `400 Bad Request` (`{"test_id": "This query parameter is required."}`)
+        """),
+        responses={
+            200: OpenApiResponse(description="Successfully retrieved test feedback"),
+            400: OpenApiResponse(description="Bad Request: Missing test_id parameter"),
+            401: OpenApiResponse(description="Unauthorized"),
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+class TeacherRetrieveUpdateDestroyTestFeedbackAPIView(generics.RetrieveUpdateDestroyAPIView):
+    authentication_classes = [CustomTokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated, IsTeacher]
+    serializer_class = TeacherTestFeedbackUpdateSerializer
+    lookup_field = "id"
+    lookup_url_kwarg = "feedback_id"
+
+    def get_queryset(self):
+        return TestFeedback.objects.select_related("teacher__user").all()
+
+    def check_object_permissions(self, request, obj):
+        super().check_object_permissions(request, obj)
+        if request.method in ["PATCH", "PUT", "DELETE"]:
+            if not hasattr(request.user, "teacher") or obj.teacher != request.user.teacher:
+                raise PermissionDenied("You can only edit or delete your own feedback.")
+
+    @extend_schema(
+        summary="Retrieve a specific feedback",
+        description="Retrieves the details of a single feedback comment.",
+        tags=["test-feedback"],
+        responses={
+            200: OpenApiResponse(description="Successfully retrieved feedback"),
+            404: OpenApiResponse(description="Feedback not found"),
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        self.serializer_class = TestFeedbackListSerializer
+        return super().get(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Update feedback (Not Allowed)",
+        description="PUT method is not supported. Please use PATCH instead.",
+        tags=["test-feedback"],
+        responses={
+            405: OpenApiResponse(description="Method not allowed"),
+        }
+    )
+    def put(self, request, *args, **kwargs):
+        return Response(
+            {"detail": "PUT method is not supported. Please use PATCH for updates."},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED
+        )
+
+    @extend_schema(
+        summary="Partially update a feedback",
+        description=dedent("""\
+            Allows a teacher to update a feedback comment they previously created.
+            
+            ### How to Test (Auth Required)
+            1. Login (`POST /api/accounts/login`) with `teacher10` (password: `123`).
+            2. Use the `access` token for Authorization.
+            3. According to seed data, `teacher10` authored Feedback ID `2` (for Test 1). 
+            4. Make a `PATCH` request to `/api/feedback/test-feedbacks/2` with the updated `comment`.
+
+            ### Test Cases
+            **1. Successful Update**
+            * **Method:** `PATCH`
+            * **URL:** `/api/feedback/test-feedbacks/2`
+            * **Body:** `{"comment": "I changed my mind, actually the questions are fine."}`
+            * **Result:** `200 OK`
+
+            **2. Forbidden Access (Not the creator)**
+            * **Auth:** Bearer Token (using `teacher11` / `123`)
+            * **URL:** `/api/feedback/test-feedbacks/2`
+            * **Result:** `403 Forbidden` (`{"detail": "You can only edit or delete your own feedback."}`)
+        """),
+        tags=["test-feedback"],
+        responses={
+            200: OpenApiResponse(description="Successfully updated the feedback"),
+            400: OpenApiResponse(description="Bad request"),
+            403: OpenApiResponse(description="Forbidden (Not the owner)"),
+            404: OpenApiResponse(description="Feedback not found"),
+        }
+    )
+    def patch(self, request, *args, **kwargs):
+        return super().patch(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Delete a feedback",
+        description=dedent("""\
+            Allows a teacher to delete a feedback comment they previously created.
+            
+            ### How to Test (Auth Required)
+            1. Login (`POST /api/accounts/login`) with `teacher10` (password: `123`).
+            2. Use the `access` token for Authorization.
+            3. Make a `DELETE` request to `/api/feedback/test-feedbacks/2`
+
+            ### Test Cases
+            **1. Successful Deletion**
+            * **Method:** `DELETE`
+            * **URL:** `/api/feedback/test-feedbacks/2`
+            * **Result:** `204 No Content`
+
+            **2. Forbidden Access (Not the creator)**
+            * **Method:** `DELETE`
+            * **Auth:** Bearer Token (using `teacher11` / `123`)
+            * **URL:** `/api/feedback/test-feedbacks/2`
+            * **Result:** `403 Forbidden` (`{"detail": "You can only edit or delete your own feedback."}`)
+        """),
+        tags=["test-feedback"],
+        responses={
+            204: OpenApiResponse(description="Successfully deleted the feedback"),
+            403: OpenApiResponse(description="Forbidden (Not the owner)"),
+            404: OpenApiResponse(description="Feedback not found"),
+        }
+    )
+    def delete(self, request, *args, **kwargs):
+        return super().delete(request, *args, **kwargs)
