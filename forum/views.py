@@ -9,6 +9,7 @@ from rest_framework import generics, permissions, filters
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 
 from accounts.authentication import CustomTokenAuthentication
 from .models import Post, PostComment, PostReaction
@@ -149,16 +150,17 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
         if self.request.method != "GET":
             return Post.objects.all()
             
+        test_id = self.request.query_params.get("test_id")
+        if not test_id:
+            raise ValidationError({"test_id": "This query parameter is required."})
+            
         queryset = Post.objects.select_related(
             "productive_test_history",
             "productive_test_history__student__user",
             "productive_test_history__productive_test__test"
         )
         
-        test_id = self.request.query_params.get("test_id")
-            
-        if test_id:
-            queryset = queryset.filter(productive_test_history__productive_test__test_id=test_id)
+        queryset = queryset.filter(productive_test_history__productive_test__test_id=test_id)
 
         # Handle filter?filter=mine for the "Your Posts" tab
         filter_type = self.request.query_params.get("filter")
@@ -279,6 +281,9 @@ class PostCommentListCreateAPIView(generics.ListCreateAPIView):
             return PostComment.objects.all()
             
         post_id = self.request.query_params.get("post_id")
+        if not post_id:
+            raise ValidationError({"post_id": "This query parameter is required."})
+            
         return PostComment.objects.select_related("user").filter(post_id=post_id)
 
     def perform_create(self, serializer):
