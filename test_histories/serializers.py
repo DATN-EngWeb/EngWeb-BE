@@ -15,6 +15,8 @@ class ProductiveTestHistorySerializer(serializers.ModelSerializer):
     """Serializer for list and create ProductiveTestHistory"""
 
     ai_feedback = serializers.SerializerMethodField()
+    is_shared = serializers.SerializerMethodField()
+    post_id = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductiveTestHistory
@@ -32,6 +34,8 @@ class ProductiveTestHistorySerializer(serializers.ModelSerializer):
             "user_note_text",
             "ai_feedback",
             "earned_bonus_point",
+            "is_shared",
+            "post_id",
         ]
         read_only_fields = [
             "id",
@@ -40,6 +44,31 @@ class ProductiveTestHistorySerializer(serializers.ModelSerializer):
             "earned_bonus_point",
         ]
 
+    def get_is_shared(self, obj):
+        """Check if this test history has been shared to forum"""
+        # Only query if requested via context
+        if not self.context.get('include_is_shared', False):
+            return None
+        
+        return obj.posts.exists()
+    
+    def get_post_id(self, obj):
+        """Get the post ID if this test history has been shared to forum"""
+        # Only query if requested via context
+        if not self.context.get('include_is_shared', False):
+            return None
+        
+        post = obj.posts.first()
+        return post.id if post else None
+    
+    def to_representation(self, instance):
+        """Remove is_shared and post_id fields from response if not requested"""
+        data = super().to_representation(instance)
+        if not self.context.get('include_is_shared', False):
+            data.pop('is_shared', None)
+            data.pop('post_id', None)
+        return data
+        
     def get_ai_feedback(self, obj):
         if not obj.ai_feedback:
             return None
