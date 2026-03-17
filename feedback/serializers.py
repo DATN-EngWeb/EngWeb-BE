@@ -3,6 +3,7 @@ from .models import TestFeedback
 from tests.models import Test
 
 class TestFeedbackListSerializer(serializers.ModelSerializer):
+    author_id = serializers.SerializerMethodField()
     author_name = serializers.SerializerMethodField()
     author_avatar = serializers.SerializerMethodField()
 
@@ -15,9 +16,17 @@ class TestFeedbackListSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "created_by",
+            "author_id",
             "author_name",
             "author_avatar",
         ]
+
+    def get_author_id(self, obj):
+        if obj.created_by == "A":
+            return None
+        if obj.teacher and obj.teacher.user:
+            return obj.teacher.user.id
+        return None
 
     def get_author_name(self, obj):
         if obj.created_by == "A":
