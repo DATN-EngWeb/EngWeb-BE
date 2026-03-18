@@ -30,4 +30,6 @@ urlpatterns = [
     path("api/forums/", include("forum.urls")),
     # Feedback API
     path("api/feedback/", include("feedback.urls")),
+    # Statistic API
+    # path("api/statistic/", include("statistic.urls")),
 ]

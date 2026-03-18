@@ -14,10 +14,15 @@ class ProductiveTestHistoryFilter(filters.FilterSet):
         choices=[("D", "Draft"), ("S", "Submission")],
         help_text="Lọc theo loại (D=Draft, S=Submission)",
     )
+    skill = filters.ChoiceFilter(
+        field_name="productive_test__test__skill",
+        choices=[("S", "Speaking"), ("W", "Writing")],
+        help_text="Lọc theo kỹ năng: S (Speaking) hoặc W (Writing)",
+    )
 
     class Meta:
         model = ProductiveTestHistory
-        fields = ["productive_test", "type"]
+        fields = ["productive_test", "type", "skill"]
 
 
 class ReceptiveTestHistoryFilter(filters.FilterSet):
@@ -32,7 +37,12 @@ class ReceptiveTestHistoryFilter(filters.FilterSet):
         choices=[("D", "Draft"), ("S", "Submission")],
         help_text="Lọc theo loại (D=Draft, S=Submission)",
     )
+    skill = filters.ChoiceFilter(
+        field_name="receptive_test__test__skill",
+        choices=[("R", "Reading"), ("L", "Listening")],
+        help_text="Lọc theo kỹ năng: R (Reading) hoặc L (Listening)",
+    )
 
     class Meta:
         model = ReceptiveTestHistory
-        fields = ["receptive_test", "type"]
+        fields = ["receptive_test", "type", "skill"]
