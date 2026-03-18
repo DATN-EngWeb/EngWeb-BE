@@ -1,5 +1,6 @@
 from rest_framework import generics, status
 from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
 import django_filters
 
 
@@ -22,6 +23,14 @@ from .permissions import IsOwnerOrAdmin, IsStudent
 from .filters import ProductiveTestHistoryFilter, ReceptiveTestHistoryFilter
 
 
+class TestHistoryPagination(PageNumberPagination):
+    """Pagination class for test history list APIs."""
+
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
 class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
     """
     List and Create ProductiveTestHistory records.
@@ -31,6 +40,7 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
 
     serializer_class = ProductiveTestHistorySerializer
     permission_classes = [IsOwnerOrAdmin]  # Default for GET
+    pagination_class = TestHistoryPagination
     filter_backends = [django_filters.rest_framework.DjangoFilterBackend]
     filterset_class = ProductiveTestHistoryFilter
 
@@ -145,6 +155,7 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
             "**Lọc dữ liệu:**\n"
             "- Có thể lọc theo `productive_test` (ID của bài test) thông qua query parameter\n"
             "- Có thể lọc theo `type` (D=Draft, S=Submission) thông qua query parameter\n"
+            "- Có thể lọc theo `skill` (`S` hoặc `W`)\n"
         ),
         tags=["test-histories"],
         parameters=[
@@ -164,6 +175,25 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 enum=["D", "S"],
             ),
             OpenApiParameter(
+                name="skill",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description="Lọc theo kỹ năng của bài test",
+                required=False,
+                enum=["S", "W"],
+            ),OpenApiParameter(
+                name="page",
+                description="Số trang (mặc định: 1)",
+                required=False,
+                type=int,
+            ),
+            OpenApiParameter(
+                name="page_size",
+                description="Số phần tử mỗi trang (mặc định: 10, tối đa: 100)",
+                required=False,
+                type=int,
+            ),
+            OpenApiParameter(
                 name="is_shared",
                 type=str,
                 location=OpenApiParameter.QUERY,
@@ -175,7 +205,15 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
         responses={
             200: OpenApiResponse(
                 description="Danh sách lịch sử thành công",
-                response=ProductiveTestHistorySerializer(many=True),
+                response=inline_serializer(
+                    name="ProductiveHistoryPaginatedResponse",
+                    fields={
+                        "count": drf_serializers.IntegerField(),
+                        "next": drf_serializers.CharField(allow_null=True),
+                        "previous": drf_serializers.CharField(allow_null=True),
+                        "results": ProductiveTestHistorySerializer(many=True),
+                    },
+                ),
             ),
             401: OpenApiResponse(
                 description="Chưa đăng nhập",
@@ -372,6 +410,7 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
 
     serializer_class = ReceptiveTestHistorySerializer
     permission_classes = [IsOwnerOrAdmin]  # Default for GET
+    pagination_class = TestHistoryPagination
     filter_backends = [django_filters.rest_framework.DjangoFilterBackend]
     filterset_class = ReceptiveTestHistoryFilter
 
@@ -487,7 +526,8 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
             "- **Admin**: Xem được toàn bộ lịch sử của tất cả học viên\n\n"
             "**Lọc dữ liệu:**\n"
             "- `receptive_test`: Lọc theo ID của Receptive Test\n"
-            "- `type`: Lọc theo loại (D=Draft, S=Submission)\n\n"
+            "- `type`: Lọc theo loại (D=Draft, S=Submission)\n"
+            "- `skill`: Lọc theo kỹ năng (`R` hoặc `L`)\n\n"
             "**Response bao gồm:**\n"
             "- Thông tin test history (attempt, times, scores)\n"
             "- Chi tiết tất cả câu trả lời (answer_histories)\n"
@@ -510,11 +550,44 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 required=False,
                 enum=["D", "S"],
             ),
+            OpenApiParameter(
+                name="skill",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description="Lọc theo kỹ năng của bài test",
+                required=False,
+                enum=["R", "L"],
+            ),
+            OpenApiParameter(
+                name="page",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                description="Số trang hiện tại (mặc định: 1)",
+                required=False,
+                default=1,
+            ),
+            OpenApiParameter(
+                name="page_size",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                description="Số lượng bản ghi mỗi trang (mặc định 10, tối đa 100)",
+                required=False,
+                enum=[10, 20, 50, 100],
+                default=10,
+            ),
         ],
         responses={
             200: OpenApiResponse(
-                description="Danh sách lịch sử thành công",
-                response=ReceptiveTestHistoryDetailSerializer(many=True),
+                description="Danh sách lịch sử thành công (có phân trang)",
+                response=inline_serializer(
+                    name="ReceptiveHistoryPaginatedResponse",
+                    fields={
+                        "count": drf_serializers.IntegerField(),
+                        "next": drf_serializers.CharField(allow_null=True),
+                        "previous": drf_serializers.CharField(allow_null=True),
+                        "results": ReceptiveTestHistoryDetailSerializer(many=True),
+                    },
+                ),
             ),
             401: OpenApiResponse(
                 description="Chưa đăng nhập",

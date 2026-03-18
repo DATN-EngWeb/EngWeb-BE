@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "feedback",
     "test_histories",
     "forum",
+    "statistic",
 ]
 
 MIDDLEWARE = [
