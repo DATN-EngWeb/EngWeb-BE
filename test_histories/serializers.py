@@ -14,6 +14,7 @@ import json
 class ProductiveTestHistorySerializer(serializers.ModelSerializer):
     """Serializer for list and create ProductiveTestHistory"""
 
+    test_title = serializers.CharField(source="productive_test.test.title", read_only=True)
     ai_feedback = serializers.SerializerMethodField()
     is_shared = serializers.SerializerMethodField()
     post_id = serializers.SerializerMethodField()
@@ -24,6 +25,7 @@ class ProductiveTestHistorySerializer(serializers.ModelSerializer):
             "id",
             "student",
             "productive_test",
+            "test_title",
             "attempt",
             "type",
             "start_time",
