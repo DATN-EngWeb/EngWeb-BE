@@ -117,7 +117,7 @@ class StatisticSummaryView(APIView):
             .order_by("-end_time", "-start_time")
         )
 
-        last_30_attempt = [
+        last_30_attempts = [
             self._to_attempt_item(
                 history,
                 history.total_score,
@@ -141,7 +141,7 @@ class StatisticSummaryView(APIView):
         )
 
         return {
-            "last_30_attempt": last_30_attempt,
+            "last_30_attempts": last_30_attempts,
             "average_score": average_score,
             "completed_tests_count": completed_tests_count,
             "accuracy": accuracy,
@@ -153,7 +153,7 @@ class StatisticSummaryView(APIView):
             student=student, productive_test__test__skill=skill, type="S"
         ).order_by("-end_time", "-start_time")
 
-        last_30_attempt = [
+        last_30_attempts = [
             self._to_attempt_item(history, None) for history in submitted_queryset[:30]
         ]
 
@@ -166,7 +166,7 @@ class StatisticSummaryView(APIView):
         )
 
         return {
-            "last_30_attempt": last_30_attempt,
+            "last_30_attempts": last_30_attempts,
             "completed_tests_count": completed_tests_count,
             "average_completion_time": average_completion_time,
         }
