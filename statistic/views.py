@@ -20,13 +20,20 @@ class StatisticSummaryView(APIView):
         return (skill or "").strip().upper()
 
     @staticmethod
-    def _to_attempt_item(history, score=None):
+    def _to_attempt_item(history, score=None, normalized_score=None):
         attempt_date = history.end_time or history.start_time
         return {
             "history_id": history.id,
             "date": attempt_date.isoformat() if attempt_date else None,
             "score": score,
+            "normalized_score": normalized_score,
         }
+
+    @staticmethod
+    def _calculate_normalized_score(score, max_score):
+        if score is None or not max_score or max_score <= 0:
+            return None
+        return round((score / max_score) * 100, 2)
 
     @staticmethod
     def _calculate_receptive_average_score(submitted_histories):
@@ -110,8 +117,15 @@ class StatisticSummaryView(APIView):
             .order_by("-end_time", "-start_time")
         )
 
-        last_30_attempt = [
-            self._to_attempt_item(history, history.total_score)
+        last_30_attempts = [
+            self._to_attempt_item(
+                history,
+                history.total_score,
+                self._calculate_normalized_score(
+                    history.total_score,
+                    history.receptive_test.total_score,
+                ),
+            )
             for history in submitted_queryset[:30]
         ]
 
@@ -127,7 +141,7 @@ class StatisticSummaryView(APIView):
         )
 
         return {
-            "last_30_attempt": last_30_attempt,
+            "last_30_attempts": last_30_attempts,
             "average_score": average_score,
             "completed_tests_count": completed_tests_count,
             "accuracy": accuracy,
@@ -139,7 +153,7 @@ class StatisticSummaryView(APIView):
             student=student, productive_test__test__skill=skill, type="S"
         ).order_by("-end_time", "-start_time")
 
-        last_30_attempt = [
+        last_30_attempts = [
             self._to_attempt_item(history, None) for history in submitted_queryset[:30]
         ]
 
@@ -152,7 +166,7 @@ class StatisticSummaryView(APIView):
         )
 
         return {
-            "last_30_attempt": last_30_attempt,
+            "last_30_attempts": last_30_attempts,
             "completed_tests_count": completed_tests_count,
             "average_completion_time": average_completion_time,
         }
