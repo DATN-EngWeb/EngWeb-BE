@@ -251,6 +251,35 @@ class SpeakingCriteriaTemplate(models.Model):
             )
         ]
 
+
+class ReadingCriteriaTemplate(models.Model):
+    level = models.CharField(
+        max_length=2,
+        choices=[
+            ("B1", "B1"),
+            ("B2", "B2"),
+            ("A1", "A1"),
+            ("A2", "A2"),
+        ],
+    )
+    code = models.CharField(max_length=50)
+    name = models.CharField(max_length=150)
+    description = models.TextField()
+    checkpoints = models.JSONField(default=list)
+    priority = models.IntegerField(validators=[MinValueValidator(1)])
+
+    def __str__(self):
+        return f"Reading Criteria - Level: {self.level}, Code: {self.code}"
+
+    class Meta:
+        db_table = "reading_criteria_template"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["level", "code"], name="unique_reading_level_code"
+            )
+        ]
+
+
 class CompletedBonus(models.Model):
     skill = models.CharField(
         max_length=1,
