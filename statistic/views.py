@@ -20,6 +20,10 @@ class StatisticSummaryView(APIView):
         return (skill or "").strip().upper()
 
     @staticmethod
+    def _normalize_level(level):
+        return (level or "").strip().upper()
+
+    @staticmethod
     def _to_attempt_item(history, score=None, normalized_score=None):
         attempt_date = history.end_time or history.start_time
         return {
@@ -106,11 +110,12 @@ class StatisticSummaryView(APIView):
 
         return round(sum(durations) / len(durations), 2)
 
-    def _build_receptive_summary(self, student, skill):
+    def _build_receptive_summary(self, student, skill, level):
         submitted_queryset = (
             ReceptiveTestHistory.objects.filter(
                 student=student,
                 receptive_test__test__skill=skill,
+                receptive_test__test__level=level,
                 type="S",
             )
             .select_related("receptive_test")
@@ -148,9 +153,12 @@ class StatisticSummaryView(APIView):
             "average_completion_time": average_completion_time,
         }
 
-    def _build_productive_summary(self, student, skill):
+    def _build_productive_summary(self, student, skill, level):
         submitted_queryset = ProductiveTestHistory.objects.filter(
-            student=student, productive_test__test__skill=skill, type="S"
+            student=student,
+            productive_test__test__skill=skill,
+            productive_test__test__level=level,
+            type="S",
         ).order_by("-end_time", "-start_time")
 
         last_30_attempts = [
@@ -172,9 +180,9 @@ class StatisticSummaryView(APIView):
         }
 
     @extend_schema(
-        summary="Thống kê tổng quan theo kỹ năng của học viên",
+        summary="Thống kê tổng quan theo kỹ năng và level của học viên",
         description=(
-            "Trả về thống kê tổng quan theo 1 kỹ năng (`R`, `L`, `S`, `W`) của học viên đang đăng nhập.\n\n"
+            "Trả về thống kê tổng quan theo 1 kỹ năng (`R`, `L`, `S`, `W`) và 1 level (`A1`, `A2`, `B1`, `B2`) của học viên đang đăng nhập.\n\n"
             "- `last_30_attempt`: 30 lịch sử làm bài gần nhất\n"
             "- `average_score`: chỉ áp dụng cho `R/L`, quy đổi thang 100\n"
             "- `completed_tests_count`: số test đã hoàn thành (distinct test, chỉ tính submitted)\n"
@@ -191,27 +199,46 @@ class StatisticSummaryView(APIView):
                 enum=["R", "L", "S", "W"],
                 description="Kỹ năng cần lấy thống kê",
             ),
+            OpenApiParameter(
+                name="level",
+                type=str,
+                location=OpenApiParameter.PATH,
+                required=True,
+                enum=["A1", "A2", "B1", "B2"],
+                description="Level cần lấy thống kê",
+            ),
         ],
         responses={
             200: OpenApiResponse(description="Lấy thống kê thành công"),
-            400: OpenApiResponse(description="Skill không hợp lệ"),
+            400: OpenApiResponse(description="Skill hoặc level không hợp lệ"),
             401: OpenApiResponse(description="Chưa đăng nhập"),
             403: OpenApiResponse(description="Chỉ student được phép truy cập"),
         },
     )
-    def get(self, request, skill):
+    def get(self, request, skill, level):
         normalized_skill = self._normalize_skill(skill)
+        normalized_level = self._normalize_level(level)
+
         if normalized_skill not in {"R", "L", "S", "W"}:
             return Response(
                 {"detail": "Invalid skill. Use one of: R, L, S, W."},
                 status=400,
             )
+        if normalized_level not in {"A1", "A2", "B1", "B2"}:
+            return Response(
+                {"detail": "Invalid level. Use one of: A1, A2, B1, B2."},
+                status=400,
+            )
 
         student = request.user.student
         if normalized_skill in {"R", "L"}:
-            summary = self._build_receptive_summary(student, normalized_skill)
+            summary = self._build_receptive_summary(
+                student, normalized_skill, normalized_level
+            )
         elif normalized_skill in {"S", "W"}:
-            summary = self._build_productive_summary(student, normalized_skill)
+            summary = self._build_productive_summary(
+                student, normalized_skill, normalized_level
+            )
         else:
             return Response(
                 {"detail": "Invalid skill. Use one of: R, L, S, W."},
@@ -221,6 +248,7 @@ class StatisticSummaryView(APIView):
         return Response(
             {
                 "skill": normalized_skill,
+                "level": normalized_level,
                 **summary,
             }
         )

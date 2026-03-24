@@ -6,6 +6,8 @@ app_name = "statistic"
 
 urlpatterns = [
     path(
-        "summary/<str:skill>", StatisticSummaryView.as_view(), name="statistic-summary"
+        "summary/<str:skill>/<str:level>",
+        StatisticSummaryView.as_view(),
+        name="statistic-summary",
     ),
 ]
