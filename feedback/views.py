@@ -1,14 +1,21 @@
 from accounts.authentication import CustomTokenAuthentication
 from accounts.models import Student, Teacher
 from test_histories.models import ProductiveTestHistory
-from tests.models import SpeakingCriteriaTemplate, WritingCriteriaTemplate
+from tests.models import (
+    ReadingCriteriaTemplate,
+    SpeakingCriteriaTemplate,
+    Test,
+    WritingCriteriaTemplate,
+)
 from .utils import (
     build_ai_prompt_text,
-    build_vertex_parts,
-    build_speaking_vertex_parts,
+    build_genai_parts_with_audio,
+    build_genai_parts_with_images,
+    build_genai_parts_with_pdf,
     deduct_ai_turn,
     extract_model_text,
     format_writing_criteria_text,
+    generate_with_genai,
     load_prompt_html,
     parse_feedback_json,
     process_prompt_html_images,
@@ -22,6 +29,7 @@ from .serializers import (
 from .permissions import IsTeacher
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Case, When, Value, IntegerField
 from django.utils.decorators import method_decorator
 from django_filters.rest_framework import DjangoFilterBackend
@@ -39,9 +47,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError, PermissionDenied
 
-import vertexai
-from vertexai.generative_models import GenerativeModel
 from textwrap import dedent
+from storage.utils.gcs_presigned import GCSPresignedURLManager
 
 
 @method_decorator(
@@ -207,18 +214,10 @@ class AIFeedbackForWritingAPIView(generics.GenericAPIView):
         parsed_feedback = None
 
         try:
-            vertexai.init(
-                project=settings.VERTEX_AI_PROJECT_ID,
-                location=settings.VERTEX_AI_LOCATION,
-            )
-            model = GenerativeModel(settings.VERTEX_AI_MODEL)
-            parts = build_vertex_parts(ai_prompt_text, prompt_images)
-            generation_config = {
-                "temperature": settings.VERTEX_AI_TEMPERATURE,
-            }
-            model_response = model.generate_content(
-                parts,
-                generation_config=generation_config,
+            parts = build_genai_parts_with_images(ai_prompt_text, prompt_images)
+            model_response = generate_with_genai(
+                parts=parts,
+                temperature=settings.VERTEX_AI_TEMPERATURE,
             )
             usage = getattr(model_response, "usage_metadata", None)
 
@@ -233,6 +232,16 @@ class AIFeedbackForWritingAPIView(generics.GenericAPIView):
 
             feedback_text = extract_model_text(model_response)
             parsed_feedback = parse_feedback_json(feedback_text)
+
+            if parsed_feedback is not None:
+                if not isinstance(parsed_feedback, dict):
+                    raise ValueError("AI feedback JSON must be an object.")
+
+                revised_text = parsed_feedback.get("revised_text")
+                if not isinstance(revised_text, str) or not revised_text.strip():
+                    raise ValueError(
+                        "AI feedback JSON is missing required plain-text field 'revised_text'."
+                    )
         except Exception as exc:
             return Response(
                 {
@@ -558,22 +567,14 @@ class AIFeedbackForSpeakingAPIView(generics.GenericAPIView):
         parsed_feedback = None
 
         try:
-            vertexai.init(
-                project=settings.VERTEX_AI_PROJECT_ID,
-                location=settings.VERTEX_AI_LOCATION,
-            )
-            model = GenerativeModel(settings.VERTEX_AI_MODEL)
-            parts = build_speaking_vertex_parts(
+            parts = build_genai_parts_with_audio(
                 ai_prompt_text=ai_prompt_text,
                 audio_gcs_uri=audio_gcs_uri,
                 mime_type=audio_mime,
             )
-            generation_config = {
-                "temperature": settings.VERTEX_AI_TEMPERATURE,
-            }
-            model_response = model.generate_content(
-                parts,
-                generation_config=generation_config,
+            model_response = generate_with_genai(
+                parts=parts,
+                temperature=settings.VERTEX_AI_TEMPERATURE,
             )
             usage = getattr(model_response, "usage_metadata", None)
 
@@ -632,6 +633,333 @@ class AIFeedbackForSpeakingAPIView(generics.GenericAPIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+@method_decorator(
+    ratelimit(key="user", rate="2/m", method=["POST"], block=False),
+    name="dispatch",
+)
+class AIFeedbackForReadingAPIView(generics.GenericAPIView):
+    authentication_classes = [CustomTokenAuthentication]
+    permission_classes = [IsTeacher]
+
+    @extend_schema(
+        summary="Generate AI feedback for reading test design",
+        description=(
+            "Generate AI review feedback for a teacher-created reading test using a PDF uploaded to GCS. "
+            "The API validates teacher ownership, test status ('I' - In Review), AI turn availability, and "
+            "GCS URI format before calling Vertex AI.\n\n"
+            "Input must include `test_id` and `pdf_gcs_uri` (gs://bucket/tests/test_<id>/uuid-file.pdf). "
+            "The uploaded PDF is always deleted after processing (success or failure)."
+        ),
+        tags=["feedback"],
+        request=inline_serializer(
+            name="AIFeedbackForReadingRequest",
+            fields={
+                "test_id": serializers.IntegerField(required=True),
+                "pdf_gcs_uri": serializers.CharField(required=True),
+            },
+        ),
+        responses={
+            200: OpenApiResponse(description="AI reading feedback generated successfully"),
+            400: OpenApiResponse(description="Invalid request or business rule violation"),
+            403: OpenApiResponse(description="Permission denied"),
+            404: OpenApiResponse(description="Test not found"),
+            502: OpenApiResponse(description="AI service error"),
+        },
+    )
+    def post(self, request):
+        if getattr(request, "limited", False):
+            return Response(
+                {
+                    "detail": "Too many AI reading feedback requests. Please wait a bit before trying again."
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        test_id = request.data.get("test_id")
+        pdf_gcs_uri = (request.data.get("pdf_gcs_uri") or "").strip()
+
+        if not test_id:
+            return Response(
+                {"detail": "test_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not pdf_gcs_uri:
+            return Response(
+                {"detail": "pdf_gcs_uri is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not pdf_gcs_uri.startswith("gs://"):
+            return Response(
+                {"detail": "pdf_gcs_uri must start with 'gs://'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            teacher = Teacher.objects.select_related("user").get(user=request.user)
+        except Teacher.DoesNotExist:
+            return Response(
+                {"detail": "Teacher profile not found."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        test = (
+            Test.objects.select_related("created_by__user")
+            .filter(pk=test_id, type="R", skill="R")
+            .first()
+        )
+        if not test:
+            self._cleanup_temp_pdf(pdf_gcs_uri)
+            return Response(
+                {"detail": "Reading test not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if test.status != "I":
+            self._cleanup_temp_pdf(pdf_gcs_uri)
+            return Response(
+                {
+                    "detail": "AI review is only allowed when the test status is 'In Review' (I)."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not test.created_by_id or test.created_by_id != teacher.pk:
+            self._cleanup_temp_pdf(pdf_gcs_uri)
+            return Response(
+                {"detail": "Only the teacher who created this test can request AI review."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if teacher.weekly_ai_turn <= 0:
+            self._cleanup_temp_pdf(pdf_gcs_uri)
+            return Response(
+                {
+                    "detail": "You have no AI review turns left. Please wait for the next weekly reset.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        uri_without_prefix = pdf_gcs_uri[len("gs://") :]
+        uri_parts = uri_without_prefix.split("/", 1)
+        if len(uri_parts) != 2 or not uri_parts[0] or not uri_parts[1]:
+            self._cleanup_temp_pdf(pdf_gcs_uri)
+            return Response(
+                {
+                    "detail": "Invalid pdf_gcs_uri format. Expected 'gs://<bucket>/<object>'."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        bucket_name, object_key = uri_parts[0], uri_parts[1]
+        if bucket_name != settings.GCS_BUCKET_NAME:
+            self._cleanup_temp_pdf(pdf_gcs_uri)
+            return Response(
+                {"detail": "pdf_gcs_uri bucket is not allowed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        expected_prefix = f"tests/test_{test.id}/"
+        if not object_key.startswith(expected_prefix):
+            self._cleanup_temp_pdf(pdf_gcs_uri)
+            return Response(
+                {
+                    "detail": f"pdf_gcs_uri must point to an object under '{expected_prefix}'."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not object_key.lower().endswith(".pdf"):
+            self._cleanup_temp_pdf(pdf_gcs_uri)
+            return Response(
+                {"detail": "pdf_gcs_uri must reference a .pdf file."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        gcs_manager = GCSPresignedURLManager()
+        metadata = gcs_manager.get_object_metadata(object_key)
+        if not metadata.get("exists"):
+            return Response(
+                {"detail": "Uploaded PDF was not found in GCS."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        file_size = metadata.get("size") or 0
+        if file_size <= 0 or file_size > gcs_manager.MAX_FILE_SIZE:
+            self._cleanup_temp_pdf(pdf_gcs_uri)
+            return Response(
+                {
+                    "detail": f"PDF file size must be between 1 byte and {gcs_manager.MAX_FILE_SIZE} bytes.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reading_criteria_rows = list(
+            ReadingCriteriaTemplate.objects.filter(level=test.level)
+            .order_by("priority")
+            .values("code", "name", "description", "checkpoints", "priority")
+        )
+
+        if not reading_criteria_rows:
+            self._cleanup_temp_pdf(pdf_gcs_uri)
+            return Response(
+                {"detail": "No reading criteria template available for this test level."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        criteria_blocks = []
+        for row in reading_criteria_rows:
+            checkpoints = row.get("checkpoints") or []
+            if not isinstance(checkpoints, list):
+                checkpoints = []
+            checkpoint_lines = "\n".join([f"   - {item}" for item in checkpoints])
+            criteria_blocks.append(
+                "\n".join(
+                    [
+                        f"{row['priority']}. {row['name']} ({row['code']}):",
+                        f"   Description: {row['description']}",
+                        "   Checkpoints:",
+                        checkpoint_lines if checkpoint_lines else "   - (No checkpoints)",
+                    ]
+                )
+            )
+
+        criteria_text = "\n\n".join(criteria_blocks)
+
+        ai_prompt_text = (
+            "You are a senior English reading-test design reviewer.\n\n"
+            "You are given a teacher-created reading test as a PDF. Your task is to review the quality of test design, "
+            "not to solve the test as a student.\n\n"
+            f"Test metadata:\n- Title: {test.title}\n- CEFR Level: {test.level}\n\n"
+            "Use the following rubric criteria:\n"
+            f"{criteria_text}\n\n"
+            "Output requirements (STRICT):\n"
+            "1. Return ONLY valid HTML fragment in English (no markdown, no code fences).\n"
+            "2. Do NOT include <html>, <head>, <body>, <style>, or <script>.\n"
+            "3. Use only these tags: <h3>, <p>, <ul>, <ol>, <li>, <strong>, <em>.\n"
+            "4. Structure your output in this order:\n"
+            "   - <h3>Executive Summary</h3>\n"
+            "   - <h3>Strengths</h3>\n"
+            "   - <h3>High-Priority Issues</h3>\n"
+            "   - <h3>Medium/Low-Priority Issues</h3>\n"
+            "   - <h3>Recommended Revisions</h3>\n"
+            "   - <h3>Final Verdict</h3>\n"
+            "5. Make feedback concrete and actionable for a teacher who authored the test.\n"
+            "6. If any part of the PDF is unclear or unreadable, explicitly state assumptions/uncertainties.\n"
+            "7. Do not fabricate missing content.\n"
+        )
+
+        usage_data = None
+        feedback_html = ""
+
+        try:
+            parts = build_genai_parts_with_pdf(
+                ai_prompt_text=ai_prompt_text,
+                pdf_gcs_uri=pdf_gcs_uri,
+            )
+            model_response = generate_with_genai(
+                parts=parts,
+                temperature=settings.VERTEX_AI_TEMPERATURE,
+            )
+            usage = getattr(model_response, "usage_metadata", None)
+            if usage is not None:
+                usage_data = {
+                    "prompt_token_count": getattr(usage, "prompt_token_count", None),
+                    "candidates_token_count": getattr(
+                        usage, "candidates_token_count", None
+                    ),
+                    "total_token_count": getattr(usage, "total_token_count", None),
+                }
+                print(usage_data)
+
+            feedback_html = extract_model_text(model_response)
+        except Exception as exc:
+            return Response(
+                {
+                    "detail": "Failed to generate AI reading feedback at the moment.",
+                    "error": f"{type(exc).__name__}: {exc}",
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        finally:
+            # self._cleanup_temp_pdf(pdf_gcs_uri)
+            print("not delete")
+
+        if not feedback_html:
+            return Response(
+                {"detail": "AI returned empty feedback. Please try again."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        try:
+            with transaction.atomic():
+                teacher_locked = Teacher.objects.select_for_update().get(pk=teacher.pk)
+                if teacher_locked.weekly_ai_turn <= 0:
+                    return Response(
+                        {
+                            "detail": "You have no AI review turns left. Please wait for the next weekly reset.",
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                teacher_locked.weekly_ai_turn -= 1
+                teacher_locked.save(update_fields=["weekly_ai_turn"])
+
+                feedback_row, _created = TestFeedback.objects.update_or_create(
+                    test_id=test.id,
+                    created_by="A",
+                    defaults={
+                        "teacher": None,
+                        "comment": feedback_html,
+                    },
+                )
+        except Exception as exc:
+            return Response(
+                {
+                    "detail": "Failed to persist AI reading feedback.",
+                    "error": f"{type(exc).__name__}: {exc}",
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(
+            {
+                "message": "AI reading feedback generated successfully.",
+                "test_id": test.id,
+                "feedback_id": feedback_row.id,
+                "ai_feedback": feedback_html,
+                "remaining_turns": {
+                    "weekly_ai_turn": teacher_locked.weekly_ai_turn,
+                },
+                "usage": usage_data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def _cleanup_temp_pdf(self, pdf_gcs_uri: str):
+        if not pdf_gcs_uri or not pdf_gcs_uri.startswith("gs://"):
+            return
+
+        try:
+            without_prefix = pdf_gcs_uri[len("gs://") :]
+            parts = without_prefix.split("/", 1)
+            if len(parts) != 2:
+                return
+
+            bucket, key = parts[0], parts[1]
+            if bucket != settings.GCS_BUCKET_NAME or not key.startswith("tests/test_"):
+                return
+
+            gcs_manager = GCSPresignedURLManager()
+            deleted = gcs_manager.delete_object(key)
+            if not deleted:
+                print(f"[AIFeedbackForReadingAPIView] Failed to delete uploaded PDF: {pdf_gcs_uri}")
+        except Exception as exc:
+            print(f"[AIFeedbackForReadingAPIView] Error deleting uploaded PDF {pdf_gcs_uri}: {exc}")
+
 
 class FeedbackPagination(PageNumberPagination):
     page_size = 5
