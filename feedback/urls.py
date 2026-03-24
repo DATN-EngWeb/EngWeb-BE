@@ -1,5 +1,6 @@
 from .views import (
-    AIFeedbackForSpeakingAPIView, 
+    AIFeedbackForReadingAPIView,
+    AIFeedbackForSpeakingAPIView,
     AIFeedbackForWritingAPIView,
     TeacherListCreateTestFeedbackAPIView,
     TeacherRetrieveUpdateDestroyTestFeedbackAPIView,
@@ -12,6 +13,11 @@ urlpatterns = [
         "ai-feedback/writing",
         AIFeedbackForWritingAPIView.as_view(),
         name="ai-feedback-writing",
+    ),
+    path(
+        "ai-feedback/reading",
+        AIFeedbackForReadingAPIView.as_view(),
+        name="ai-feedback-reading",
     ),
     path(
         "ai-feedback/speaking",

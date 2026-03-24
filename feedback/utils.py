@@ -3,10 +3,12 @@ import json
 import re
 
 import requests
+from django.conf import settings
 from django.db import transaction
 
 from accounts.models import Student
-from vertexai.generative_models import Part
+from google import genai
+from google.genai import types
 
 
 IMG_TAG_PATTERN = re.compile(r"<img\b[^>]*>", flags=re.IGNORECASE)
@@ -177,16 +179,18 @@ def build_ai_prompt_text(
         '    "summary": "<3–5 sentences summarising the overall performance at CEFR level '
         f'{test_level}>",\n'
         '    "next_actions": "<2–4 concrete suggestions for what the student should do next to improve>"\n'
-        "  }\n"
+        "  },\n"
+        '  "revised_text": "<full revised version of the student response in plain text only; no HTML, no markdown, no code fences>"\n'
         "}\n\n"
         "3. The value of each field must be plain text only (no nested JSON, no markdown syntax).\n"
-        "4. CRITICAL: Return ONLY the raw JSON object. Do NOT wrap it in markdown code fences (```json ... ```). "
+        "4. `revised_text` is mandatory and must be plain text only. It should preserve the original meaning and structure as much as possible while applying only necessary corrections.\n"
+        "5. CRITICAL: Return ONLY the raw JSON object. Do NOT wrap it in markdown code fences (```json ... ```). "
         "Do NOT add any prefix text like 'json' or 'Here is the JSON:'. Do NOT add any suffix text or explanations. "
         "Start your response directly with '{' and end with '}'.\n"
-        "5. Do not explain the JSON, do not add any extra text before or after it. Return ONLY the JSON object.\n"
-        "6. Do not end any sentence halfway; always complete your thoughts.\n"
-        "7. Do not invent missing prompt details; rely only on the provided HTML and images.\n"
-        "8. STRICT RULE: Always address the candidate directly as 'you' or 'your' (e.g., 'You used great vocabulary', 'Your grammar needs work'). CRITICAL: NEVER use third-person pronouns like 'the student', 'he', 'she', or 'they' to refer to the candidate.\n"
+        "6. Do not explain the JSON, do not add any extra text before or after it. Return ONLY the JSON object.\n"
+        "7. Do not end any sentence halfway; always complete your thoughts.\n"
+        "8. Do not invent missing prompt details; rely only on the provided HTML and images.\n"
+        "9. STRICT RULE: Always address the candidate directly as 'you' or 'your' (e.g., 'You used great vocabulary', 'Your grammar needs work'). CRITICAL: NEVER use third-person pronouns like 'the student', 'he', 'she', or 'they' to refer to the candidate.\n"
     )
 
 def load_prompt_html(prompt_source):
@@ -207,33 +211,32 @@ def load_prompt_html(prompt_source):
 
     return prompt_source, False
 
-def build_vertex_parts(ai_prompt_text, prompt_images):
-    """
-    Build multimodal parts (text + images) for Vertex AI Gemini.
-    """
-    parts = [ai_prompt_text]
+def build_genai_parts_with_images(ai_prompt_text, prompt_images):
+    """Build google-genai content parts (text + inline images)."""
+    parts = [types.Part.from_text(text=ai_prompt_text)]
     for image in prompt_images:
         try:
             image_bytes = base64.b64decode(image["bytes_base64"], validate=True)
-            parts.append(Part.from_data(data=image_bytes, mime_type=image["mime_type"]))
+            parts.append(
+                types.Part.from_bytes(
+                    data=image_bytes,
+                    mime_type=image["mime_type"],
+                )
+            )
         except Exception:
             # Ignore invalid image payloads silently to avoid breaking the whole request.
             continue
     return parts
 
 
-def build_speaking_vertex_parts(ai_prompt_text: str, audio_gcs_uri: str, mime_type: str):
-    """
-    Build multimodal parts (text + audio) for Vertex AI Gemini speaking evaluation.
-
-    The audio is provided as a GCS URI (gs://...) which Gemini can fetch directly.
-    """
-    parts = [ai_prompt_text]
+def build_genai_parts_with_audio(ai_prompt_text: str, audio_gcs_uri: str, mime_type: str):
+    """Build google-genai content parts (text + audio URI)."""
+    parts = [types.Part.from_text(text=ai_prompt_text)]
     if audio_gcs_uri:
         try:
             parts.append(
-                Part.from_uri(
-                    uri=audio_gcs_uri,
+                types.Part.from_uri(
+                    file_uri=audio_gcs_uri,
                     mime_type=mime_type,
                 )
             )
@@ -242,6 +245,31 @@ def build_speaking_vertex_parts(ai_prompt_text: str, audio_gcs_uri: str, mime_ty
             # so that the request does not break completely.
             pass
     return parts
+
+
+def build_genai_parts_with_pdf(ai_prompt_text: str, pdf_gcs_uri: str):
+    """Build google-genai content parts (text + PDF URI)."""
+    return [
+        types.Part.from_text(text=ai_prompt_text),
+        types.Part.from_uri(file_uri=pdf_gcs_uri, mime_type="application/pdf"),
+    ]
+
+
+def generate_with_genai(parts, temperature):
+    """Call Google Gen AI SDK (Vertex backend) and return raw response."""
+    client = genai.Client(
+        vertexai=True,
+        project=settings.VERTEX_AI_PROJECT_ID,
+        location=settings.VERTEX_AI_LOCATION,
+    )
+
+    return client.models.generate_content(
+        model=settings.VERTEX_AI_MODEL,
+        contents=parts,
+        config=types.GenerateContentConfig(
+            temperature=temperature,
+        ),
+    )
 
 def extract_model_text(response):
     """
