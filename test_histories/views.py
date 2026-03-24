@@ -56,11 +56,13 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
         
         # Base queryset based on role
         if user.role == "A":
-            queryset = ProductiveTestHistory.objects.order_by("type", "-start_time")
+            queryset = ProductiveTestHistory.objects.select_related(
+                "productive_test__test"
+            ).order_by("type", "-start_time")
         elif user.role == "S" and hasattr(user, "student"):
-            queryset = ProductiveTestHistory.objects.filter(student=user.student).order_by(
-                "type", "-start_time"
-            )
+            queryset = ProductiveTestHistory.objects.filter(
+                student=user.student
+            ).select_related("productive_test__test").order_by("type", "-start_time")
         else:
             queryset = ProductiveTestHistory.objects.none()
         
@@ -156,6 +158,7 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
             "- Có thể lọc theo `productive_test` (ID của bài test) thông qua query parameter\n"
             "- Có thể lọc theo `type` (D=Draft, S=Submission) thông qua query parameter\n"
             "- Có thể lọc theo `skill` (`S` hoặc `W`)\n"
+            "- Có thể lọc theo `level` (`A1`, `A2`, `B1`, `B2`)\n"
         ),
         tags=["test-histories"],
         parameters=[
@@ -181,7 +184,16 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 description="Lọc theo kỹ năng của bài test",
                 required=False,
                 enum=["S", "W"],
-            ),OpenApiParameter(
+            ),
+            OpenApiParameter(
+                name="level",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description="Lọc theo level của bài test",
+                required=False,
+                enum=["A1", "A2", "B1", "B2"],
+            ),
+            OpenApiParameter(
                 name="page",
                 description="Số trang (mặc định: 1)",
                 required=False,
@@ -528,6 +540,7 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
             "- `receptive_test`: Lọc theo ID của Receptive Test\n"
             "- `type`: Lọc theo loại (D=Draft, S=Submission)\n"
             "- `skill`: Lọc theo kỹ năng (`R` hoặc `L`)\n\n"
+            "- `level`: Lọc theo level (`A1`, `A2`, `B1`, `B2`)\n\n"
             "**Response bao gồm:**\n"
             "- Thông tin test history (attempt, times, scores)\n"
             "- Chi tiết tất cả câu trả lời (answer_histories)\n"
@@ -559,12 +572,19 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 enum=["R", "L"],
             ),
             OpenApiParameter(
+                name="level",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description="Lọc theo level của bài test",
+                required=False,
+                enum=["A1", "A2", "B1", "B2"],
+            ),
+            OpenApiParameter(
                 name="page",
                 type=int,
                 location=OpenApiParameter.QUERY,
                 description="Số trang hiện tại (mặc định: 1)",
                 required=False,
-                default=1,
             ),
             OpenApiParameter(
                 name="page_size",
@@ -572,8 +592,6 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 location=OpenApiParameter.QUERY,
                 description="Số lượng bản ghi mỗi trang (mặc định 10, tối đa 100)",
                 required=False,
-                enum=[10, 20, 50, 100],
-                default=10,
             ),
         ],
         responses={

@@ -15,6 +15,7 @@ class ProductiveTestHistorySerializer(serializers.ModelSerializer):
     """Serializer for list and create ProductiveTestHistory"""
 
     test_title = serializers.CharField(source="productive_test.test.title", read_only=True)
+    level = serializers.CharField(source="productive_test.test.level", read_only=True)
     ai_feedback = serializers.SerializerMethodField()
     is_shared = serializers.SerializerMethodField()
     post_id = serializers.SerializerMethodField()
@@ -26,6 +27,7 @@ class ProductiveTestHistorySerializer(serializers.ModelSerializer):
             "student",
             "productive_test",
             "test_title",
+            "level",
             "attempt",
             "type",
             "start_time",
@@ -473,6 +475,9 @@ class ReceptiveTestHistoryDetailSerializer(serializers.ModelSerializer):
     test_title = serializers.CharField(
         source="receptive_test.test.title", read_only=True
     )
+    level = serializers.CharField(
+        source="receptive_test.test.level", read_only=True
+    )
 
     class Meta:
         model = ReceptiveTestHistory
@@ -482,6 +487,7 @@ class ReceptiveTestHistoryDetailSerializer(serializers.ModelSerializer):
             "student_username",
             "receptive_test",
             "test_title",
+            "level",
             "attempt",
             "type",
             "start_time",
