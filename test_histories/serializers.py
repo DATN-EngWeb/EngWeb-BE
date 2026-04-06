@@ -1,9 +1,14 @@
+from decimal import Decimal, ROUND_HALF_UP
+
 from rest_framework import serializers
 from django.utils import timezone
 from django.db import transaction
+from django.db.models import F, Max
 from .models import ProductiveTestHistory, ReceptiveTestHistory, ReceptiveAnswerHistory
 from accounts.models import Student
 from tests.models import (
+    CompletedBonus,
+    EXPBonusRule,
     ProductiveTest,
     ReceptiveTest,
     ReceptiveQuestion,
@@ -231,6 +236,7 @@ class ReceptiveTestHistorySerializer(serializers.ModelSerializer):
             "end_time",
             "total_time",
             "total_score",
+            "bonus_point",
             "earned_bonus_point",
             "answer_histories",
         ]
@@ -239,11 +245,17 @@ class ReceptiveTestHistorySerializer(serializers.ModelSerializer):
             "student",
             "attempt",
             "total_score",
+            "bonus_point",
             "earned_bonus_point",
         ]
 
     def validate(self, attrs):
         """Validate the data"""
+        if self.instance and self.instance.type == "S":
+            raise serializers.ValidationError(
+                {"type": "Submitted history cannot be updated."}
+            )
+
         # For create operations, check if receptive_test exists
         if not self.instance:
             receptive_test = attrs.get("receptive_test")
@@ -297,6 +309,88 @@ class ReceptiveTestHistorySerializer(serializers.ModelSerializer):
                         )
 
         return attrs
+
+    @staticmethod
+    def _get_exp_bonus_rule(completion_percentage):
+        if completion_percentage >= 100:
+            return EXPBonusRule.objects.get(max_percentage=100)
+
+        return EXPBonusRule.objects.get(
+            min_percentage__lte=completion_percentage,
+            max_percentage__gt=completion_percentage,
+        )
+
+    @staticmethod
+    def _calculate_bonus_point(receptive_test, total_score):
+        """
+        Calculate bonus points based on completion percentage and bonus rules
+        Returns: (bonus_point, completion_percentage, completed_bonus, exp_rule)
+        """
+        max_score = receptive_test.total_score or 0
+        if max_score <= 0:
+            return 0, 0.0, 0, None
+
+        completion_percentage = (total_score / max_score) * 100
+        exp_rule = ReceptiveTestHistorySerializer._get_exp_bonus_rule(
+            completion_percentage
+        )
+
+        completed_bonus = CompletedBonus.objects.get(
+            skill=receptive_test.test.skill,
+            level=receptive_test.test.level,
+        )
+
+        exp_earned = (
+            Decimal(str(completed_bonus.completed_bonus))
+            * Decimal(str(exp_rule.exp_percentage))
+            / Decimal("100")
+        )
+        bonus_point = int(
+            exp_earned.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        )
+
+        return bonus_point, round(completion_percentage, 2), completed_bonus, exp_rule
+
+    def _apply_bonus_points(self, receptive_test_history, previous_bonus_point=0):
+        if receptive_test_history.type != "S":
+            receptive_test_history.bonus_point = 0
+            receptive_test_history.earned_bonus_point = 0
+            receptive_test_history.save(update_fields=["bonus_point", "earned_bonus_point"])
+            return receptive_test_history.bonus_point, receptive_test_history.earned_bonus_point
+
+        bonus_point, _, _, _ = self._calculate_bonus_point(
+            receptive_test_history.receptive_test,
+            receptive_test_history.total_score or 0,
+        )
+
+        receptive_test_history.bonus_point = bonus_point
+        # Only award positive improvement; do not subtract points on worse attempts.
+        receptive_test_history.earned_bonus_point = max(
+            0, bonus_point - previous_bonus_point
+        )
+        receptive_test_history.save(update_fields=["bonus_point", "earned_bonus_point"])
+
+        delta = receptive_test_history.earned_bonus_point
+        if delta:
+            Student.objects.filter(pk=receptive_test_history.student_id).update(
+                cumulative_point=F("cumulative_point") + delta,
+                weekly_point=F("weekly_point") + delta,
+            )
+
+        return receptive_test_history.bonus_point, receptive_test_history.earned_bonus_point
+
+    def _get_previous_submission_bonus(self, receptive_test_history):
+        best_bonus = (
+            ReceptiveTestHistory.objects.filter(
+                student=receptive_test_history.student,
+                receptive_test=receptive_test_history.receptive_test,
+                type="S",
+            )
+            .exclude(pk=receptive_test_history.pk)
+            .aggregate(best_bonus=Max("bonus_point"))
+        )
+
+        return best_bonus["best_bonus"] or 0
 
     def _calculate_answer_score(self, question, selected_answer=None, user_text=None):
         """
@@ -405,7 +499,11 @@ class ReceptiveTestHistorySerializer(serializers.ModelSerializer):
         receptive_test_history.total_score = total_score
         receptive_test_history.save(update_fields=["total_score"])
 
-        # TODO: Calculate and update earned_bonus_point based on EXPBonusRule
+        if receptive_test_history.type == "S":
+            previous_bonus_point = self._get_previous_submission_bonus(receptive_test_history)
+            self._apply_bonus_points(receptive_test_history, previous_bonus_point=previous_bonus_point)
+        else:
+            self._apply_bonus_points(receptive_test_history, previous_bonus_point=0)
 
         return receptive_test_history
 
@@ -460,7 +558,11 @@ class ReceptiveTestHistorySerializer(serializers.ModelSerializer):
             instance.total_score = total_score
             instance.save(update_fields=["total_score"])
 
-        # TODO: Calculate and update earned_bonus_point based on EXPBonusRule
+        if instance.type == "S":
+            bonus_before_save = self._get_previous_submission_bonus(instance)
+            self._apply_bonus_points(instance, previous_bonus_point=bonus_before_save)
+        else:
+            self._apply_bonus_points(instance, previous_bonus_point=0)
 
         return instance
 
@@ -478,6 +580,9 @@ class ReceptiveTestHistoryDetailSerializer(serializers.ModelSerializer):
     level = serializers.CharField(
         source="receptive_test.test.level", read_only=True
     )
+    completion_percentage = serializers.SerializerMethodField()
+    rating = serializers.SerializerMethodField()
+    feedback_message = serializers.SerializerMethodField()
 
     class Meta:
         model = ReceptiveTestHistory
@@ -494,9 +599,52 @@ class ReceptiveTestHistoryDetailSerializer(serializers.ModelSerializer):
             "end_time",
             "total_time",
             "total_score",
+            "completion_percentage",
+            "bonus_point",
             "earned_bonus_point",
+            "rating",
+            "feedback_message",
             "answer_histories",
         ]
+
+    @staticmethod
+    def _resolve_exp_rule(completion_percentage):
+        if completion_percentage is None:
+            return None
+
+        try:
+            if completion_percentage >= 100:
+                return EXPBonusRule.objects.get(max_percentage=100)
+
+            return EXPBonusRule.objects.get(
+                min_percentage__lte=completion_percentage,
+                max_percentage__gt=completion_percentage,
+            )
+        except (EXPBonusRule.DoesNotExist, EXPBonusRule.MultipleObjectsReturned):
+            return None
+
+    def get_completion_percentage(self, obj):
+        max_score = obj.receptive_test.total_score or 0
+        achieved_score = obj.total_score or 0
+
+        if max_score <= 0:
+            return 0.0
+
+        return round((achieved_score / max_score) * 100, 2)
+
+    def get_rating(self, obj):
+        if obj.type != "S":
+            return None
+
+        exp_rule = self._resolve_exp_rule(self.get_completion_percentage(obj))
+        return exp_rule.rating if exp_rule else None
+
+    def get_feedback_message(self, obj):
+        if obj.type != "S":
+            return None
+
+        exp_rule = self._resolve_exp_rule(self.get_completion_percentage(obj))
+        return exp_rule.feedback_message if exp_rule else None
 
     def get_answer_histories(self, obj):
         """Get answer histories with question and answer details"""
