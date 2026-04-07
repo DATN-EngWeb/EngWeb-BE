@@ -90,6 +90,11 @@ class ProductiveTestHistorySerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         """Validate the data"""
+        if self.instance and self.instance.type == "S":
+            raise serializers.ValidationError(
+                {"type": "Submitted history cannot be updated."}
+            )
+
         # For create operations
         if not self.instance:
             productive_test = attrs.get("productive_test")
@@ -124,6 +129,65 @@ class ProductiveTestHistorySerializer(serializers.ModelSerializer):
             )
 
         return attrs
+
+    @staticmethod
+    def _calculate_productive_bonus_point(productive_test):
+        completed_bonus = CompletedBonus.objects.get(
+            skill=productive_test.test.skill,
+            level=productive_test.test.level,
+        )
+        return int(
+            Decimal(str(completed_bonus.completed_bonus)).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP
+            )
+        )
+
+    def _apply_submission_exp(self, productive_test_history):
+        if productive_test_history.type != "S":
+            productive_test_history.earned_bonus_point = 0
+            productive_test_history.save(update_fields=["earned_bonus_point"])
+            return productive_test_history.earned_bonus_point
+
+        has_previous_submission = ProductiveTestHistory.objects.filter(
+            student=productive_test_history.student,
+            productive_test=productive_test_history.productive_test,
+            type="S",
+        ).exclude(pk=productive_test_history.pk).exists()
+
+        if has_previous_submission:
+            productive_test_history.earned_bonus_point = 0
+            productive_test_history.save(update_fields=["earned_bonus_point"])
+            return productive_test_history.earned_bonus_point
+
+        bonus_point = self._calculate_productive_bonus_point(
+            productive_test_history.productive_test
+        )
+        productive_test_history.earned_bonus_point = bonus_point
+        productive_test_history.save(update_fields=["earned_bonus_point"])
+
+        # Update student's points only if this is the first submission for this test
+        if bonus_point:
+            Student.objects.filter(pk=productive_test_history.student_id).update(
+                cumulative_point=F("cumulative_point") + bonus_point,
+                weekly_point=F("weekly_point") + bonus_point,
+            )
+
+        return productive_test_history.earned_bonus_point
+
+    @transaction.atomic
+    def create(self, validated_data):
+        productive_test_history = super().create(validated_data)
+        self._apply_submission_exp(productive_test_history)
+        return productive_test_history
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+        self._apply_submission_exp(instance)
+        return instance
 
 
 class ReceptiveAnswerHistorySerializer(serializers.Serializer):
@@ -371,6 +435,8 @@ class ReceptiveTestHistorySerializer(serializers.ModelSerializer):
         receptive_test_history.save(update_fields=["bonus_point", "earned_bonus_point"])
 
         delta = receptive_test_history.earned_bonus_point
+        
+        # Update student's points based on the delta of earned bonus points compared to previous best submission
         if delta:
             Student.objects.filter(pk=receptive_test_history.student_id).update(
                 cumulative_point=F("cumulative_point") + delta,
