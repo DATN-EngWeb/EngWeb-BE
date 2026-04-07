@@ -14,6 +14,7 @@ from django.db.models import Q
 
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from user_progress.serializers import UserLevelSerializer
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -166,6 +167,7 @@ class TeacherSerializer(serializers.ModelSerializer):
 
 class StudentSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
+    level = UserLevelSerializer(read_only=True)
 
     class Meta:
         model = Student
@@ -181,7 +183,6 @@ class StudentSerializer(serializers.ModelSerializer):
             "streak_count",
             "max_streak",
             "level",
-            "title",
             "created_at",
             "updated_at"
         ]
@@ -195,8 +196,6 @@ class StudentSerializer(serializers.ModelSerializer):
             "last_submitted_date": {"read_only": True},
             "streak_count": {"read_only": True},
             "max_streak": {"read_only": True},
-            "level": {"read_only": True},
-            "title": {"read_only": True},
             "created_at": {"read_only": True},
             "updated_at": {"read_only": True},
         }

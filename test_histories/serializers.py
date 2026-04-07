@@ -15,6 +15,7 @@ from tests.models import (
     ReceptiveQuestion,
     ReceptiveAnswer,
 )
+from user_progress.utils import sync_student_level_from_cumulative_point
 import json
 
 
@@ -42,7 +43,38 @@ def _update_student_streak_for_submission(student_id):
     student.last_submitted_date = now
     student.save(update_fields=["streak_count", "max_streak", "last_submitted_date"])
 
-class ProductiveTestHistorySerializer(serializers.ModelSerializer):
+
+class BaseSubmissionHistorySerializer(serializers.ModelSerializer):
+    """Shared validation for draft/submission history serializers."""
+
+    submitted_type_error = {"type": "Submitted history cannot be updated."}
+    required_end_time_error = {"end_time": "End time is required for submissions."}
+
+    def validate(self, attrs):
+        if self.instance and self.instance.type == "S":
+            raise serializers.ValidationError(self.submitted_type_error)
+
+        start_time = attrs.get("start_time")
+        end_time = attrs.get("end_time")
+
+        if start_time and start_time > timezone.now():
+            raise serializers.ValidationError(
+                {"start_time": "Start time cannot be in the future."}
+            )
+
+        if end_time and start_time and end_time < start_time:
+            raise serializers.ValidationError(
+                {"end_time": "End time must be after start time."}
+            )
+
+        type_value = attrs.get("type", self.instance.type if self.instance else "D")
+        if type_value == "S" and not (end_time or (self.instance and self.instance.end_time)):
+            raise serializers.ValidationError(self.required_end_time_error)
+
+        return attrs
+
+
+class ProductiveTestHistorySerializer(BaseSubmissionHistorySerializer):
     """Serializer for list and create ProductiveTestHistory"""
 
     test_title = serializers.CharField(source="productive_test.test.title", read_only=True)
@@ -116,10 +148,7 @@ class ProductiveTestHistorySerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         """Validate the data"""
-        if self.instance and self.instance.type == "S":
-            raise serializers.ValidationError(
-                {"type": "Submitted history cannot be updated."}
-            )
+        attrs = super().validate(attrs)
 
         # For create operations
         if not self.instance:
@@ -130,29 +159,6 @@ class ProductiveTestHistorySerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"productive_test": "Productive test does not exist."}
                 )
-
-        # Validate times
-        start_time = attrs.get("start_time")
-        end_time = attrs.get("end_time")
-
-        if start_time and start_time > timezone.now():
-            raise serializers.ValidationError(
-                {"start_time": "Start time cannot be in the future."}
-            )
-
-        if end_time and start_time and end_time < start_time:
-            raise serializers.ValidationError(
-                {"end_time": "End time must be after start time."}
-            )
-
-        # For submission, end_time should be provided
-        type_value = attrs.get("type", self.instance.type if self.instance else "D")
-        if type_value == "S" and not (
-            end_time or (self.instance and self.instance.end_time)
-        ):
-            raise serializers.ValidationError(
-                {"end_time": "End time is required for submissions."}
-            )
 
         return attrs
 
@@ -185,6 +191,7 @@ class ProductiveTestHistorySerializer(serializers.ModelSerializer):
         if has_previous_submission:
             productive_test_history.earned_bonus_point = 0
             productive_test_history.save(update_fields=["earned_bonus_point"])
+            productive_test_history._level_notice = None
             return productive_test_history.earned_bonus_point
 
         bonus_point = self._calculate_productive_bonus_point(
@@ -199,6 +206,11 @@ class ProductiveTestHistorySerializer(serializers.ModelSerializer):
                 cumulative_point=F("cumulative_point") + bonus_point,
                 weekly_point=F("weekly_point") + bonus_point,
             )
+            productive_test_history._level_notice = (
+                sync_student_level_from_cumulative_point(productive_test_history.student_id)
+            )
+        else:
+            productive_test_history._level_notice = None
 
         return productive_test_history.earned_bonus_point
 
@@ -311,7 +323,7 @@ class ReceptiveAnswerHistorySerializer(serializers.Serializer):
         return attrs
 
 
-class ReceptiveTestHistorySerializer(serializers.ModelSerializer):
+class ReceptiveTestHistorySerializer(BaseSubmissionHistorySerializer):
     """Serializer for creating and updating ReceptiveTestHistory with answer histories"""
 
     answer_histories = ReceptiveAnswerHistorySerializer(many=True, write_only=True)
@@ -343,10 +355,7 @@ class ReceptiveTestHistorySerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         """Validate the data"""
-        if self.instance and self.instance.type == "S":
-            raise serializers.ValidationError(
-                {"type": "Submitted history cannot be updated."}
-            )
+        attrs = super().validate(attrs)
 
         # For create operations, check if receptive_test exists
         if not self.instance:
@@ -355,29 +364,6 @@ class ReceptiveTestHistorySerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"receptive_test": "Receptive test does not exist."}
                 )
-
-        # Validate times
-        start_time = attrs.get("start_time")
-        end_time = attrs.get("end_time")
-
-        if start_time and start_time > timezone.now():
-            raise serializers.ValidationError(
-                {"start_time": "Start time cannot be in the future."}
-            )
-
-        if end_time and start_time and end_time < start_time:
-            raise serializers.ValidationError(
-                {"end_time": "End time must be after start time."}
-            )
-
-        # For submission, end_time should be provided
-        type_value = attrs.get("type", self.instance.type if self.instance else "D")
-        if type_value == "S" and not (
-            end_time or (self.instance and self.instance.end_time)
-        ):
-            raise serializers.ValidationError(
-                {"end_time": "End time is required for submissions."}
-            )
 
         # Validate that all questions belong to the receptive_test
         answer_histories_data = attrs.get("answer_histories", [])
@@ -443,6 +429,49 @@ class ReceptiveTestHistorySerializer(serializers.ModelSerializer):
 
         return bonus_point, round(completion_percentage, 2), completed_bonus, exp_rule
 
+    def _build_answer_history_objects(self, receptive_test_history, answer_histories_data):
+        total_score = 0
+        answer_history_objects = []
+
+        for answer_data in answer_histories_data:
+            question = answer_data["receptive_question"]
+            selected_answer = answer_data.get("receptive_answer")
+            user_text = answer_data.get("user_answer_text")
+
+            is_correct, score = self._calculate_answer_score(
+                question, selected_answer, user_text
+            )
+
+            answer_history_objects.append(
+                ReceptiveAnswerHistory(
+                    receptive_test_history=receptive_test_history,
+                    receptive_question=question,
+                    receptive_answer=selected_answer,
+                    user_answer_text=user_text,
+                    is_correct=is_correct,
+                )
+            )
+
+            total_score += score
+
+        return total_score, answer_history_objects
+
+    def _persist_answer_histories(self, receptive_test_history, answer_histories_data):
+        if not answer_histories_data:
+            return 0
+
+        total_score, answer_history_objects = self._build_answer_history_objects(
+            receptive_test_history, answer_histories_data
+        )
+
+        if answer_history_objects:
+            ReceptiveAnswerHistory.objects.bulk_create(answer_history_objects)
+
+        receptive_test_history.total_score = total_score
+        receptive_test_history.save(update_fields=["total_score"])
+
+        return total_score
+
     def _apply_bonus_points(self, receptive_test_history, previous_bonus_point=0):
         if receptive_test_history.type != "S":
             receptive_test_history.bonus_point = 0
@@ -472,6 +501,11 @@ class ReceptiveTestHistorySerializer(serializers.ModelSerializer):
                 cumulative_point=F("cumulative_point") + delta,
                 weekly_point=F("weekly_point") + delta,
             )
+            receptive_test_history._level_notice = (
+                sync_student_level_from_cumulative_point(receptive_test_history.student_id)
+            )
+        else:
+            receptive_test_history._level_notice = None
 
         return receptive_test_history.bonus_point, receptive_test_history.earned_bonus_point
 
@@ -560,40 +594,7 @@ class ReceptiveTestHistorySerializer(serializers.ModelSerializer):
             student=student, attempt=attempt, **validated_data
         )
 
-        # Calculate total score and prepare answer histories for batch create
-        total_score = 0
-        answer_history_objects = []
-
-        for answer_data in answer_histories_data:
-            question = answer_data["receptive_question"]
-            selected_answer = answer_data.get("receptive_answer")
-            user_text = answer_data.get("user_answer_text")
-
-            # Calculate score for this answer
-            is_correct, score = self._calculate_answer_score(
-                question, selected_answer, user_text
-            )
-
-            # Prepare ReceptiveAnswerHistory object
-            answer_history_objects.append(
-                ReceptiveAnswerHistory(
-                    receptive_test_history=receptive_test_history,
-                    receptive_question=question,
-                    receptive_answer=selected_answer,
-                    user_answer_text=user_text,
-                    is_correct=is_correct,
-                )
-            )
-
-            total_score += score
-
-        # Batch create all answer histories
-        if answer_history_objects:
-            ReceptiveAnswerHistory.objects.bulk_create(answer_history_objects)
-
-        # Update total_score
-        receptive_test_history.total_score = total_score
-        receptive_test_history.save(update_fields=["total_score"])
+        self._persist_answer_histories(receptive_test_history, answer_histories_data)
 
         if receptive_test_history.type == "S":
             previous_bonus_point = self._get_previous_submission_bonus(receptive_test_history)
@@ -616,43 +617,8 @@ class ReceptiveTestHistorySerializer(serializers.ModelSerializer):
 
         # If answer_histories provided, recalculate scores
         if answer_histories_data:
-            # Delete old answer histories before creating new ones
             instance.answer_histories.all().delete()
-
-            # Calculate total score and prepare answer histories for batch create
-            total_score = 0
-            answer_history_objects = []
-
-            for answer_data in answer_histories_data:
-                question = answer_data["receptive_question"]
-                selected_answer = answer_data.get("receptive_answer")
-                user_text = answer_data.get("user_answer_text")
-
-                # Calculate score for this answer
-                is_correct, score = self._calculate_answer_score(
-                    question, selected_answer, user_text
-                )
-
-                # Prepare ReceptiveAnswerHistory object
-                answer_history_objects.append(
-                    ReceptiveAnswerHistory(
-                        receptive_test_history=instance,
-                        receptive_question=question,
-                        receptive_answer=selected_answer,
-                        user_answer_text=user_text,
-                        is_correct=is_correct,
-                    )
-                )
-
-                total_score += score
-
-            # Batch create all answer histories
-            if answer_history_objects:
-                ReceptiveAnswerHistory.objects.bulk_create(answer_history_objects)
-
-            # Update total_score
-            instance.total_score = total_score
-            instance.save(update_fields=["total_score"])
+            self._persist_answer_histories(instance, answer_histories_data)
 
         if instance.type == "S":
             bonus_before_save = self._get_previous_submission_bonus(instance)

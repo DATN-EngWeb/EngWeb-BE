@@ -50,7 +50,6 @@ def _build_streak_notice(student, previous_last_submitted_date):
         return {
             "continued": False,
             "current_streak": student.streak_count,
-            "is_streak_lit_today": True,
         }
 
     previous_date = timezone.localdate(previous_last_submitted_date)
@@ -58,7 +57,6 @@ def _build_streak_notice(student, previous_last_submitted_date):
         return {
             "continued": True,
             "current_streak": student.streak_count,
-            "is_streak_lit_today": True,
         }
 
     # Already submitted today, keep streak and notify with continued=false.
@@ -66,14 +64,12 @@ def _build_streak_notice(student, previous_last_submitted_date):
         return {
             "continued": False,
             "current_streak": student.streak_count,
-            "is_streak_lit_today": True,
         }
 
     # Streak reset or other non-consecutive submission days.
     return {
         "continued": False,
         "current_streak": student.streak_count,
-        "is_streak_lit_today": True,
     }
 
 
@@ -145,6 +141,7 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 serializer.save()
                 response_data = dict(serializer.data)
                 response_data["streak_notice"] = None
+                response_data["level_notice"] = None
                 return Response(response_data, status=status.HTTP_200_OK)
             else:
                 # Create new draft
@@ -159,6 +156,7 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 serializer.save(student=student, attempt=attempt)
                 response_data = dict(serializer.data)
                 response_data["streak_notice"] = None
+                response_data["level_notice"] = None
                 return Response(response_data, status=status.HTTP_201_CREATED)
 
         elif type_value == "S":
@@ -169,13 +167,14 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                     existing_draft, data=request.data, partial=True
                 )
                 serializer.is_valid(raise_exception=True)
-                serializer.save(type="S")
+                history = serializer.save(type="S")
                 response_data = dict(serializer.data)
                 streak_notice = _build_streak_notice(
                     student, previous_last_submitted_date
                 )
                 if streak_notice:
                     response_data["streak_notice"] = streak_notice
+                response_data["level_notice"] = getattr(history, "_level_notice", None)
                 return Response(response_data, status=status.HTTP_200_OK)
             else:
                 # Create new submission
@@ -186,13 +185,14 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
 
                 serializer = self.get_serializer(data=request.data)
                 serializer.is_valid(raise_exception=True)
-                serializer.save(student=student, attempt=attempt, type="S")
+                history = serializer.save(student=student, attempt=attempt, type="S")
                 response_data = dict(serializer.data)
                 streak_notice = _build_streak_notice(
                     student, previous_last_submitted_date
                 )
                 if streak_notice:
                     response_data["streak_notice"] = streak_notice
+                response_data["level_notice"] = getattr(history, "_level_notice", None)
                 return Response(response_data, status=status.HTTP_201_CREATED)
 
         return Response(
@@ -579,8 +579,10 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
             streak_notice = _build_streak_notice(student, previous_last_submitted_date)
             if streak_notice:
                 response_data["streak_notice"] = streak_notice
+            response_data["level_notice"] = getattr(history, "_level_notice", None)
         else:
             response_data["streak_notice"] = None
+            response_data["level_notice"] = None
 
         return Response(response_data, status=status_code)
 

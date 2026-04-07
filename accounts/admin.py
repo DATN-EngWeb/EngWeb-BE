@@ -29,7 +29,6 @@ class StudentAdmin(admin.ModelAdmin):
     list_display = (
         "user",
         "level",
-        "title",
         "cumulative_point",
         "weekly_point",
         "streak_count",

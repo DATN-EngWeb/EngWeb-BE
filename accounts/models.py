@@ -181,13 +181,12 @@ class Student(models.Model):
     streak_count = models.IntegerField(validators=[MinValueValidator(0)], default=0)
     max_streak = models.IntegerField(validators=[MinValueValidator(0)], default=0)
 
-    # level and title
-    level = models.IntegerField(validators=[MinValueValidator(1)], default=1)
-    title = models.CharField(
-        max_length=100, 
-        null=True, 
-        blank=True, 
-        default="Beginner"
+    # level progression
+    level = models.ForeignKey(
+        "user_progress.UserLevel",
+        on_delete=models.PROTECT,
+        related_name="students",
+        default=1,
     )
 
     # timestamp
