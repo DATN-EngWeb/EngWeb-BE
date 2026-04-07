@@ -171,9 +171,13 @@ class Student(models.Model):
     # test tracking
     completed_test = models.IntegerField(validators=[MinValueValidator(0)], default=0)
     qualified_test = models.IntegerField(validators=[MinValueValidator(0)], default=0)
-    last_attempt_at = models.DateTimeField(null=True, blank=True, default=None)
 
     # streak tracking
+    last_submitted_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        default=None,
+    )
     streak_count = models.IntegerField(validators=[MinValueValidator(0)], default=0)
     max_streak = models.IntegerField(validators=[MinValueValidator(0)], default=0)
 

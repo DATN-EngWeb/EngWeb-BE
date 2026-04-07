@@ -1,6 +1,14 @@
 import django_filters
-from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import generics
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.response import Response
+from rest_framework import status, serializers
+from django.utils import timezone
+from datetime import timedelta
+
+from accounts.models import Student
+from accounts.permissions import IsOwner
 
 from .filters import UserLevelFilter
 from .models import UserLevel
@@ -72,3 +80,70 @@ class UserLevelRetrieveAPIView(generics.RetrieveAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
+
+class CurrentUserStreakAPIView(generics.GenericAPIView):
+    permission_classes = [IsOwner]
+
+    @extend_schema(
+        summary="Lấy streak hiện tại của user",
+        description=(
+            "Lấy thông tin streak của user hiện tại gồm `last_submitted_date`, "
+            "`streak_count`, `max_streak`, `is_streak_lit_today`.\n\n"
+            "**Logic kiểm tra mất chuỗi khi truy vấn:**\n"
+            "- Nếu `last_submitted_date` cũ hơn hôm qua, hệ thống tự cập nhật `streak_count` về `0`\n"
+            "- Nếu `last_submitted_date` là hôm qua hoặc hôm nay thì giữ nguyên streak\n"
+            "- `is_streak_lit_today=true` khi user đã submit trong ngày hôm nay\n"
+            "- `max_streak` không thay đổi"
+        ),
+        tags=["user-progress"],
+        responses={
+            200: OpenApiResponse(
+                description="Lấy thông tin streak thành công",
+                response=inline_serializer(
+                    name="CurrentUserStreakResponse",
+                    fields={
+                        "last_submitted_date": serializers.DateTimeField(allow_null=True),
+                        "streak_count": serializers.IntegerField(),
+                        "max_streak": serializers.IntegerField(),
+                        "is_streak_lit_today": serializers.BooleanField(),
+                    },
+                ),
+            ),
+            401: OpenApiResponse(description="Cần đăng nhập"),
+            403: OpenApiResponse(description="Chỉ học viên mới có thể truy cập"),
+        },
+    )
+    def get(self, request, *args, **kwargs):
+        user = request.user
+
+        if user.role != "S" or not hasattr(user, "student"):
+            raise PermissionDenied("Only Student can access this resource.")
+
+        student = user.student
+        today = timezone.localdate()
+        yesterday = today - timedelta(days=1)
+
+        if student.streak_count > 0:
+            if not student.last_submitted_date:
+                student.streak_count = 0
+                student.save(update_fields=["streak_count"])
+            else:
+                last_submitted_date = timezone.localdate(student.last_submitted_date)
+                if last_submitted_date < yesterday:
+                    student.streak_count = 0
+                    student.save(update_fields=["streak_count"])
+
+        is_streak_lit_today = False
+        if student.last_submitted_date:
+            is_streak_lit_today = timezone.localdate(student.last_submitted_date) == today
+
+        return Response(
+            {
+                "last_submitted_date": student.last_submitted_date,
+                "streak_count": student.streak_count,
+                "max_streak": student.max_streak,
+                "is_streak_lit_today": is_streak_lit_today,
+            },
+            status=status.HTTP_200_OK,
+        )

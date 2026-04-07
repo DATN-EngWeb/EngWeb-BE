@@ -1,4 +1,5 @@
 from decimal import Decimal, ROUND_HALF_UP
+from datetime import timedelta
 
 from rest_framework import serializers
 from django.utils import timezone
@@ -15,6 +16,31 @@ from tests.models import (
     ReceptiveAnswer,
 )
 import json
+
+
+def _update_student_streak_for_submission(student_id):
+    """Update student's streak metrics when a submission is made."""
+    now = timezone.now()
+    today = timezone.localdate(now)
+
+    student = Student.objects.select_for_update().get(pk=student_id)
+
+    if student.last_submitted_date:
+        last_submitted_date = timezone.localdate(student.last_submitted_date)
+
+        if last_submitted_date == today:
+            new_streak_count = student.streak_count
+        elif last_submitted_date == today - timedelta(days=1):
+            new_streak_count = student.streak_count + 1
+        else:
+            new_streak_count = 1
+    else:
+        new_streak_count = 1
+
+    student.streak_count = new_streak_count
+    student.max_streak = max(student.max_streak, new_streak_count)
+    student.last_submitted_date = now
+    student.save(update_fields=["streak_count", "max_streak", "last_submitted_date"])
 
 class ProductiveTestHistorySerializer(serializers.ModelSerializer):
     """Serializer for list and create ProductiveTestHistory"""
@@ -147,6 +173,8 @@ class ProductiveTestHistorySerializer(serializers.ModelSerializer):
             productive_test_history.earned_bonus_point = 0
             productive_test_history.save(update_fields=["earned_bonus_point"])
             return productive_test_history.earned_bonus_point
+
+        _update_student_streak_for_submission(productive_test_history.student_id)
 
         has_previous_submission = ProductiveTestHistory.objects.filter(
             student=productive_test_history.student,
@@ -421,6 +449,8 @@ class ReceptiveTestHistorySerializer(serializers.ModelSerializer):
             receptive_test_history.earned_bonus_point = 0
             receptive_test_history.save(update_fields=["bonus_point", "earned_bonus_point"])
             return receptive_test_history.bonus_point, receptive_test_history.earned_bonus_point
+
+        _update_student_streak_for_submission(receptive_test_history.student_id)
 
         bonus_point, _, _, _ = self._calculate_bonus_point(
             receptive_test_history.receptive_test,

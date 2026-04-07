@@ -2,6 +2,8 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 import django_filters
+from datetime import timedelta
+from django.utils import timezone
 
 
 from drf_spectacular.utils import (
@@ -29,6 +31,50 @@ class TestHistoryPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = "page_size"
     max_page_size = 100
+
+
+def _build_streak_notice(student, previous_last_submitted_date):
+    """Return streak notice for submission cases (continued, first-day, same-day)."""
+    student.refresh_from_db(fields=["streak_count", "last_submitted_date"])
+
+    today = timezone.localdate()
+    if not student.last_submitted_date:
+        return None
+
+    current_submitted_date = timezone.localdate(student.last_submitted_date)
+    if current_submitted_date != today:
+        return None
+
+    # First submission day (no previous submission date).
+    if not previous_last_submitted_date:
+        return {
+            "continued": False,
+            "current_streak": student.streak_count,
+            "is_streak_lit_today": True,
+        }
+
+    previous_date = timezone.localdate(previous_last_submitted_date)
+    if previous_date == today - timedelta(days=1):
+        return {
+            "continued": True,
+            "current_streak": student.streak_count,
+            "is_streak_lit_today": True,
+        }
+
+    # Already submitted today, keep streak and notify with continued=false.
+    if previous_date == today:
+        return {
+            "continued": False,
+            "current_streak": student.streak_count,
+            "is_streak_lit_today": True,
+        }
+
+    # Streak reset or other non-consecutive submission days.
+    return {
+        "continued": False,
+        "current_streak": student.streak_count,
+        "is_streak_lit_today": True,
+    }
 
 
 class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
@@ -79,6 +125,7 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
         - Submission (S): Convert draft to submission if exists, or create new
         """
         student = request.user.student
+        previous_last_submitted_date = student.last_submitted_date
         productive_test_id = request.data.get("productive_test")
         type_value = request.data.get("type", "D")
 
@@ -96,7 +143,9 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 )
                 serializer.is_valid(raise_exception=True)
                 serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
+                response_data = dict(serializer.data)
+                response_data["streak_notice"] = None
+                return Response(response_data, status=status.HTTP_200_OK)
             else:
                 # Create new draft
                 # Calculate attempt based on submission count
@@ -108,7 +157,9 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 serializer = self.get_serializer(data=request.data)
                 serializer.is_valid(raise_exception=True)
                 serializer.save(student=student, attempt=attempt)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
+                response_data = dict(serializer.data)
+                response_data["streak_notice"] = None
+                return Response(response_data, status=status.HTTP_201_CREATED)
 
         elif type_value == "S":
             # Submission workflow: Convert draft or create new
@@ -119,7 +170,13 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 )
                 serializer.is_valid(raise_exception=True)
                 serializer.save(type="S")
-                return Response(serializer.data, status=status.HTTP_200_OK)
+                response_data = dict(serializer.data)
+                streak_notice = _build_streak_notice(
+                    student, previous_last_submitted_date
+                )
+                if streak_notice:
+                    response_data["streak_notice"] = streak_notice
+                return Response(response_data, status=status.HTTP_200_OK)
             else:
                 # Create new submission
                 submission_count = ProductiveTestHistory.objects.filter(
@@ -130,7 +187,13 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 serializer = self.get_serializer(data=request.data)
                 serializer.is_valid(raise_exception=True)
                 serializer.save(student=student, attempt=attempt, type="S")
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
+                response_data = dict(serializer.data)
+                streak_notice = _build_streak_notice(
+                    student, previous_last_submitted_date
+                )
+                if streak_notice:
+                    response_data["streak_notice"] = streak_notice
+                return Response(response_data, status=status.HTTP_201_CREATED)
 
         return Response(
             {"type": "Invalid type. Must be 'D' or 'S'."},
@@ -253,6 +316,12 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
             "- Nếu đã có draft: Chuyển draft đó thành submission\n"
             "- Nếu chưa có draft: Tạo submission mới với attempt = (số submission đã nộp) + 1\n"
             "- Mỗi submission là 1 lần nộp bài hoàn chỉnh\n\n"
+            "**Streak khi submit (type='S'):**\n"
+            "- Nếu submit liên tiếp từ hôm qua sang hôm nay: `continued=true`, streak tăng\n"
+            "- Nếu lần submit đầu tiên: `continued=false`, `current_streak=1`\n"
+            "- Nếu đã submit trong hôm nay: `continued=false`, giữ nguyên streak hiện tại\n"
+            "- Nếu bị đứt chuỗi rồi quay lại submit: reset chuỗi về `1`\n"
+            "- Response có thêm `streak_notice` gồm `continued` và `current_streak`\n\n"
             "**Lưu ý:**\n"
             "- `student` và `attempt` tự động được set\n"
             "- `type` mặc định là 'D' (Draft) nếu không gửi\n"
@@ -469,7 +538,13 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
 
         return ReceptiveTestHistory.objects.none()
 
-    def _save_and_return_response(self, request, instance=None):
+    def _save_and_return_response(
+        self,
+        request,
+        instance=None,
+        type_value="D",
+        previous_last_submitted_date=None,
+    ):
         """
         Helper method to save receptive test history and return detailed response.
 
@@ -499,7 +574,15 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
 
         # Return detailed response
         detail_serializer = ReceptiveTestHistoryDetailSerializer(history)
-        return Response(detail_serializer.data, status=status_code)
+        response_data = dict(detail_serializer.data)
+        if type_value == "S":
+            streak_notice = _build_streak_notice(student, previous_last_submitted_date)
+            if streak_notice:
+                response_data["streak_notice"] = streak_notice
+        else:
+            response_data["streak_notice"] = None
+
+        return Response(response_data, status=status_code)
 
     def create(self, request, *args, **kwargs):
         """
@@ -508,6 +591,7 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
         - Submission (S): Convert draft to submission if exists, or create new
         """
         student = request.user.student
+        previous_last_submitted_date = student.last_submitted_date
         receptive_test_id = request.data.get("receptive_test")
         type_value = request.data.get("type", "D")
 
@@ -518,11 +602,21 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
 
         if type_value == "D":
             # Draft workflow: Override existing draft or create new
-            return self._save_and_return_response(request, instance=existing_draft)
+            return self._save_and_return_response(
+                request,
+                instance=existing_draft,
+                type_value=type_value,
+                previous_last_submitted_date=previous_last_submitted_date,
+            )
 
         elif type_value == "S":
             # Submission workflow: Convert draft or create new
-            return self._save_and_return_response(request, instance=existing_draft)
+            return self._save_and_return_response(
+                request,
+                instance=existing_draft,
+                type_value=type_value,
+                previous_last_submitted_date=previous_last_submitted_date,
+            )
 
         return Response(
             {"type": "Invalid type. Must be 'D' or 'S'."},
@@ -645,6 +739,12 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
             "- Tính `total_score` và `is_correct` cho từng câu\n"
             "- Tính `bonus_point` (tổng bonus hiện tại của lần submit)\n"
             "- Tính `earned_bonus_point` (delta được cộng vào điểm của student)\n\n"
+            "**Streak khi submit (type='S'):**\n"
+            "- Nếu submit liên tiếp từ hôm qua sang hôm nay: `continued=true`, streak tăng\n"
+            "- Nếu lần submit đầu tiên: `continued=false`, `current_streak=1`\n"
+            "- Nếu đã submit trong hôm nay: `continued=false`, giữ nguyên streak hiện tại\n"
+            "- Nếu bị đứt chuỗi rồi quay lại submit: reset chuỗi về `1`\n"
+            "- Response có thêm `streak_notice` gồm `continued` và `current_streak`\n\n"
             "**Lưu ý:**\n"
             "- `student` và `attempt` tự động được set\n"
             "- `type` mặc định là 'D' (Draft) nếu không gửi\n"
