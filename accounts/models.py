@@ -171,19 +171,22 @@ class Student(models.Model):
     # test tracking
     completed_test = models.IntegerField(validators=[MinValueValidator(0)], default=0)
     qualified_test = models.IntegerField(validators=[MinValueValidator(0)], default=0)
-    last_attempt_at = models.DateTimeField(null=True, blank=True, default=None)
 
     # streak tracking
+    last_submitted_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        default=None,
+    )
     streak_count = models.IntegerField(validators=[MinValueValidator(0)], default=0)
     max_streak = models.IntegerField(validators=[MinValueValidator(0)], default=0)
 
-    # level and title
-    level = models.IntegerField(validators=[MinValueValidator(1)], default=1)
-    title = models.CharField(
-        max_length=100, 
-        null=True, 
-        blank=True, 
-        default="Beginner"
+    # level progression
+    level = models.ForeignKey(
+        "user_progress.UserLevel",
+        on_delete=models.PROTECT,
+        related_name="students",
+        default=1,
     )
 
     # timestamp

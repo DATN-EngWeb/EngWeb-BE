@@ -18,7 +18,6 @@ from rest_framework.response import Response
 from django.core.files.storage import default_storage
 
 class StudentRetrieveUpdateAPIView(generics.RetrieveUpdateAPIView):
-    authentication_classes = [CustomTokenAuthentication]
     permission_classes = [IsOwner]
     queryset = Student.objects.select_related("user").all()
     serializer_class = StudentSerializer
@@ -78,11 +77,20 @@ class StudentRetrieveUpdateAPIView(generics.RetrieveUpdateAPIView):
                         "bonus_ai_turn": serializers.IntegerField(),
                         "completed_test": serializers.IntegerField(),
                         "qualified_test": serializers.IntegerField(),
-                        "last_attempt_at": serializers.DateTimeField(allow_null=True),
+                        "last_submitted_date": serializers.DateTimeField(allow_null=True),
                         "streak_count": serializers.IntegerField(),
                         "max_streak": serializers.IntegerField(),
-                        "level": serializers.IntegerField(),
-                        "title": serializers.CharField(allow_null=True),
+                        "level": inline_serializer(
+                            name="StudentLevelNestedResponse",
+                            fields={
+                                "id": serializers.IntegerField(),
+                                "level_number": serializers.IntegerField(),
+                                "level_title": serializers.CharField(),
+                                "level_icon": serializers.URLField(allow_null=True),
+                                "min_xp": serializers.IntegerField(),
+                                "max_xp": serializers.IntegerField(),
+                            },
+                        ),
                         "created_at": serializers.DateTimeField(),
                     }
                 )
@@ -171,11 +179,20 @@ class StudentRetrieveUpdateAPIView(generics.RetrieveUpdateAPIView):
                                 "bonus_ai_turn": {"type": "integer"},
                                 "completed_test": {"type": "integer"},
                                 "qualified_test": {"type": "integer"},
-                                "last_attempt_at": {"type": "string", "format": "date-time", "nullable": True},
+                                "last_submitted_date": {"type": "string", "format": "date-time", "nullable": True},
                                 "streak_count": {"type": "integer"},
                                 "max_streak": {"type": "integer"},
-                                "level": {"type": "integer"},
-                                "title": {"type": "string", "nullable": True},
+                                "level": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "integer"},
+                                        "level_number": {"type": "integer"},
+                                        "level_title": {"type": "string"},
+                                        "level_icon": {"type": "string", "format": "uri", "nullable": True},
+                                        "min_xp": {"type": "integer"},
+                                        "max_xp": {"type": "integer"},
+                                    },
+                                },
                                 "created_at": {"type": "string", "format": "date-time"},
                             },
                         },
@@ -208,11 +225,17 @@ class StudentRetrieveUpdateAPIView(generics.RetrieveUpdateAPIView):
                                 "bonus_ai_turn": 0,
                                 "completed_test": 0,
                                 "qualified_test": 0,
-                                "last_attempt_at": None,
+                                "last_submitted_date": None,
                                 "streak_count": 0,
                                 "max_streak": 0,
-                                "level": 1,
-                                "title": "Beginner",
+                                "level": {
+                                    "id": 1,
+                                    "level_number": 1,
+                                    "level_title": "Newbie",
+                                    "level_icon": None,
+                                    "min_xp": 0,
+                                    "max_xp": 299,
+                                },
                                 "created_at": "2026-01-25T15:56:33.601632+07:00",
                             },
                         },

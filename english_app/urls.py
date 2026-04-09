@@ -32,4 +32,6 @@ urlpatterns = [
     path("api/feedback/", include("feedback.urls")),
     # Statistic API
     path("api/statistic/", include("statistic.urls")),
+    # User Progress API
+    path("api/user-progress/", include("user_progress.urls")),
 ]

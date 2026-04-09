@@ -72,6 +72,12 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
         Raises PermissionDenied if non-admin tries to filter by status='R'.
         """
         queryset = super().get_queryset()
+
+        # Exclude overview-only tests that do not have the corresponding detail record.
+        queryset = queryset.filter(
+            Q(type="P", productive_test__isnull=False)
+            | Q(type="R", receptive_test__isnull=False)
+        )
         mine = self.request.query_params.get("mine", "").lower()
 
         if mine in ["true", "false"]:

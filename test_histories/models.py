@@ -74,7 +74,8 @@ class ReceptiveTestHistory(models.Model):
     total_score = models.IntegerField(
         validators=[MinValueValidator(0)], default=0, null=True, blank=True
     )
-    earned_bonus_point = models.IntegerField(default=0)
+    bonus_point = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    earned_bonus_point = models.IntegerField(default=0, validators=[MinValueValidator(0)])
 
     class Meta:
         db_table = "receptive_test_history"
