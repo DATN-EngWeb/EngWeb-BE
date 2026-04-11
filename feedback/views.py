@@ -36,18 +36,21 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django_ratelimit.decorators import ratelimit
 from drf_spectacular.utils import (
     OpenApiExample,
+    OpenApiParameter,
     OpenApiResponse,
     extend_schema,
     inline_serializer,
 )
 
 from rest_framework import generics, serializers, status, permissions
+from rest_framework.filters import OrderingFilter
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError, PermissionDenied
 
 from textwrap import dedent
+from .filters import TestFeedbackFilterSet
 from storage.utils.gcs_presigned import GCSPresignedURLManager
 
 
@@ -966,13 +969,15 @@ class FeedbackPagination(PageNumberPagination):
     page_size_query_param = "page_size"
     max_page_size = 20
 
+
 class TeacherListCreateTestFeedbackAPIView(generics.ListCreateAPIView):
-    authentication_classes = [CustomTokenAuthentication]
     pagination_class = FeedbackPagination
     permission_classes = [IsTeacher]
     
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["created_by"]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_class = TestFeedbackFilterSet
+    ordering_fields = ["created_at"]
+    ordering = ["-created_at"]  # Default ordering
 
     def get_serializer_class(self):
         if self.request.method == "POST":
@@ -1080,16 +1085,58 @@ class TeacherListCreateTestFeedbackAPIView(generics.ListCreateAPIView):
             ### Test Cases
             **1. Successful Listing (Default)**
             * **URL:** `/api/feedback/test-feedbacks?test_id=1`
-            * **Result:** `200 OK` (AI Feedback is strictly the first item, followed by page 1 of Teacher feedback).
+            * **Result:** `200 OK` (AI feedback is strictly the first item, followed by page 1 of Teacher feedback).
 
             **2. Filter by Teacher Feedback Only**
             * **URL:** `/api/feedback/test-feedbacks?test_id=1&created_by=T`
             * **Result:** `200 OK` (Only shows feedback added by human teachers).
 
-            **3. Missing Required Parameter**
+            **3. Sort Teacher Feedback**
+            * **URL:** `/api/feedback/test-feedbacks?test_id=1&ordering=-created_at`
+            * **Result:** `200 OK` (Newest feedback first; default ordering is `-created_at`).
+
+            **4. Missing Required Parameter**
             * **URL:** `/api/feedback/test-feedbacks`
             * **Result:** `400 Bad Request` (`{"test_id": "This query parameter is required."}`)
         """),
+        parameters=[
+            OpenApiParameter(
+                name="test_id",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                description="ID of the test to retrieve feedback for",
+                required=True,
+            ),
+            OpenApiParameter(
+                name="created_by",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description="Filter feedback by author type",
+                required=False,
+                enum=["A", "T"],
+            ),
+            OpenApiParameter(
+                name="ordering",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description="Sort by created_at; use -created_at for newest first",
+                required=False,
+            ),
+            OpenApiParameter(
+                name="page",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                description="Page number",
+                required=False,
+            ),
+            OpenApiParameter(
+                name="page_size",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                description="Number of items per page",
+                required=False,
+            ),
+        ],
         responses={
             200: OpenApiResponse(description="Successfully retrieved test feedback"),
             400: OpenApiResponse(description="Bad Request: Missing test_id parameter"),

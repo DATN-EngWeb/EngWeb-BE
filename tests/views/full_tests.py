@@ -1,7 +1,7 @@
 from rest_framework.generics import RetrieveUpdateDestroyAPIView
 from rest_framework import permissions, status, serializers
 from rest_framework.response import Response
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied
 from drf_spectacular.utils import extend_schema, OpenApiResponse
 from django.db import transaction
 
@@ -35,6 +35,9 @@ from tests.utils.gcs_cleanup import (
     tags=["full-test"],
     responses={
         200: ReceptiveTestRetrieveSerializer,
+        403: OpenApiResponse(
+            description="Forbidden: Students can only view published tests"
+        ),
         404: OpenApiResponse(
             description="Test type is not Receptive (R), does not exist, or has been removed (for non-admin users)"
         ),
@@ -110,6 +113,21 @@ class ReceptiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
             raise NotFound("This test is not Receptive Test (type is not R)")
         if not self.request.user.is_staff and obj.status == "R":
             raise NotFound("This test has been removed.")
+
+        # GET access policy:
+        # - Admin/Teacher: can view for management and review flows
+        # - Student: can only view published tests
+        if self.request.method == "GET":
+            if self.request.user.role == "S":
+                if obj.status != "P":
+                    raise PermissionDenied(
+                        "Students can only view published tests."
+                    )
+            elif self.request.user.role in ["A", "T"]:
+                return obj
+            else:
+                raise PermissionDenied("You do not have permission to view this test.")
+
         return obj
 
     def put(self, request, *args, **kwargs):
@@ -389,7 +407,10 @@ class ReceptiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
         )
 
         # Return updated data
-        retrieve_serializer = ReceptiveTestRetrieveSerializer(instance)
+        retrieve_serializer = ReceptiveTestRetrieveSerializer(
+            instance,
+            context={"request": request},
+        )
         return Response(retrieve_serializer.data, status=status.HTTP_200_OK)
 
 
@@ -403,6 +424,9 @@ class ReceptiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
     tags=["full-test"],
     responses={
         200: ProductiveTestRetrieveSerializer,
+        403: OpenApiResponse(
+            description="Forbidden: Students can only view published tests"
+        ),
         404: OpenApiResponse(
             description="Test type is not Productive (P), does not exist, or has been removed (for non-admin users)"
         ),
@@ -475,6 +499,21 @@ class ProductiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
             raise NotFound("This test is not Productive Test (type is not P)")
         if not self.request.user.is_staff and obj.status == "R":
             raise NotFound("This test has been removed.")
+
+        # GET access policy:
+        # - Admin/Teacher: can view for management and review flows
+        # - Student: can only view published tests
+        if self.request.method == "GET":
+            if self.request.user.role == "S":
+                if obj.status != "P":
+                    raise PermissionDenied(
+                        "Students can only view published tests."
+                    )
+            elif self.request.user.role in ["A", "T"]:
+                return obj
+            else:
+                raise PermissionDenied("You do not have permission to view this test.")
+
         return obj
 
     def put(self, request, *args, **kwargs):
@@ -531,5 +570,8 @@ class ProductiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
         updated_instance.refresh_from_db()
 
         # Return updated data
-        retrieve_serializer = ProductiveTestRetrieveSerializer(updated_instance)
+        retrieve_serializer = ProductiveTestRetrieveSerializer(
+            updated_instance,
+            context={"request": request},
+        )
         return Response(retrieve_serializer.data, status=status.HTTP_200_OK)
