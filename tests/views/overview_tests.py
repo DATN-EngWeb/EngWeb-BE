@@ -185,16 +185,63 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                     detail="Only students can use 'my_progress' parameter to filter tests."
                 )
 
-        # Filter out removed tests for non-admin users
-        if self.request.user.is_authenticated and not self.request.user.is_staff:
-            queryset = queryset.exclude(status="R")
+        status_filter = self.request.query_params.get("status", "")
 
-            # Check if trying to filter by status=R
-            status_filter = self.request.query_params.get("status", "")
+        # Visibility policy:
+        # - Anonymous/Student: only published tests
+        # - Teacher: own tests can be P/D/I; others only P/I
+        # - Admin: all statuses
+        if not self.request.user.is_authenticated:
+            if status_filter and status_filter != "P":
+                raise PermissionDenied(
+                    detail="Anonymous users can only filter by status 'P' (Published)."
+                )
+            queryset = queryset.filter(status="P")
+        elif getattr(self.request.user, "role", None) == "S":
+            if status_filter and status_filter != "P":
+                raise PermissionDenied(
+                    detail="Students can only filter by status 'P' (Published)."
+                )
+            queryset = queryset.filter(status="P")
+        elif getattr(self.request.user, "role", None) == "T":
             if status_filter == "R":
                 raise PermissionDenied(
                     detail="Only admin users can filter by status 'R' (Removed)."
                 )
+
+            if status_filter and status_filter not in ["P", "I", "D"]:
+                raise PermissionDenied(
+                    detail="Teachers can only filter by status 'P', 'I', or 'D'."
+                )
+
+            if mine == "false" and status_filter == "D":
+                raise PermissionDenied(
+                    detail="Teachers cannot filter draft tests of other teachers."
+                )
+
+            teacher = getattr(self.request.user, "teacher", None)
+            if not teacher:
+                raise PermissionDenied(
+                    detail="Teacher profile not found for this account."
+                )
+
+            queryset = queryset.filter(
+                Q(created_by=teacher, status__in=["P", "D", "I"])
+                |
+                (
+                    ~Q(created_by=teacher)
+                    & Q(status__in=["P", "I"])
+                )
+                |
+                (
+                    Q(created_by__isnull=True)
+                    & Q(status__in=["P", "I"])
+                )
+            )
+        elif not self.request.user.is_staff:
+            raise PermissionDenied(
+                detail="This role is not allowed to access test overview."
+            )
 
         # Add annotation for submitted count only when needed
         # Annotate when:
