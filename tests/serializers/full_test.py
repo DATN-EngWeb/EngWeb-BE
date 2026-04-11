@@ -72,6 +72,15 @@ class ReceptiveTestSerializer(serializers.ModelSerializer):
 
 class ReceptiveTestRetrieveSerializer(serializers.ModelSerializer):
     receptive_test = ReceptiveTestSerializer(read_only=True)
+    is_owner = serializers.SerializerMethodField()
+
+    def get_is_owner(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return False
+        teacher = getattr(user, "teacher", None)
+        return bool(teacher and obj.created_by_id == teacher.pk)
 
     class Meta:
         model = Test
@@ -86,6 +95,7 @@ class ReceptiveTestRetrieveSerializer(serializers.ModelSerializer):
             "status",
             "created_at",
             "updated_at",
+            "is_owner",
             "receptive_test",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
@@ -116,6 +126,15 @@ class ProductiveTestSerializer(serializers.ModelSerializer):
 
 class ProductiveTestRetrieveSerializer(serializers.ModelSerializer):
     productive_test = ProductiveTestSerializer(read_only=True)
+    is_owner = serializers.SerializerMethodField()
+
+    def get_is_owner(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return False
+        teacher = getattr(user, "teacher", None)
+        return bool(teacher and obj.created_by_id == teacher.pk)
 
     class Meta:
         model = Test
@@ -130,6 +149,7 @@ class ProductiveTestRetrieveSerializer(serializers.ModelSerializer):
             "status",
             "created_at",
             "updated_at",
+            "is_owner",
             "productive_test",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
