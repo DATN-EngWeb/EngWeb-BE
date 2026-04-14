@@ -22,4 +22,4 @@ VALUES
 -- Excellent: 90-100%
 (90, 100, 120, 'Excellent', '🎉 Excellent work! You did a fantastic job. Keep it up!')
 
-ON CONFLICT DO NOTHING;
+ON CONFLICT (min_percentage, max_percentage) DO NOTHING;

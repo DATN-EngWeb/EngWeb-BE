@@ -369,3 +369,9 @@ class EXPBonusRule(models.Model):
 
     class Meta:
         db_table = "exp_bonus_rule"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["min_percentage", "max_percentage"],
+                name="unique_exp_bonus_rule_range",
+            )
+        ]
