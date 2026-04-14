@@ -8,13 +8,12 @@ from django.db.models import F, Max
 from .models import ProductiveTestHistory, ReceptiveTestHistory, ReceptiveAnswerHistory
 from accounts.models import Student
 from tests.models import (
-    CompletedBonus,
-    EXPBonusRule,
     ProductiveTest,
     ReceptiveTest,
     ReceptiveQuestion,
     ReceptiveAnswer,
 )
+from user_progress.models import CompletedBonus, EXPBonusRule
 from user_progress.utils import sync_student_level_from_cumulative_point
 import json
 
