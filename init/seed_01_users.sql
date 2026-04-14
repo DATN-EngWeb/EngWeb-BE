@@ -32,4 +32,8 @@ INSERT INTO "user" (id, password, last_login, username, is_active, date_joined, 
 (1026, 'pbkdf2_sha256$1000000$HD7QVmBcwRdwW80uL6dGZ1$oKi5U4h/y4/iWAVh84VIFx2s7wpr8xcChLw91I5Afg0=', NULL, 'teacher12', True, '2024-01-27 10:00:00+00', 'teacher12@example.com', 'Teacher Twelve', NULL, 'avatars/default-avatar.jpg', 'V', 'T', '2024-01-27 10:00:00+00', '550e8400-e29b-41d4-a716-446655440027'),
 (1027, 'pbkdf2_sha256$1000000$HD7QVmBcwRdwW80uL6dGZ1$oKi5U4h/y4/iWAVh84VIFx2s7wpr8xcChLw91I5Afg0=', NULL, 'teacher13', True, '2024-01-28 10:00:00+00', 'teacher13@example.com', 'Teacher Thirteen', NULL, 'avatars/default-avatar.jpg', 'D', 'T', '2024-01-28 10:00:00+00', '550e8400-e29b-41d4-a716-446655440028'),
 (1028, 'pbkdf2_sha256$1000000$HD7QVmBcwRdwW80uL6dGZ1$oKi5U4h/y4/iWAVh84VIFx2s7wpr8xcChLw91I5Afg0=', NULL, 'teacher14', True, '2024-01-29 10:00:00+00', 'teacher14@example.com', 'Teacher Fourteen', NULL, 'avatars/default-avatar.jpg', 'D', 'T', '2024-01-29 10:00:00+00', '550e8400-e29b-41d4-a716-446655440029'),
-(1029, 'pbkdf2_sha256$1000000$HD7QVmBcwRdwW80uL6dGZ1$oKi5U4h/y4/iWAVh84VIFx2s7wpr8xcChLw91I5Afg0=', NULL, 'teacher15', True, '2024-01-30 10:00:00+00', 'teacher15@example.com', 'Teacher Fifteen', NULL, 'avatars/default-avatar.jpg', 'D', 'T', '2024-01-30 10:00:00+00', '550e8400-e29b-41d4-a716-446655440030');
+(1029, 'pbkdf2_sha256$1000000$HD7QVmBcwRdwW80uL6dGZ1$oKi5U4h/y4/iWAVh84VIFx2s7wpr8xcChLw91I5Afg0=', NULL, 'teacher15', True, '2024-01-30 10:00:00+00', 'teacher15@example.com', 'Teacher Fifteen', NULL, 'avatars/default-avatar.jpg', 'D', 'T', '2024-01-30 10:00:00+00', '550e8400-e29b-41d4-a716-446655440030')
+ON CONFLICT (id) DO NOTHING;
+
+-- Update sequence after seeding explicit IDs
+SELECT setval(pg_get_serial_sequence('"user"', 'id'), (SELECT COALESCE(MAX(id), 1) FROM "user"));

@@ -42,6 +42,15 @@ These rules are mandatory when creating commits or pull requests in this reposit
 - Keep commits atomic and logically grouped.
 - Do not include unrelated file changes in the same commit.
 
+## Commit Preparation And Grouping
+
+- Before any commit, always review current changes first (at minimum `git status --short` and diff inspection).
+- Group changes by problem/intent before staging. Each commit must solve one coherent issue only.
+- If multiple concerns exist (e.g. seed idempotency, migration constraint, data refresh), create separate commits for each concern.
+- Stage files explicitly per group; do not use broad staging that mixes unrelated changes.
+- After each commit, re-check remaining changes and continue grouping until the working tree is clean or intentionally left dirty.
+- If a file contains mixed concerns, split hunks so each commit still stays single-purpose.
+
 ## Pull Request Rules
 
 - Use branch-derived keys in the PR title.

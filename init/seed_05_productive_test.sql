@@ -17,3 +17,6 @@ INSERT INTO productive_test (test_id, format, topic, description, min_word, glue
 -- Speaking test configuration (format H - Description)
 (4, 'H', 'Eating', 'https://storage.googleapis.com/dev-nens-english-app-test-vu/tests/test_4/e9f8c724-8744-4382-92d8-e2cb465a0506.html', 0, '', '{"audio": null, "image": null}'::jsonb)
 ON CONFLICT (test_id) DO NOTHING;
+
+-- Update sequence after seeding explicit IDs in test table
+SELECT setval('test_id_seq', (SELECT COALESCE(MAX(id), 1) FROM test));

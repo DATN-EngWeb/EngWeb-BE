@@ -1,19 +1,14 @@
 -- Seed data for UserLevel model
 -- This file is executed after Django migrations in entrypoint.sh
 
-INSERT INTO user_level (id, level_number, level_title, min_xp, max_xp)
+INSERT INTO user_level (level_number, level_title, level_icon, min_xp, max_xp)
 VALUES
-(1, 1, 'Newbie', 0, 299),
-(2, 2, 'Learner', 300, 699),
-(3, 3, 'Student', 700, 1199),
-(4, 4, 'Practitioner', 1200, 1999),
-(5, 5, 'Intermediate', 2000, 3199),
-(6, 6, 'Upper-Intermediate', 3200, 4999),
-(7, 7, 'Advanced', 5000, 7499),
-(8, 8, 'Proficient', 7500, 10999),
-(9, 9, 'Expert', 11000, 15999),
-(10, 10, 'Master', 16000, 24999)
+(1, 'Rookie', 'https://cdn.jsdelivr.net/npm/@tabler/icons/icons/star.svg', 0, 100),
+(2, 'Beginner', 'https://cdn.jsdelivr.net/npm/@tabler/icons/icons/book.svg', 100, 250),
+(3, 'Apprentice', 'https://cdn.jsdelivr.net/npm/@tabler/icons/icons/pencil.svg', 250, 500),
+(4, 'Learner', 'https://cdn.jsdelivr.net/npm/@tabler/icons/icons/target.svg', 500, 900),
+(5, 'Skilled', 'https://cdn.jsdelivr.net/npm/@tabler/icons/icons/bolt.svg', 900, 1400),
+(6, 'Advanced', 'https://cdn.jsdelivr.net/npm/@tabler/icons/icons/rocket.svg', 1400, 1900),
+(7, 'Expert', 'https://cdn.jsdelivr.net/npm/@tabler/icons/icons/trophy.svg', 1900, 2400),
+(8, 'Master', 'https://cdn.jsdelivr.net/npm/@tabler/icons/icons/crown.svg', 2400, 999999)
 ON CONFLICT (level_number) DO NOTHING;
-
--- Update sequence after seeding explicit IDs
-SELECT setval('user_level_id_seq', (SELECT COALESCE(MAX(id), 1) FROM user_level));
