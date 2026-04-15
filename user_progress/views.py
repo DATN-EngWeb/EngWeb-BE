@@ -1,5 +1,11 @@
 import django_filters
-from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, inline_serializer
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    inline_serializer,
+)
 from rest_framework import generics
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
@@ -7,7 +13,6 @@ from rest_framework import status, serializers
 from django.utils import timezone
 from datetime import timedelta
 
-from accounts.models import Student
 from accounts.permissions import IsOwner
 
 from .filters import UserLevelFilter
@@ -144,6 +149,87 @@ class CurrentUserStreakAPIView(generics.GenericAPIView):
                 "streak_count": student.streak_count,
                 "max_streak": student.max_streak,
                 "is_streak_lit_today": is_streak_lit_today,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class CurrentUserAITurnView(generics.GenericAPIView):
+    permission_classes = [IsOwner]
+
+    @extend_schema(
+        summary="Lấy số lượt AI còn lại của user hiện tại",
+        description=(
+            "Lấy nhanh số lượt AI còn lại của user hiện tại\n\n"
+            "Role:\n"
+            "- `S`: Student\n"
+            "- `T`: Teacher\n\n"
+            "Student: trả về `weekly_ai_turn`, `bonus_ai_turn`, `total_ai_turn`\n\n"
+            "Teacher: trả về `weekly_ai_turn`, `bonus_ai_turn=0`, `total_ai_turn`"
+        ),
+        tags=["user-progress"],
+        examples=[
+            OpenApiExample(
+                "Student response",
+                value={
+                    "role": "S",
+                    "weekly_ai_turn": 3,
+                    "bonus_ai_turn": 1,
+                    "total_ai_turn": 4,
+                },
+                response_only=True,
+            ),
+            OpenApiExample(
+                "Teacher response",
+                value={
+                    "role": "T",
+                    "weekly_ai_turn": 2,
+                    "bonus_ai_turn": 0,
+                    "total_ai_turn": 2,
+                },
+                response_only=True,
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(
+                description="Lấy thông tin lượt AI thành công",
+                response=inline_serializer(
+                    name="CurrentUserAITurnResponse",
+                    fields={
+                        "role": serializers.ChoiceField(
+                            choices=[("S", "Student"), ("T", "Teacher")],
+                            help_text="User role code: S = Student, T = Teacher",
+                        ),
+                        "weekly_ai_turn": serializers.IntegerField(),
+                        "bonus_ai_turn": serializers.IntegerField(),
+                        "total_ai_turn": serializers.IntegerField(),
+                    },
+                ),
+            ),
+            401: OpenApiResponse(description="Cần đăng nhập"),
+            403: OpenApiResponse(
+                description="Chỉ học viên hoặc giáo viên mới có thể truy cập"
+            ),
+        },
+    )
+    def get(self, request, *args, **kwargs):
+        user = request.user
+
+        if user.role == "S" and hasattr(user, "student"):
+            weekly_ai_turn = user.student.weekly_ai_turn
+            bonus_ai_turn = user.student.bonus_ai_turn
+        elif user.role == "T" and hasattr(user, "teacher"):
+            weekly_ai_turn = user.teacher.weekly_ai_turn
+            bonus_ai_turn = 0
+        else:
+            raise PermissionDenied("Only Student or Teacher can access this resource.")
+
+        return Response(
+            {
+                "role": user.role,
+                "weekly_ai_turn": weekly_ai_turn,
+                "bonus_ai_turn": bonus_ai_turn,
+                "total_ai_turn": weekly_ai_turn + bonus_ai_turn,
             },
             status=status.HTTP_200_OK,
         )
