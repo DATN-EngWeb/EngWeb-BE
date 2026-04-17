@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "forum",
     "statistic",
     "user_progress",
+    "notifications",
 ]
 
 MIDDLEWARE = [

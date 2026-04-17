@@ -52,6 +52,7 @@ from rest_framework.exceptions import ValidationError, PermissionDenied
 from textwrap import dedent
 from .filters import TestFeedbackFilterSet
 from storage.utils.gcs_presigned import GCSPresignedURLManager
+from notifications.models import Notification
 
 
 @method_decorator(
@@ -1010,13 +1011,23 @@ class TeacherListCreateTestFeedbackAPIView(generics.ListCreateAPIView):
         user = self.request.user
         if user.role != "T":
             raise PermissionDenied("Only teachers can submit feedback via this endpoint.")
-            
+
         try:
             teacher = Teacher.objects.get(user=user)
         except Teacher.DoesNotExist:
             raise PermissionDenied("Teacher profile not found for this user.")
-            
-        serializer.save(teacher=teacher, created_by="T")
+
+        feedback = serializer.save(teacher=teacher, created_by="T")
+
+        test_owner_user = feedback.test.created_by.user if feedback.test.created_by else None
+        if test_owner_user and test_owner_user.id != self.request.user.id:
+            Notification.objects.create(
+                user=test_owner_user,
+                type="F",
+                title=f"{self.request.user.username} left feedback on your test.",
+                content=feedback.comment[:200] if feedback.comment else "",
+                reference_id=feedback.id,
+            )
 
     @extend_schema(
         summary="Create teacher feedback for a test",
