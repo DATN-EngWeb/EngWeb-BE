@@ -1,3 +1,4 @@
+from django.conf import settings
 from ..authentication import CustomTokenAuthentication
 from ..models import Student
 from ..permissions import IsOwner
@@ -216,8 +217,8 @@ class StudentRetrieveUpdateAPIView(generics.RetrieveUpdateAPIView):
                                 "status": "V",
                                 "role": "S",
                                 "updated_at": "2026-01-25T15:56:33.601650+07:00",
-                                "avatar_url": "https://storage.googleapis.com/dev-nens-english-app-test-vu/users/avatars/student.png",
-                                "cover_url": "https://storage.googleapis.com/dev-nens-english-app-test-vu/users/covers/test_student_cover.png",
+                                "avatar_url": f"{settings.MEDIA_URL.rstrip('/')}/users/avatars/student.png",
+                                "cover_url": f"{settings.MEDIA_URL.rstrip('/')}/users/covers/test_student_cover.png",
                                 "user": 2,
                                 "cumulative_point": 0,
                                 "weekly_point": 0,

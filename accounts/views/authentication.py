@@ -87,7 +87,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                             "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzY5NTExNjY1LCJpYXQiOjE3NjkzMzE2NjUsImp0aSI6IjhjNzUyMjVlYjY2NDRiOTA5YTU4MDM1NmIzZTI2YzE4IiwidXNlcl9pZCI6IjEiLCJyb2xlIjoiQSJ9.692YKwbTbJvpQKUvcI8GLuiJqa9HBUxnuc_YUlZvU4Y",
                             "status": "V",
                             "username": "admin",
-                            "avatar": "https://storage.googleapis.com/dev-nens-english-app-test-vu/users/avatars/admin-avatar.png",
+                            "avatar": f"{settings.MEDIA_URL.rstrip('/')}/users/avatars/admin-avatar.png",
                         },
                     ),
                 ],
