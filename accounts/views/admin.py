@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
@@ -115,7 +116,7 @@ class AdminListUserAPIView(generics.ListAPIView):
                             "updated_at": "2026-01-24T14:38:49.292474+07:00",
                             "role_display": "Teacher",
                             "status_display": "Waiting Approval",
-                            "avatar_url": "https://storage.googleapis.com/dev-nens-english-app-test-vu/users/avatars/Gemini_Generated_Image_3cek3u3cek3u3cek.png",
+                            "avatar_url": f"{settings.MEDIA_URL.rstrip('/')}/users/avatars/Gemini_Generated_Image_3cek3u3cek3u3cek.png",
                         }
                     ],
                 },
@@ -218,7 +219,7 @@ class AdminRetrieveUpdateDestroyUserAPIView(generics.RetrieveUpdateDestroyAPIVie
                     "file_storage_uuid": "8166784b-2c0a-4430-982a-0d13125b8cdb",
                     "full_name": "Nguyễn Hoàng Vũ",
                     "date_of_birth": "2004-09-03",
-                    "cover": "https://storage.googleapis.com/dev-nens-english-app-test-vu/users/covers/default-cover.jpg",
+                    "cover": f"{settings.MEDIA_URL.rstrip('/')}/users/covers/default-cover.jpg",
                     "status": "W",
                     "role": "T",
                     "updated_at": "2026-01-24T14:38:49.292474+07:00",
@@ -229,14 +230,14 @@ class AdminRetrieveUpdateDestroyUserAPIView(generics.RetrieveUpdateDestroyAPIVie
                     "credentials": [
                         {
                             "id": 0,
-                            "url": "https://storage.googleapis.com/dev-nens-english-app-test-vu/teachers/credentials/8166784b-2c0a-4430-982a-0d13125b8cdb/credential_0.jpg",
+                            "url": f"{settings.MEDIA_URL.rstrip('/')}/teachers/credentials/8166784b-2c0a-4430-982a-0d13125b8cdb/credential_0.jpg",
                             "name": "credential_0.jpg",
                             "size": 2791601,
                             "type": "image/jpeg"
                         },
                         {
                             "id": 1,
-                            "url": "https://storage.googleapis.com/dev-nens-english-app-test-vu/teachers/credentials/8166784b-2c0a-4430-982a-0d13125b8cdb/credential_1.jpg",
+                            "url": f"{settings.MEDIA_URL.rstrip('/')}/teachers/credentials/8166784b-2c0a-4430-982a-0d13125b8cdb/credential_1.jpg",
                             "name": "credential_1.jpg",
                             "size": 4357,
                             "type": "image/jpeg"
@@ -245,7 +246,7 @@ class AdminRetrieveUpdateDestroyUserAPIView(generics.RetrieveUpdateDestroyAPIVie
                     "teacher_type_display": "Center Teacher",
                     "role_display": "Teacher",
                     "status_display": "Waiting Approval",
-                    "avatar_url": "https://storage.googleapis.com/dev-nens-english-app-test-vu/users/avatars/Gemini_Generated_Image_3cek3u3cek3u3cek.png",
+                    "avatar_url": f"{settings.MEDIA_URL.rstrip('/')}/users/avatars/Gemini_Generated_Image_3cek3u3cek3u3cek.png",
                 },
                 response_only=True,
                 status_codes=["200"],
@@ -382,13 +383,13 @@ class AdminRetrieveUpdateDestroyUserAPIView(generics.RetrieveUpdateDestroyAPIVie
                         "file_storage_uuid": "0cdbf098-a528-4ae8-ab29-1a8e319e3ab6",
                         "full_name": "Admin Name",
                         "date_of_birth": "2000-01-01",
-                        "cover": "https://storage.googleapis.com/dev-nens-english-app-test-vu/users/covers/134052332635336370.jpg",
+                        "cover": f"{settings.MEDIA_URL.rstrip('/')}/users/covers/134052332635336370.jpg",
                         "status": "V",
                         "role": "A",
                         "updated_at": "2026-01-25T00:22:47.234716+07:00",
                         "role_display": "Admin",
                         "status_display": "Verified",
-                        "avatar_url": "https://storage.googleapis.com/dev-nens-english-app-test-vu/users/avatars/image_0.jpg",
+                        "avatar_url": f"{settings.MEDIA_URL.rstrip('/')}/users/avatars/image_0.jpg",
                     }
                 },
                 response_only=True,
