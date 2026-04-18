@@ -13,7 +13,6 @@ from rest_framework.exceptions import ValidationError
 
 from accounts.authentication import CustomTokenAuthentication
 from .models import Post, PostComment, PostReaction
-from notifications.models import Notification
 from .serializers import (
     PostListSerializer, 
     PostCreateSerializer, 
@@ -291,16 +290,6 @@ class PostCommentListCreateAPIView(generics.ListCreateAPIView):
 
         post.comment_count = F("comment_count") + 1
         post.save(update_fields=["comment_count"])
-
-        post_owner_user = post.productive_test_history.student.user
-        if post_owner_user.id != self.request.user.id:
-            Notification.objects.create(
-                user=post_owner_user,
-                type="C",
-                title=f"{self.request.user.username} commented on your post.",
-                content=comment.content[:200] if comment.content else "",
-                reference_id=comment.id,
-            )
 
     @extend_schema(
         summary="Create a comment on a post",
