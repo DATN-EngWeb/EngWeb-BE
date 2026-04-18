@@ -34,4 +34,6 @@ urlpatterns = [
     path("api/statistic/", include("statistic.urls")),
     # User Progress API
     path("api/user-progress/", include("user_progress.urls")),
+    # Notifications API
+    path("api/notifications/", include("notifications.urls")),
 ]

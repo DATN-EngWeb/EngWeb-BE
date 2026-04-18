@@ -13,6 +13,7 @@ from rest_framework.exceptions import ValidationError
 
 from accounts.authentication import CustomTokenAuthentication
 from .models import Post, PostComment, PostReaction
+from notifications.models import Notification
 from .serializers import (
     PostListSerializer, 
     PostCreateSerializer, 
@@ -111,13 +112,11 @@ class UserRetrieveUpdateDeleteCommentAPIView(generics.RetrieveUpdateDestroyAPIVi
         return super().delete(request, *args, **kwargs)
 
     def perform_destroy(self, instance):
-        # Save reference to post before deleting comment
         post = instance.post
-        
-        # Delete comment
+        comment_id = instance.id
+
         super().perform_destroy(instance)
-        
-        # Safely decrement comment_count
+
         post.comment_count = F('comment_count') - 1
         post.save(update_fields=['comment_count'])
 
@@ -287,13 +286,21 @@ class PostCommentListCreateAPIView(generics.ListCreateAPIView):
         return PostComment.objects.select_related("user").filter(post_id=post_id)
 
     def perform_create(self, serializer):
-        # The serializer validates that post_id exists and assigns the post instance to validated_data["post"]
         post = serializer.validated_data.get("post")
-        serializer.save(user=self.request.user)
-        
-        # Increment comment count safely
+        comment = serializer.save(user=self.request.user)
+
         post.comment_count = F("comment_count") + 1
         post.save(update_fields=["comment_count"])
+
+        post_owner_user = post.productive_test_history.student.user
+        if post_owner_user.id != self.request.user.id:
+            Notification.objects.create(
+                user=post_owner_user,
+                type="C",
+                title=f"{self.request.user.username} commented on your post.",
+                content=comment.content[:200] if comment.content else "",
+                reference_id=comment.id,
+            )
 
     @extend_schema(
         summary="Create a comment on a post",
