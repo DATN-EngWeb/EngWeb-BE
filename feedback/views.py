@@ -1010,13 +1010,13 @@ class TeacherListCreateTestFeedbackAPIView(generics.ListCreateAPIView):
         user = self.request.user
         if user.role != "T":
             raise PermissionDenied("Only teachers can submit feedback via this endpoint.")
-            
+
         try:
             teacher = Teacher.objects.get(user=user)
         except Teacher.DoesNotExist:
             raise PermissionDenied("Teacher profile not found for this user.")
-            
-        serializer.save(teacher=teacher, created_by="T")
+
+        feedback = serializer.save(teacher=teacher, created_by="T")
 
     @extend_schema(
         summary="Create teacher feedback for a test",
