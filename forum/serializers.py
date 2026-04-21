@@ -5,6 +5,7 @@ from test_histories.models import ProductiveTestHistory
 
 class PostListSerializer(serializers.ModelSerializer):
     # Get user info
+    author_id = serializers.IntegerField(source="productive_test_history.student.user.id", read_only=True)
     author_name = serializers.CharField(source="productive_test_history.student.user.full_name", read_only=True)
     author_avatar = serializers.ImageField(source="productive_test_history.student.user.avatar", read_only=True)
     
@@ -22,7 +23,7 @@ class PostListSerializer(serializers.ModelSerializer):
         model = Post
         fields = [
             "id", "title", "description", "like_count", "comment_count", "created_at",
-            "author_name", "author_avatar", "skill", "audio_path", "user_answer_text", "is_liked"
+            "author_id", "author_name", "author_avatar", "skill", "audio_path", "user_answer_text", "is_liked"
         ]
 
 
@@ -64,6 +65,7 @@ class PostUpdateSerializer(serializers.ModelSerializer):
 
 
 class PostCommentListSerializer(serializers.ModelSerializer):
+    author_id = serializers.IntegerField(source="user.id", read_only=True)
     author_name = serializers.CharField(source="user.full_name", read_only=True)
     author_avatar = serializers.ImageField(source="user.avatar", read_only=True)
 
@@ -74,6 +76,7 @@ class PostCommentListSerializer(serializers.ModelSerializer):
             "content",
             "created_at",
             "updated_at",
+            "author_id",
             "author_name",
             "author_avatar",
         ]
