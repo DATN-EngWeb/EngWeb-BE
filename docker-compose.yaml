@@ -8,7 +8,7 @@ services:
       - "8000:8000"
     volumes:
       - ./:/app
-      - ./dev-nens-english-app-sa-key.json:/app/dev-nens-english-app-sa-key.json:ro
+      - ./test-nens-english-app-sa-key.json:/app/test-nens-english-app-sa-key.json:ro
     depends_on:
       - db
       - redis

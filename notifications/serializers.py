@@ -51,6 +51,7 @@ class StudentNotificationSerializer(serializers.ModelSerializer):
     type = serializers.CharField(default="C")
     post_id = serializers.IntegerField(source="post.id")
     post_title = serializers.CharField(source="post.title")
+    test_id = serializers.SerializerMethodField()
     skill = serializers.SerializerMethodField()
     author = serializers.SerializerMethodField()
     message = serializers.CharField(source="content")
@@ -59,9 +60,16 @@ class StudentNotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = PostComment
         fields = [
-            "id", "type", "post_id", "post_title", "skill",
+            "id", "type", "test_id", "post_id", "post_title", "skill",
             "author", "message", "is_read", "created_at"
         ]
+
+    def get_test_id(self, obj):
+        if obj.post and obj.post.productive_test_history:
+            prod_test = obj.post.productive_test_history.productive_test
+            if prod_test and prod_test.test:
+                return prod_test.test.id
+        return None
 
     def get_skill(self, obj):
         if obj.post and obj.post.productive_test_history:

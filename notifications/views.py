@@ -117,7 +117,7 @@ class NotificationPagination(PageNumberPagination):
                         fields={
                             "id": serializers.IntegerField(),
                             "type": serializers.CharField(help_text="'F' for Teacher (TestFeedback), 'C' for Student (PostComment)"),
-                            "test_id": serializers.IntegerField(help_text="Test ID (Teacher only)"),
+                            "test_id": serializers.IntegerField(help_text="Test ID (Both Teacher and Student)"),
                             "test_name": serializers.CharField(help_text="Test title (Teacher only)"),
                             "post_id": serializers.IntegerField(help_text="Post ID (Student only)"),
                             "post_title": serializers.CharField(help_text="Post title (Student only)"),
