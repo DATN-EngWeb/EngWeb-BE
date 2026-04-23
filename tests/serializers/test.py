@@ -20,6 +20,7 @@ class TestSerializer(serializers.ModelSerializer):
     created_by = serializers.SerializerMethodField()
     progress_status = serializers.SerializerMethodField()
     submitted = serializers.SerializerMethodField()
+    post_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Test
@@ -38,6 +39,7 @@ class TestSerializer(serializers.ModelSerializer):
             "created_by",
             "progress_status",
             "submitted",
+            "post_count",
         ]
         extra_kwargs = {
             "id": {"read_only": True},
@@ -178,9 +180,40 @@ class TestSerializer(serializers.ModelSerializer):
 
         return 0
 
+    def get_post_count(self, obj):
+        """
+        Calculate total number of forum posts for this test.
+        Returns None if not requested via 'post_count' parameter.
+
+        OPTIMIZATION: If 'post_count' was already annotated in queryset,
+        reuse that value instead of querying again.
+        """
+        request_post_count = self.context.get("request_post_count", False)
+        if not request_post_count:
+            return None
+
+        # Reuse annotated value when available.
+        if hasattr(obj, "post_count"):
+            return obj.post_count
+
+        # Receptive tests do not have forum posts.
+        if obj.type != "P":
+            return 0
+
+        # Import here to avoid circular import
+        from forum.models import Post
+
+        try:
+            productive_test = obj.productive_test
+            return Post.objects.filter(
+                productive_test_history__productive_test=productive_test
+            ).count()
+        except:
+            return 0
+
     def to_representation(self, instance):
         """
-        Override to remove progress_status and submitted fields if they're None
+        Override to remove optional fields if they're None
         """
         representation = super().to_representation(instance)
 
@@ -191,6 +224,10 @@ class TestSerializer(serializers.ModelSerializer):
         # Remove submitted field if it's None (not requested)
         if representation.get("submitted") is None:
             representation.pop("submitted", None)
+
+        # Remove post_count field if it's None (not requested)
+        if representation.get("post_count") is None:
+            representation.pop("post_count", None)
 
         return representation
 

@@ -274,11 +274,28 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                 )
             )
 
+        # Add annotation for post count only when requested.
+        post_count_param = self.request.query_params.get("post_count", "").lower()
+        if post_count_param == "true":
+            queryset = queryset.annotate(
+                post_count=Case(
+                    When(
+                        type="P",
+                        then=Count(
+                            "productive_test__histories__posts",
+                            distinct=True,
+                        ),
+                    ),
+                    default=Value(0),
+                    output_field=IntegerField(),
+                )
+            )
+
         return queryset
 
     def get_serializer_context(self):
         """
-        Override to add progress_status and submitted request flags to context
+        Override to add progress_status/submitted/post_count request flags to context
         """
         context = super().get_serializer_context()
 
@@ -303,6 +320,11 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
         submitted_param = self.request.query_params.get("submitted", "").lower()
         request_submitted = submitted_param == "true"
         context["request_submitted"] = request_submitted
+
+        # Check if post_count parameter is requested
+        post_count_param = self.request.query_params.get("post_count", "").lower()
+        request_post_count = post_count_param == "true"
+        context["request_post_count"] = request_post_count
 
         return context
 
@@ -330,6 +352,7 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "  - `none`: Các bài test chưa làm\n"
             "- `progress_status`: Hiển thị trạng thái hoàn thành của student (true/false) - **Chỉ áp dụng cho student đã đăng nhập**\n"
             "- `submitted`: Hiển thị số lượng học sinh đã submit bài test (true/false)\n"
+            "- `post_count`: Hiển thị số lượng bài post trong forum của bài test (true/false)\n"
             "- `page`: Số trang (mặc định: 1)\n"
             "- `page_size`: Số phần tử mỗi trang (mặc định: 10, tối đa: 100)\n\n"
             "**Tham số sắp xếp (Ordering):**\n"
@@ -365,6 +388,11 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "**Lưu ý về tham số `submitted`:**\n"
             "- Khi `submitted=true`, API sẽ trả về thêm trường `submitted` cho mỗi test\n"
             "- Trường `submitted` cho biết tổng số lượng học sinh đã submit bài test đó (type='S')\n"
+            "\n"
+            "**Lưu ý về tham số `post_count`:**\n"
+            "- Khi `post_count=true`, API sẽ trả về thêm trường `post_count` cho mỗi test\n"
+            "- Trường `post_count` cho biết tổng số bài post forum của bài test đó\n"
+            "- Với Receptive test (type='R'), `post_count` luôn là 0\n"
             "**Ví dụ:**\n"
             "- `/api/tests/?type=R` - Lấy tất cả bài Receptive Test (Reading/Listening)\n"
             "- `/api/tests/?type=P&level=B1` - Lấy bài Productive Test cấp B1\n"
@@ -387,7 +415,8 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "- `/api/tests/?submitted=true` - Lấy danh sách bài test kèm số lượng submission\n"
             "- `/api/tests/?submitted=true&ordering=-submitted` - Lấy bài test kèm số submission, sắp xếp theo nhiều nhất\n"
             "- `/api/tests/?ordering=-submitted` - Sắp xếp theo nhiều submission (KHÔNG hiển thị field submitted)\n"
-            "- `/api/tests/?mine=true&submitted=true&ordering=-submitted` - Bài test của mình, xem bài nào được submit nhiều nhất"
+            "- `/api/tests/?mine=true&submitted=true&ordering=-submitted` - Bài test của mình, xem bài nào được submit nhiều nhất\n"
+            "- `/api/tests/?post_count=true` - Lấy danh sách bài test kèm số lượng bài post forum"
         ),
         tags=["tests (overview)"],
         parameters=[
@@ -465,6 +494,16 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                     "Hiển thị số lượng học sinh đã submit bài test (true/false). "
                     "Khi submitted=true, API sẽ trả về thêm trường 'submitted' cho mỗi test, "
                     "cho biết tổng số lượng submission (type='S') của bài test đó. "
+                ),
+                required=False,
+                type=bool,
+            ),
+            OpenApiParameter(
+                name="post_count",
+                description=(
+                    "Hiển thị số lượng bài post forum của bài test (true/false). "
+                    "Khi post_count=true, API sẽ trả về thêm trường 'post_count' cho mỗi test. "
+                    "Với Receptive test (type='R'), giá trị luôn là 0. "
                 ),
                 required=False,
                 type=bool,
