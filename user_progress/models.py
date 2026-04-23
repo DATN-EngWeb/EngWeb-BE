@@ -112,3 +112,33 @@ class EXPBonusRule(models.Model):
                 name="unique_exp_bonus_rule_range",
             )
         ]
+
+
+class StreakRewardRule(models.Model):
+    streak_day = models.IntegerField(
+        unique=True,
+        validators=[MinValueValidator(1)],
+        help_text="Required streak day to unlock this reward",
+    )
+    xp_reward = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="XP awarded when user reaches streak_day",
+    )
+    ai_turn_reward = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Total AI turns shown in reward config",
+    )
+
+    def __str__(self):
+        return (
+            f"Streak {self.streak_day}d: +{self.xp_reward} XP, "
+            f"+{self.ai_turn_reward} AI turns "
+        )
+
+    class Meta:
+        db_table = "streak_reward_rule"
+        ordering = ["streak_day"]
+
+

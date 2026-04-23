@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import UserLevel, CompletedBonus, EXPBonusRule
+from .models import UserLevel, CompletedBonus, EXPBonusRule, StreakRewardRule
 
 @admin.register(UserLevel)
 class UserLevelAdmin(admin.ModelAdmin):
@@ -23,3 +23,15 @@ class EXPBonusRuleAdmin(admin.ModelAdmin):
 		"rating",
 		"feedback_message",
 	)
+
+
+@admin.register(StreakRewardRule)
+class StreakRewardRuleAdmin(admin.ModelAdmin):
+	list_display = (
+		"id",
+		"streak_day",
+		"xp_reward",
+		"ai_turn_reward",
+	)
+	ordering = ("streak_day",)
+	search_fields = ("streak_day",)

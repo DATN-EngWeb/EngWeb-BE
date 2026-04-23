@@ -10,14 +10,15 @@ from rest_framework import generics
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework import status, serializers
+from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from datetime import timedelta
 
 from accounts.permissions import IsOwner
 
 from .filters import UserLevelFilter
-from .models import UserLevel
-from .serializers import UserLevelSerializer
+from .models import UserLevel, StreakRewardRule
+from .serializers import UserLevelSerializer, StreakRewardRuleSerializer
 
 
 class UserLevelListAPIView(generics.ListAPIView):
@@ -233,3 +234,51 @@ class CurrentUserAITurnView(generics.GenericAPIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class StreakRewardRuleListAPIView(generics.ListAPIView):
+    queryset = StreakRewardRule.objects.all().order_by("streak_day")
+    serializer_class = StreakRewardRuleSerializer
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Danh sách mốc thưởng streak",
+        description="Lấy danh sách rule thưởng theo mốc streak, sắp xếp tăng dần theo streak_day.",
+        tags=["user-progress"],
+        responses={
+            200: StreakRewardRuleSerializer(many=True),
+            401: OpenApiResponse(description="Cần đăng nhập"),
+        },
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+class StreakRewardRuleRetrieveAPIView(generics.RetrieveAPIView):
+    queryset = StreakRewardRule.objects.all()
+    serializer_class = StreakRewardRuleSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = "streak_day"
+    lookup_url_kwarg = "streak_day"
+
+    @extend_schema(
+        summary="Lấy chi tiết mốc thưởng streak",
+        description="Lấy chi tiết một rule thưởng theo giá trị streak_day.",
+        tags=["user-progress"],
+        parameters=[
+            OpenApiParameter(
+                name="streak_day",
+                type=int,
+                location=OpenApiParameter.PATH,
+                required=True,
+                description="Số ngày streak cần lấy rule",
+            ),
+        ],
+        responses={
+            200: StreakRewardRuleSerializer,
+            401: OpenApiResponse(description="Cần đăng nhập"),
+            404: OpenApiResponse(description="Không tìm thấy mốc thưởng streak"),
+        },
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
