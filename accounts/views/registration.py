@@ -409,11 +409,11 @@ class TeacherSubmitProfileAPIView(generics.CreateAPIView):
         avatar_file = request.FILES.get("user.avatar")
 
         if not full_name:
-            user_errors["full_name"] = "This field is required."
+            user_errors["full_name"] = ["This field is required."]
         if not date_of_birth:
-            user_errors["date_of_birth"] = "This field is required."
+            user_errors["date_of_birth"] = ["This field is required."]
         if not avatar_file:
-            user_errors["avatar"] = "This field is required."
+            user_errors["avatar"] = ["This field is required."]
 
         if user_errors:
             return Response({"user": user_errors}, status=status.HTTP_400_BAD_REQUEST)
@@ -427,7 +427,7 @@ class TeacherSubmitProfileAPIView(generics.CreateAPIView):
         try:
             credentials_data = process_credential_files_upload(request.FILES, user)
         except ValueError as e:
-            return Response({"teacher.credentials": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"credentials": [str(e)]}, status=status.HTTP_400_BAD_REQUEST)
 
         teacher_data = {
             "user": user.pk,
