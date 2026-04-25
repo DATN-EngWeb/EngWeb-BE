@@ -220,7 +220,7 @@ class ReceptiveQuestionUpdateSerializer(serializers.Serializer):
     id = serializers.IntegerField(required=False)
     question_number = serializers.IntegerField(required=False)
     content = serializers.CharField(required=False)
-    explanation = serializers.CharField(required=False)
+    explanation = serializers.CharField(required=False, allow_blank=True)
     score = serializers.IntegerField(required=False)
     resources = serializers.JSONField(required=False)
     receptive_answers = ReceptiveAnswerUpdateSerializer(many=True, required=False)
