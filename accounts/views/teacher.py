@@ -132,19 +132,21 @@ class TeacherRetrieveUpdateAPIView(generics.RetrieveUpdateAPIView):
         user_data.pop("avatar", None)
         user_data.pop("cover", None)
 
-        credentials = teacher_data.get("credentials", [])
+        credentials = teacher_data.get("credentials")
         
-        if isinstance(credentials, list):
-            processed = []
+        if not isinstance(credentials, list):
+            credentials = []
+
+        processed = []
+        
+        for item in credentials:
+            if isinstance(item, dict) and item.get("url"):
+                item = item.copy()
+                item["url"] = get_absolute_media_url(item["url"])
             
-            for item in credentials:
-                if isinstance(item, dict) and item.get("url"):
-                    item = item.copy()
-                    item["url"] = get_absolute_media_url(item["url"])
-                
-                processed.append(item)
-            
-            teacher_data["credentials"] = processed
+            processed.append(item)
+        
+        teacher_data["credentials"] = processed
 
         return Response({**user_data, **teacher_data}, status=status.HTTP_200_OK)
 

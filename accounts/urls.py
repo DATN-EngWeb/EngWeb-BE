@@ -18,6 +18,7 @@ from .views.password import (
     ChangePasswordAPIView
 )
 from .views.admin import (
+    AdminOverviewAPIView,
     AdminListUserAPIView,
     AdminRetrieveUpdateDestroyUserAPIView,
 )
@@ -50,6 +51,7 @@ urlpatterns = [
 
     # Admin manage user endpoints
     path("admin-users", AdminListUserAPIView.as_view(), name="admin-list-user"),
+    path("admin-users/overview", AdminOverviewAPIView.as_view(), name="admin-overview"),
     path("admin-users/<int:pk>", AdminRetrieveUpdateDestroyUserAPIView.as_view(), name="admin-retrieve-update-destroy-user"),
 
     # Teacher endpoints

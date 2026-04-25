@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db.models import Count
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
@@ -24,6 +25,85 @@ class UserPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = "page_size"
     max_page_size = 100
+
+class AdminOverviewAPIView(generics.GenericAPIView):
+    permission_classes = [IsAdmin]
+    authentication_classes = [CustomTokenAuthentication]
+    queryset = User.objects.all()
+
+    @extend_schema(
+        operation_id="admin_users_overview",
+        summary="Admin - Users Overview API",
+        description="Get a breakdown of users grouped by their role and status.",
+        tags=["admin"],
+        responses={
+            200: OpenApiResponse(
+                description="Overview statistics retrieved successfully",
+                response=inline_serializer(
+                    name="AdminOverviewResponse",
+                    fields={
+                        "total_users": serializers.IntegerField(),
+                        "pending_approvals": serializers.IntegerField(),
+                        "active_users": serializers.IntegerField(),
+                        "teachers": inline_serializer(
+                            name="TeacherStatusCount",
+                            many=True,
+                            fields={
+                                "status": serializers.CharField(),
+                                "total_users": serializers.IntegerField()
+                            }
+                        ),
+                        "students": inline_serializer(
+                            name="StudentStatusCount",
+                            many=True,
+                            fields={
+                                "status": serializers.CharField(),
+                                "total_users": serializers.IntegerField()
+                            }
+                        ),
+                        "admins": inline_serializer(
+                            name="AdminStatusCount",
+                            many=True,
+                            fields={
+                                "status": serializers.CharField(),
+                                "total_users": serializers.IntegerField()
+                            }
+                        ),
+                    }
+                )
+            )
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        metrics = User.objects.values('role', 'status').annotate(total=Count('id'))
+        
+        response_data = {
+            "total_users": User.objects.count(),
+            "pending_approvals": 0,
+            "active_users": 0,
+            "teachers": [],
+            "students": [],
+            "admins": []
+        }
+        
+        role_map = {"T": "teachers", "S": "students", "A": "admins"}
+        
+        for item in metrics:
+            role_key = role_map.get(item['role'])
+            if role_key:
+                response_data[role_key].append({
+                    "status": item['status'],
+                    "total_users": item['total']
+                })
+            
+            if item['role'] == 'T' and item['status'] == 'W':
+                response_data['pending_approvals'] += item['total']
+            
+            if item['status'] == 'V':
+                response_data['active_users'] += item['total']
+        
+        return Response(response_data, status=status.HTTP_200_OK)
+
 
 class AdminListUserAPIView(generics.ListAPIView):
     permission_classes = [IsAdmin]
@@ -285,23 +365,25 @@ class AdminRetrieveUpdateDestroyUserAPIView(generics.RetrieveUpdateDestroyAPIVie
                 teacher = user.teacher
                 teacher_serializer = TeacherSerializer(teacher, context={"request": request})
                 teacher_data = teacher_serializer.data
-                credentials = teacher_data.get("credentials", [])
+                credentials = teacher_data.get("credentials")
 
-                if isinstance(credentials, list):
-                    processed_credentials = []
+                if not isinstance(credentials, list):
+                    credentials = []
 
-                    for cred in credentials:
-                        cred_url = cred.get("url", "") if isinstance(cred, dict) else ""
-                        
-                        if cred_url:
-                            processed_cred = cred.copy()
-                            processed_cred["url"] = get_absolute_media_url(cred_url)
-                            
-                            processed_credentials.append(processed_cred)
-                        else:
-                            processed_credentials.append(cred)
+                processed_credentials = []
+
+                for cred in credentials:
+                    cred_url = cred.get("url", "") if isinstance(cred, dict) else ""
                     
-                    teacher_data["credentials"] = processed_credentials
+                    if cred_url:
+                        processed_cred = cred.copy()
+                        processed_cred["url"] = get_absolute_media_url(cred_url)
+                        
+                        processed_credentials.append(processed_cred)
+                    else:
+                        processed_credentials.append(cred)
+                
+                teacher_data["credentials"] = processed_credentials
 
                 user_data.update(teacher_data)
                 user_data["teacher_type_display"] = teacher.get_teacher_type_display()
