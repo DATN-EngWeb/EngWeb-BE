@@ -23,6 +23,7 @@ from .serializers import (
 )
 from .permissions import IsOwnerOrAdmin, IsStudent
 from .filters import ProductiveTestHistoryFilter, ReceptiveTestHistoryFilter
+from user_progress.models import StreakRewardRule
 
 
 class TestHistoryPagination(PageNumberPagination):
@@ -37,6 +38,12 @@ def _build_streak_notice(student, previous_last_submitted_date):
     """Return streak notice for submission cases (continued, first-day, same-day)."""
     student.refresh_from_db(fields=["streak_count", "last_submitted_date"])
 
+    current_milestone = (
+        StreakRewardRule.objects.filter(streak_day__lte=student.streak_count)
+        .order_by("-streak_day")
+        .first()
+    )
+
     today = timezone.localdate()
     if not student.last_submitted_date:
         return None
@@ -50,6 +57,7 @@ def _build_streak_notice(student, previous_last_submitted_date):
         return {
             "continued": False,
             "current_streak": student.streak_count,
+            "current_streak_milestone_id": current_milestone.id if current_milestone else None,
         }
 
     previous_date = timezone.localdate(previous_last_submitted_date)
@@ -57,6 +65,7 @@ def _build_streak_notice(student, previous_last_submitted_date):
         return {
             "continued": True,
             "current_streak": student.streak_count,
+            "current_streak_milestone_id": current_milestone.id if current_milestone else None,
         }
 
     # Already submitted today, keep streak and notify with continued=false.
@@ -64,12 +73,14 @@ def _build_streak_notice(student, previous_last_submitted_date):
         return {
             "continued": False,
             "current_streak": student.streak_count,
+            "current_streak_milestone_id": current_milestone.id if current_milestone else None,
         }
 
     # Streak reset or other non-consecutive submission days.
     return {
         "continued": False,
         "current_streak": student.streak_count,
+        "current_streak_milestone_id": current_milestone.id if current_milestone else None,
     }
 
 
@@ -141,6 +152,7 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 serializer.save()
                 response_data = dict(serializer.data)
                 response_data["streak_notice"] = None
+                response_data["streak_reward_notice"] = None
                 response_data["level_notice"] = None
                 return Response(response_data, status=status.HTTP_200_OK)
             else:
@@ -156,6 +168,7 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 serializer.save(student=student, attempt=attempt)
                 response_data = dict(serializer.data)
                 response_data["streak_notice"] = None
+                response_data["streak_reward_notice"] = None
                 response_data["level_notice"] = None
                 return Response(response_data, status=status.HTTP_201_CREATED)
 
@@ -174,6 +187,9 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 )
                 if streak_notice:
                     response_data["streak_notice"] = streak_notice
+                response_data["streak_reward_notice"] = getattr(
+                    history, "_streak_reward_notice", None
+                )
                 response_data["level_notice"] = getattr(history, "_level_notice", None)
                 return Response(response_data, status=status.HTTP_200_OK)
             else:
@@ -192,6 +208,9 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
                 )
                 if streak_notice:
                     response_data["streak_notice"] = streak_notice
+                response_data["streak_reward_notice"] = getattr(
+                    history, "_streak_reward_notice", None
+                )
                 response_data["level_notice"] = getattr(history, "_level_notice", None)
                 return Response(response_data, status=status.HTTP_201_CREATED)
 
@@ -321,7 +340,8 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
             "- Nếu lần submit đầu tiên: `continued=false`, `current_streak=1`\n"
             "- Nếu đã submit trong hôm nay: `continued=false`, giữ nguyên streak hiện tại\n"
             "- Nếu bị đứt chuỗi rồi quay lại submit: reset chuỗi về `1`\n"
-            "- Response có thêm `streak_notice` gồm `continued` và `current_streak`\n\n"
+            "- Response có thêm `streak_notice` gồm `continued`, `current_streak`, `current_streak_milestone` (gồm `id`, `streak_day`)\n\n"
+            "- Nếu đạt mốc thưởng streak: Response có thêm `streak_reward_notice` gồm `id`, `streak_day`, `xp_reward`, `ai_turn_reward`\n\n"
             "**Lưu ý:**\n"
             "- `student` và `attempt` tự động được set\n"
             "- `type` mặc định là 'D' (Draft) nếu không gửi\n"
@@ -579,9 +599,13 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
             streak_notice = _build_streak_notice(student, previous_last_submitted_date)
             if streak_notice:
                 response_data["streak_notice"] = streak_notice
+            response_data["streak_reward_notice"] = getattr(
+                history, "_streak_reward_notice", None
+            )
             response_data["level_notice"] = getattr(history, "_level_notice", None)
         else:
             response_data["streak_notice"] = None
+            response_data["streak_reward_notice"] = None
             response_data["level_notice"] = None
 
         return Response(response_data, status=status_code)
@@ -746,7 +770,8 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
             "- Nếu lần submit đầu tiên: `continued=false`, `current_streak=1`\n"
             "- Nếu đã submit trong hôm nay: `continued=false`, giữ nguyên streak hiện tại\n"
             "- Nếu bị đứt chuỗi rồi quay lại submit: reset chuỗi về `1`\n"
-            "- Response có thêm `streak_notice` gồm `continued` và `current_streak`\n\n"
+            "- Response có thêm `streak_notice` gồm `continued`, `current_streak`, `current_streak_milestone` (gồm `id`, `streak_day`)\n\n"
+            "- Nếu đạt mốc thưởng streak: Response có thêm `streak_reward_notice` gồm `id`, `streak_day`, `xp_reward`, `ai_turn_reward`\n\n"
             "**Lưu ý:**\n"
             "- `student` và `attempt` tự động được set\n"
             "- `type` mặc định là 'D' (Draft) nếu không gửi\n"

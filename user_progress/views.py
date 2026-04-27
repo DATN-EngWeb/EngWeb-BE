@@ -21,6 +21,43 @@ from .models import UserLevel, StreakRewardRule
 from .serializers import UserLevelSerializer, StreakRewardRuleSerializer
 
 
+def _sync_expired_streak(student):
+    """Reset streak_count when the student's last submission is older than yesterday."""
+    today = timezone.localdate()
+    yesterday = today - timedelta(days=1)
+
+    if student.streak_count <= 0:
+        return
+
+    if not student.last_submitted_date:
+        student.streak_count = 0
+        student.save(update_fields=["streak_count"])
+        return
+
+    last_submitted_date = timezone.localdate(student.last_submitted_date)
+    if last_submitted_date < yesterday:
+        student.streak_count = 0
+        student.save(update_fields=["streak_count"])
+
+
+def _serialize_streak_milestone(rule):
+    if not rule:
+        return None
+
+    return {
+        "id": rule.id,
+        "streak_day": rule.streak_day,
+    }
+
+
+def _get_current_streak_milestone(student):
+    return (
+        StreakRewardRule.objects.filter(streak_day__lte=student.streak_count)
+        .order_by("-streak_day")
+        .first()
+    )
+
+
 class UserLevelListAPIView(generics.ListAPIView):
     queryset = UserLevel.objects.all().order_by("min_xp")
     serializer_class = UserLevelSerializer
@@ -95,12 +132,13 @@ class CurrentUserStreakAPIView(generics.GenericAPIView):
         summary="Lấy streak hiện tại của user",
         description=(
             "Lấy thông tin streak của user hiện tại gồm `last_submitted_date`, "
-            "`streak_count`, `max_streak`, `is_streak_lit_today`.\n\n"
+            "`streak_count`, `max_streak`, `is_streak_lit_today`, `current_streak_milestone`.\n\n"
             "**Logic kiểm tra mất chuỗi khi truy vấn:**\n"
             "- Nếu `last_submitted_date` cũ hơn hôm qua, hệ thống tự cập nhật `streak_count` về `0`\n"
             "- Nếu `last_submitted_date` là hôm qua hoặc hôm nay thì giữ nguyên streak\n"
             "- `is_streak_lit_today=true` khi user đã submit trong ngày hôm nay\n"
-            "- `max_streak` không thay đổi"
+            "- `max_streak` không thay đổi\n"
+            "- `current_streak_milestone` là mốc cao nhất hiện tại user đã đạt (hoặc `null`)"
         ),
         tags=["user-progress"],
         responses={
@@ -113,6 +151,14 @@ class CurrentUserStreakAPIView(generics.GenericAPIView):
                         "streak_count": serializers.IntegerField(),
                         "max_streak": serializers.IntegerField(),
                         "is_streak_lit_today": serializers.BooleanField(),
+                        "current_streak_milestone": inline_serializer(
+                            name="CurrentStreakMilestone",
+                            fields={
+                                "id": serializers.IntegerField(),
+                                "streak_day": serializers.IntegerField(),
+                            },
+                            allow_null=True,
+                        ),
                     },
                 ),
             ),
@@ -127,18 +173,11 @@ class CurrentUserStreakAPIView(generics.GenericAPIView):
             raise PermissionDenied("Only Student can access this resource.")
 
         student = user.student
-        today = timezone.localdate()
-        yesterday = today - timedelta(days=1)
+        _sync_expired_streak(student)
 
-        if student.streak_count > 0:
-            if not student.last_submitted_date:
-                student.streak_count = 0
-                student.save(update_fields=["streak_count"])
-            else:
-                last_submitted_date = timezone.localdate(student.last_submitted_date)
-                if last_submitted_date < yesterday:
-                    student.streak_count = 0
-                    student.save(update_fields=["streak_count"])
+        today = timezone.localdate()
+
+        current_streak_milestone = _get_current_streak_milestone(student)
 
         is_streak_lit_today = False
         if student.last_submitted_date:
@@ -150,6 +189,9 @@ class CurrentUserStreakAPIView(generics.GenericAPIView):
                 "streak_count": student.streak_count,
                 "max_streak": student.max_streak,
                 "is_streak_lit_today": is_streak_lit_today,
+                "current_streak_milestone": _serialize_streak_milestone(
+                    current_streak_milestone
+                ),
             },
             status=status.HTTP_200_OK,
         )
