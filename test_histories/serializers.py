@@ -8,15 +8,26 @@ from django.db.models import F, Max
 from .models import ProductiveTestHistory, ReceptiveTestHistory, ReceptiveAnswerHistory
 from accounts.models import Student
 from tests.models import (
-    CompletedBonus,
-    EXPBonusRule,
     ProductiveTest,
     ReceptiveTest,
     ReceptiveQuestion,
     ReceptiveAnswer,
 )
+from user_progress.models import CompletedBonus, EXPBonusRule, StreakRewardRule
 from user_progress.utils import sync_student_level_from_cumulative_point
 import json
+
+
+def _build_streak_reward_notice(streak_reward_rule):
+    if not streak_reward_rule:
+        return None
+
+    return {
+        "new_streak_milestone_id": streak_reward_rule.id,
+        "streak_day": streak_reward_rule.streak_day,
+        "xp_reward": streak_reward_rule.xp_reward,
+        "ai_turn_reward": streak_reward_rule.ai_turn_reward,
+    }
 
 
 def _update_student_streak_for_submission(student_id):
@@ -25,6 +36,8 @@ def _update_student_streak_for_submission(student_id):
     today = timezone.localdate(now)
 
     student = Student.objects.select_for_update().get(pk=student_id)
+
+    previous_streak_count = student.streak_count
 
     if student.last_submitted_date:
         last_submitted_date = timezone.localdate(student.last_submitted_date)
@@ -42,6 +55,25 @@ def _update_student_streak_for_submission(student_id):
     student.max_streak = max(student.max_streak, new_streak_count)
     student.last_submitted_date = now
     student.save(update_fields=["streak_count", "max_streak", "last_submitted_date"])
+
+    if new_streak_count <= previous_streak_count:
+        return None
+
+    streak_reward_rule = StreakRewardRule.objects.filter(
+        streak_day=new_streak_count
+    ).first()
+    if not streak_reward_rule:
+        return None
+
+    # Update XP and AI turns for the student if there are rewards, even if this is not the first time hitting this streak day (e.g. if they lost the streak and regained it)
+    if streak_reward_rule.xp_reward or streak_reward_rule.ai_turn_reward:
+        Student.objects.filter(pk=student_id).update(
+            cumulative_point=F("cumulative_point") + streak_reward_rule.xp_reward,
+            weekly_point=F("weekly_point") + streak_reward_rule.xp_reward,
+            bonus_ai_turn=F("bonus_ai_turn") + streak_reward_rule.ai_turn_reward,
+        )
+
+    return _build_streak_reward_notice(streak_reward_rule)
 
 
 class BaseSubmissionHistorySerializer(serializers.ModelSerializer):
@@ -178,9 +210,13 @@ class ProductiveTestHistorySerializer(BaseSubmissionHistorySerializer):
         if productive_test_history.type != "S":
             productive_test_history.earned_bonus_point = 0
             productive_test_history.save(update_fields=["earned_bonus_point"])
+            productive_test_history._streak_reward_notice = None
             return productive_test_history.earned_bonus_point
 
-        _update_student_streak_for_submission(productive_test_history.student_id)
+        streak_reward_notice = _update_student_streak_for_submission(
+            productive_test_history.student_id
+        )
+        productive_test_history._streak_reward_notice = streak_reward_notice
 
         has_previous_submission = ProductiveTestHistory.objects.filter(
             student=productive_test_history.student,
@@ -191,7 +227,14 @@ class ProductiveTestHistorySerializer(BaseSubmissionHistorySerializer):
         if has_previous_submission:
             productive_test_history.earned_bonus_point = 0
             productive_test_history.save(update_fields=["earned_bonus_point"])
-            productive_test_history._level_notice = None
+            if streak_reward_notice and streak_reward_notice["xp_reward"]:
+                productive_test_history._level_notice = (
+                    sync_student_level_from_cumulative_point(
+                        productive_test_history.student_id
+                    )
+                )
+            else:
+                productive_test_history._level_notice = None
             return productive_test_history.earned_bonus_point
 
         bonus_point = self._calculate_productive_bonus_point(
@@ -200,12 +243,19 @@ class ProductiveTestHistorySerializer(BaseSubmissionHistorySerializer):
         productive_test_history.earned_bonus_point = bonus_point
         productive_test_history.save(update_fields=["earned_bonus_point"])
 
+        should_sync_level = bool(
+            streak_reward_notice and streak_reward_notice["xp_reward"]
+        )
+
         # Update student's points only if this is the first submission for this test
         if bonus_point:
             Student.objects.filter(pk=productive_test_history.student_id).update(
                 cumulative_point=F("cumulative_point") + bonus_point,
                 weekly_point=F("weekly_point") + bonus_point,
             )
+            should_sync_level = True
+
+        if should_sync_level:
             productive_test_history._level_notice = (
                 sync_student_level_from_cumulative_point(productive_test_history.student_id)
             )
@@ -477,9 +527,13 @@ class ReceptiveTestHistorySerializer(BaseSubmissionHistorySerializer):
             receptive_test_history.bonus_point = 0
             receptive_test_history.earned_bonus_point = 0
             receptive_test_history.save(update_fields=["bonus_point", "earned_bonus_point"])
+            receptive_test_history._streak_reward_notice = None
             return receptive_test_history.bonus_point, receptive_test_history.earned_bonus_point
 
-        _update_student_streak_for_submission(receptive_test_history.student_id)
+        streak_reward_notice = _update_student_streak_for_submission(
+            receptive_test_history.student_id
+        )
+        receptive_test_history._streak_reward_notice = streak_reward_notice
 
         bonus_point, _, _, _ = self._calculate_bonus_point(
             receptive_test_history.receptive_test,
@@ -501,6 +555,11 @@ class ReceptiveTestHistorySerializer(BaseSubmissionHistorySerializer):
                 cumulative_point=F("cumulative_point") + delta,
                 weekly_point=F("weekly_point") + delta,
             )
+
+        should_sync_level = bool(
+            delta or (streak_reward_notice and streak_reward_notice["xp_reward"])
+        )
+        if should_sync_level:
             receptive_test_history._level_notice = (
                 sync_student_level_from_cumulative_point(receptive_test_history.student_id)
             )
