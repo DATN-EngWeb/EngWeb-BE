@@ -11,7 +11,7 @@ from ..serializers import UserSerializer, TeacherSerializer
 from ..filters import UserFilter
 from ..permissions import IsAdmin
 from ..authentication import CustomTokenAuthentication
-from ..utils import get_absolute_media_url, delete_user_storage_folder
+from ..utils import get_absolute_media_url, delete_user_storage_folder, send_status_update_email
 
 from drf_spectacular.utils import (
     extend_schema,
@@ -553,6 +553,7 @@ class AdminRetrieveUpdateDestroyUserAPIView(generics.RetrieveUpdateDestroyAPIVie
             if user.role != "A" and user.status == "D":
                 user.status = "V"
                 user.save()
+                send_status_update_email(user.email, user.full_name or user.username, "enabled")
 
                 response = {
                     "message": "Account enabled successfully",
@@ -572,6 +573,7 @@ class AdminRetrieveUpdateDestroyUserAPIView(generics.RetrieveUpdateDestroyAPIVie
                 if approve:
                     user.status = "V"
                     user.save()
+                    send_status_update_email(user.email, user.full_name or user.username, "approved")
                     response = {
                         "message": "Teacher profile approved successfully",
                         "user_id": user.id,
@@ -581,7 +583,10 @@ class AdminRetrieveUpdateDestroyUserAPIView(generics.RetrieveUpdateDestroyAPIVie
                 else:
                     # Delete all files in teacher's storage folder before deleting user
                     delete_user_storage_folder(user)
+                    user_email = user.email
+                    user_name = user.full_name or user.username
                     user.delete()
+                    send_status_update_email(user_email, user_name, "rejected")
                     return Response({"message": "Teacher profile rejected and user deleted"}, status=status.HTTP_204_NO_CONTENT)
             else:
                 return Response({"detail": "Action 'review_profile' is only for waiting Teacher profiles."}, status=status.HTTP_400_BAD_REQUEST)
@@ -640,6 +645,7 @@ class AdminRetrieveUpdateDestroyUserAPIView(generics.RetrieveUpdateDestroyAPIVie
         if user.role != "A" and user.status == "V":
             user.status = "D"
             user.save()
+            send_status_update_email(user.email, user.full_name or user.username, "disabled")
             
             response = {
                 "message": "User disabled successfully",
