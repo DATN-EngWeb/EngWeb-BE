@@ -617,3 +617,162 @@ def delete_user_storage_folder(user):
             default_storage.delete(str(user.cover))
         except Exception:
             pass
+
+
+def send_status_update_email(email, full_name, action):
+    logo_data = get_logo_bytes()
+    logo_cid = "nens-logo"
+    logo_html = (
+        f'<img src="cid:{logo_cid}" alt="NENS Logo" style="max-width: 120px; height: auto; margin-bottom: 20px;" />'
+        if logo_data
+        else ""
+    )
+
+    action_details = {
+        "enabled": {
+            "subject": "Your account has been enabled",
+            "title": "Account Enabled",
+            "message": "Your account has been enabled by the administrator. You can now log in and access all features.",
+            "color": "#4CAF50"
+        },
+        "disabled": {
+            "subject": "Your account has been disabled",
+            "title": "Account Disabled",
+            "message": "Your account has been disabled by the administrator. If you believe this is a mistake, please contact support.",
+            "color": "#F44336"
+        },
+        "approved": {
+            "subject": "Your teacher profile has been approved",
+            "title": "Profile Approved",
+            "message": "Congratulations! Your teacher profile has been approved by the administrator. You can now start teaching on NENS.",
+            "color": "#4CAF50"
+        },
+        "rejected": {
+            "subject": "Your teacher profile has been rejected",
+            "title": "Profile Rejected",
+            "message": "We regret to inform you that your teacher profile has been rejected by the administrator. As a result, your account has been removed. Please contact support for more details or submit a new application.",
+            "color": "#F44336"
+        }
+    }
+
+    details = action_details.get(action)
+    if not details:
+        return
+
+    subject = f"{details['subject']} - NENS"
+    html_body = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {{
+                font-family: 'Poppins', Arial, sans-serif;
+                background-color: #FFF4E9;
+                color: #383838;
+                padding: 0;
+                margin: 0;
+            }}
+            .email-wrapper {{
+                background-color: #FFF4E9;
+                padding: 40px 20px;
+            }}
+            .container {{
+                background-color: #FFFFFF;
+                padding: 40px 30px;
+                border-radius: 12px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                max-width: 600px;
+                margin: 0 auto;
+            }}
+            .logo-container {{
+                text-align: center;
+                margin-bottom: 30px;
+            }}
+            h1 {{
+                color: {details['color']};
+                font-size: 24px;
+                font-weight: bold;
+                margin: 0 0 20px 0;
+                text-align: center;
+            }}
+            p {{
+                font-size: 16px;
+                line-height: 1.6;
+                color: #383838;
+                margin: 15px 0;
+            }}
+            .info-box {{
+                background-color: #f8f9fa;
+                padding: 20px;
+                border-radius: 8px;
+                margin: 30px 0;
+                border-left: 4px solid {details['color']};
+                text-align: center;
+            }}
+            .info-box p {{
+                margin: 0;
+                font-size: 16px;
+                font-weight: 500;
+            }}
+            .footer {{
+                margin-top: 30px;
+                padding-top: 20px;
+                border-top: 1px solid #E0E0E0;
+                text-align: center;
+                font-size: 14px;
+                color: #666;
+            }}
+            .footer-brand {{
+                color: #532822;
+                font-weight: bold;
+                font-size: 16px;
+                margin-top: 10px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="email-wrapper">
+            <div class="container">
+                <div class="logo-container">
+                    {logo_html}
+                </div>
+                <h1>{details['title']}</h1>
+                <p>Hi {full_name},</p>
+                
+                <div class="info-box">
+                    <p>{details['message']}</p>
+                </div>
+                
+                <p>If you have any questions, feel free to contact our support team at <a href="mailto:nens.hcmus@gmail.com" style="color: #FF854B; text-decoration: none; font-weight: bold;">nens.hcmus@gmail.com</a>.</p>
+                
+                <div class="footer">
+                    <p>Thank you for choosing NENS.</p>
+                    <div class="footer-brand">NENS — No English No Success</div>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    from_email = settings.EMAIL_HOST_USER
+    email_message = EmailMessage(
+        subject=subject, body=html_body, from_email=from_email, to=[email]
+    )
+    email_message.content_subtype = "html"
+
+    if logo_data:
+        image = MIMEImage(logo_data)
+        image.add_header("Content-ID", f"<{logo_cid}>")
+        image.add_header("Content-Disposition", "inline", filename="logo.png")
+        email_message.attach(image)
+
+    try:
+        email_message.send(fail_silently=False)
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to send status update email: {e}")
+
