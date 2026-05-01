@@ -12,8 +12,8 @@ class AssistantConversationAdmin(admin.ModelAdmin):
 
 @admin.register(AssistantMessage)
 class AssistantMessageAdmin(admin.ModelAdmin):
-    list_display = ("id", "conversation", "role", "status", "created_at")
-    list_filter = ("role", "status")
+    list_display = ("id", "conversation", "role", "mode", "status", "created_at")
+    list_filter = ("role", "mode", "status")
     search_fields = ("conversation__title", "content")
 
 

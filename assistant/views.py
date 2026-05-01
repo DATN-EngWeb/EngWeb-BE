@@ -544,6 +544,7 @@ class AssistantConversationMessageAPIView(APIView):
             user_message = AssistantMessage.objects.create(
                 conversation=conversation,
                 role=AssistantMessage.ROLE_USER,
+                mode=mode,
                 content=message_text,
                 status=AssistantMessage.STATUS_COMPLETED,
             )
@@ -572,6 +573,7 @@ class AssistantConversationMessageAPIView(APIView):
                 AssistantMessage.objects.create(
                     conversation=conversation,
                     role=AssistantMessage.ROLE_ASSISTANT,
+                    mode=mode,
                     content="",
                     status=AssistantMessage.STATUS_FAILED,
                     error_message=f"{type(exc).__name__}: {exc}",
@@ -589,6 +591,7 @@ class AssistantConversationMessageAPIView(APIView):
             assistant_message = AssistantMessage.objects.create(
                 conversation=conversation,
                 role=AssistantMessage.ROLE_ASSISTANT,
+                mode=mode,
                 content=assistant_content,
                 token_usage_prompt=usage.get("prompt_token_count"),
                 token_usage_completion=usage.get("completion_token_count"),

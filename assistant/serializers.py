@@ -6,12 +6,14 @@ from .utils import normalize_mode
 
 class AssistantMessageSerializer(serializers.ModelSerializer):
     content = serializers.SerializerMethodField()
+    mode = serializers.SerializerMethodField()
 
     class Meta:
         model = AssistantMessage
         fields = [
             "id",
             "role",
+            "mode",
             "content",
             "token_usage_prompt",
             "token_usage_completion",
@@ -43,6 +45,10 @@ class AssistantMessageSerializer(serializers.ModelSerializer):
                 return raw
         except Exception:
             return None
+
+    def get_mode(self, obj):
+        mode = getattr(obj, "mode", None) or getattr(getattr(obj, "conversation", None), "mode", None)
+        return normalize_mode(mode)
 
 
 class AssistantConversationMessagesMetaSerializer(serializers.Serializer):
@@ -84,6 +90,7 @@ class AssistantConversationDetailSerializer(AssistantConversationSerializer):
         if messages is None:
             messages = obj.messages.all()
         return AssistantMessageSerializer(messages, many=True, context=self.context).data
+
     def get_messages_meta(self, obj):
         return self.context.get("messages_meta", {})
 

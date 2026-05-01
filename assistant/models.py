@@ -71,6 +71,7 @@ class AssistantMessage(models.Model):
         related_name="messages",
     )
     role = models.CharField(max_length=12, choices=ROLE_CHOICES)
+    mode = models.CharField(max_length=20, choices=AssistantConversation.MODE_CHOICES, null=True, blank=True)
     content = models.TextField()
     token_usage_prompt = models.PositiveIntegerField(null=True, blank=True)
     token_usage_completion = models.PositiveIntegerField(null=True, blank=True)
