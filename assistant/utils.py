@@ -46,6 +46,12 @@ def _quota_defaults_for_user(user):
     return max(int(default_limit), 1), max(int(default_period), 60)
 
 
+def _localize_reset_at(reset_at):
+    if reset_at is None:
+        return None
+    return timezone.localtime(reset_at)
+
+
 @transaction.atomic
 def get_or_create_quota(user):
     quota = AssistantQuota.objects.select_for_update().filter(user=user).first()
@@ -79,7 +85,7 @@ def check_and_consume_quota(user, amount=1, reserve=True):
         return False, {
             "remaining": 0,
             "limit": quota.limit,
-            "reset_at": reset_at,
+            "reset_at": _localize_reset_at(reset_at),
         }
 
     if reserve:
@@ -90,7 +96,7 @@ def check_and_consume_quota(user, amount=1, reserve=True):
     return True, {
         "remaining": remaining,
         "limit": quota.limit,
-        "reset_at": reset_at,
+        "reset_at": _localize_reset_at(reset_at),
     }
 
 
@@ -117,7 +123,7 @@ def get_quota_status(user):
     return {
         "remaining": max(quota.limit - quota.used, 0),
         "limit": quota.limit,
-        "reset_at": reset_at,
+        "reset_at": _localize_reset_at(reset_at),
     }
 
 
