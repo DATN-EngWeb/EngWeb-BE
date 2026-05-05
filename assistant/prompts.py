@@ -45,7 +45,7 @@ USER_PROMPTS = {
         "Mode: translation\n"
         "User request: {message}\n\n"
         "Requirements:\n"
-        "1. Translate naturally into the target language.\n"
+        "1. Translate naturally into the target language (the same language as the user's message).\n"
         "2. If the sentence is complex, provide a literal translation too.\n"
         "3. Highlight difficult words, idioms, and subtle meaning differences.\n"
         "4. Return JSON with EXACTLY these keys - no more, no less:\n"
