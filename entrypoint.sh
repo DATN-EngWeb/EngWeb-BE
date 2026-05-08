@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # wait for Postgres to be ready (host: db, port: 5432)
-echo "Waiting for Postgres (db:5432)..."
-until nc -z db 5432; do
+echo "Waiting for Postgres (${DB_HOST}:${DB_PORT})..."
+until nc -z ${DB_HOST} ${DB_PORT}; do
   sleep 1
 done
 echo "✓ Postgres is up."
@@ -54,8 +54,8 @@ else:
 PY
 
 # Seed data from SQL files in init folder
-echo "Seeding data from init/*.sql files..."
-for sql_file in /app/init/*.sql; do
+echo "Seeding basic setup data from init/seed_00_*.sql files..."
+for sql_file in /app/init/seed_00_*.sql; do
   if [ -f "$sql_file" ]; then
     echo "  Running $sql_file..."
     PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U "${DB_USER}" -d "${DB_NAME}" -f "$sql_file"
