@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "statistic",
     "user_progress",
     "notifications",
+    "assistant",
 ]
 
 MIDDLEWARE = [
@@ -195,6 +196,11 @@ VERTEX_AI_PROJECT_ID = env("VERTEX_AI_PROJECT_ID")
 VERTEX_AI_LOCATION = env("VERTEX_AI_LOCATION")
 VERTEX_AI_MODEL = env("VERTEX_AI_MODEL")
 VERTEX_AI_TEMPERATURE = env.float("VERTEX_AI_TEMPERATURE")
+
+# assistant quota defaults
+ASSISTANT_QUOTA_DEFAULT_LIMIT = 50
+ASSISTANT_QUOTA_DEFAULT_PERIOD_SECONDS = 12 * 60 * 60
+ASSISTANT_SHORT_MEMORY_MESSAGES = 6
 
 # dev vs prod
 if DEBUG:

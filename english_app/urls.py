@@ -36,4 +36,6 @@ urlpatterns = [
     path("api/user-progress/", include("user_progress.urls")),
     # Notifications API
     path("api/notifications/", include("notifications.urls")),
+    # Assistant API
+    path("api/assistant/", include("assistant.urls")),
 ]
