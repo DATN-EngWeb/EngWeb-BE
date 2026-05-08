@@ -1,21 +1,5 @@
-"""
-URL configuration for english_app project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularSwaggerView,
@@ -23,25 +7,35 @@ from drf_spectacular.views import (
 )
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path("admin/", admin.site.urls),
+    # accounts API
+    path("api/accounts/", include("accounts.urls")),
     # OpenAPI schema
-    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     # Swagger UI
-    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path(
+        "api/docs/",
+        SpectacularSwaggerView.as_view(url_name="schema"),
+        name="swagger-ui",
+    ),
     # ReDoc
-    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
-]
-
-# For testing Swagger UI. This will be removed in the future.
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def health(request):
-    return Response({"status": "ok"})
-
-
-urlpatterns += [
-    path('api/health/', health, name='health'),
+    path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    # Tests API
+    path("api/tests/", include("tests.urls")),
+    # Storage API
+    path("api/storage/", include("storage.urls")),
+    # Test Histories API
+    path("api/test-histories/", include("test_histories.urls")),
+    # Forums API
+    path("api/forums/", include("forum.urls")),
+    # Feedback API
+    path("api/feedback/", include("feedback.urls")),
+    # Statistic API
+    path("api/statistic/", include("statistic.urls")),
+    # User Progress API
+    path("api/user-progress/", include("user_progress.urls")),
+    # Notifications API
+    path("api/notifications/", include("notifications.urls")),
+    # Assistant API
+    path("api/assistant/", include("assistant.urls")),
 ]

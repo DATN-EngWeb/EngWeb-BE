@@ -1,17 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Wait for Postgres to be ready (host: db, port: 5432)
-echo "Waiting for Postgres (db:5432)..."
-until nc -z db 5432; do
+# wait for Postgres to be ready (host: db, port: 5432)
+echo "Waiting for Postgres (${DB_HOST}:${DB_PORT})..."
+until nc -z ${DB_HOST} ${DB_PORT}; do
   sleep 1
 done
-echo "Postgres is up."
+echo "✓ Postgres is up."
 
-# Apply migrations
+# wait for Redis to be ready
+echo "Waiting for Redis (redis:6379)..."
+until nc -z redis 6379; do
+  sleep 1
+done
+echo "✓ Redis is up."
+
+# create migrations for all apps (development only)
+echo "Creating migrations..."
+python manage.py makemigrations --noinput
+
+# apply migrations
+echo "Applying migrations..."
 python manage.py migrate --noinput
 
-# Create superuser using mandatory env vars (no defaults)
+# create superuser using mandatory env vars (no defaults)
 python - <<'PY'
 import os
 import django
@@ -25,10 +37,30 @@ password = os.environ['DJANGO_SUPERUSER_PASSWORD']
 
 User = get_user_model()
 if not User.objects.filter(username=username).exists():
-    User.objects.create_superuser(username=username, email=email, password=password)
+    user = User.objects.create_superuser(username=username, email=email, password=password)
+    # Set status to 'V' (Verified) for admin
+    user.status = 'V'
+    user.save()
     print(f"Created superuser: {username} / {email}")
 else:
-    print(f"Superuser '{username}' already exists. Skipping creation.")
+    # Update existing superuser to ensure status is 'V'
+    user = User.objects.get(username=username)
+    if user.status != 'V':
+        user.status = 'V'
+        user.save()
+        print(f"Updated superuser '{username}' status to V")
+    else:
+        print(f"Superuser '{username}' already exists with status=V. Skipping creation.")
 PY
+
+# Seed data from SQL files in init folder
+echo "Seeding basic setup data from init/seed_00_*.sql files..."
+for sql_file in /app/init/seed_00_*.sql; do
+  if [ -f "$sql_file" ]; then
+    echo "  Running $sql_file..."
+    PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U "${DB_USER}" -d "${DB_NAME}" -f "$sql_file"
+  fi
+done
+echo "✓ SQL seed files executed."
 
 exec python manage.py runserver 0.0.0.0:8000

@@ -1,5 +1,7 @@
 __pycache__/
 db.sqlite3
-static/
-media/
 .env
+media/
+static/
+.cursor/
+test-nens-english-app-sa-key.json

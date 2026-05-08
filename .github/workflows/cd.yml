@@ -1,0 +1,61 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-to-vm:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Deploy via SSH to VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            set -e  # Exit on error
+            cd ~/EngWeb-BE
+            
+            # Stop containers before git pull to avoid permission issues
+            echo "Stopping containers before git pull..."
+            docker compose down || true
+
+            # Sleep for 10 seconds to avoid permission issues
+            echo "Sleeping for 10 seconds..."
+            sleep 10
+            
+            # Pull latest code
+            echo "Pulling latest code..."
+            git pull origin main
+            
+            # Start containers
+            echo "Starting containers..."
+            docker compose up -d
+            
+            # Wait for services to be healthy with retry logic
+            echo "Waiting for Django backend to be ready..."
+            MAX_RETRIES=30
+            RETRY_INTERVAL=10
+            RETRY_COUNT=0
+            
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+              if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+                echo "Health check passed!"
+                echo "Deployment successful!"
+                exit 0
+              fi
+              
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              echo "Health check attempt $RETRY_COUNT/$MAX_RETRIES failed, retrying in ${RETRY_INTERVAL}s..."
+              sleep $RETRY_INTERVAL
+            done
+            
+            # If we reach here, health check failed after all retries
+            echo "Health check failed after $MAX_RETRIES attempts!"
+            echo "Checking container status..."
+            docker compose ps
+            exit 1

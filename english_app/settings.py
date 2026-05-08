@@ -1,182 +1,279 @@
 from pathlib import Path
+from datetime import timedelta
+
 import os
 import environ
-from datetime import timedelta
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load environment variables from .env
+# ====================
+# Enviroment Variables
+# ====================
 env = environ.Env()
 environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
-# Secret key
+# general
 SECRET_KEY = env("SECRET_KEY")
-
-# Debug mode
 DEBUG = env.bool("DEBUG", default=True)
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
-# Allowed hosts
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])  # comma-separated in .env
-
-
-# Application definition
+# ====================
+# Basic Configurations
+# ====================
 INSTALLED_APPS = [
     # default django apps
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
     # third-party apps
-    'corsheaders',
-    'rest_framework',
-    'django_filters',
-    'drf_spectacular',
-    'drf_spectacular_sidecar',
-
-    # authentication apps
-    'rest_framework_simplejwt',
-    'rest_framework_simplejwt.token_blacklist',
+    "corsheaders",
+    "rest_framework",
+    "django_filters",
+    "drf_spectacular",
+    "drf_spectacular_sidecar",
+    "storages",
+    "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
+    "django_ratelimit",
+    # custom apps
+    "accounts",
+    "tests",
+    "storage",
+    "feedback",
+    "test_histories",
+    "forum",
+    "statistic",
+    "user_progress",
+    "notifications",
+    "assistant",
 ]
 
-# Middleware
 MIDDLEWARE = [
     # default django middleware
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # third-party middleware
-    'corsheaders.middleware.CorsMiddleware',
+    "corsheaders.middleware.CorsMiddleware",
 ]
 
-# Root URL conf
-ROOT_URLCONF = 'english_app.urls'
+ROOT_URLCONF = "english_app.urls"
 
-# Templates
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'english_app.wsgi.application'
+WSGI_APPLICATION = "english_app.wsgi.application"
 
-# Database settings
-DATABASES = {
-    'default': {
-        'ENGINE': env('DB_ENGINE'),
-        'NAME': env('DB_NAME'),
-        'USER': env('DB_USER'),
-        'PASSWORD': env('DB_PASSWORD'),
-        'HOST': env('DB_HOST'),
-        'PORT': env('DB_PORT'),
-    }
-}
-
-# Cache settings
-CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': f"redis://{env('REDIS_HOST')}:{env('REDIS_PORT')}/{env('REDIS_DB')}",
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        }
-    }
-}
-
-
-# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
+LANGUAGE_CODE = "en-us"
 
-# Internationalization
-LANGUAGE_CODE = 'en-us'
-
-TIME_ZONE = 'UTC'
+TIME_ZONE = "Asia/Ho_Chi_Minh"
 
 USE_I18N = True
 
 USE_TZ = True
 
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "static"
 
-# Static files (CSS, JavaScript, Images)
-STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'static'
+if DEBUG:
+    DEFAULT_AUTH = [
+        "accounts.authentication.CustomTokenAuthentication",
+        "accounts.authentication.CustomBasicAuthentication",
+    ]
+else:
+    DEFAULT_AUTH = [
+        "accounts.authentication.CustomTokenAuthentication",
+    ]
 
-# Media files (Images, Videos, etc.)
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
-
-# CORS
-CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=True)
-CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
-
-# REST framework settings
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
-    ),
-    'DEFAULT_FILTER_BACKENDS': (
-        'django_filters.rest_framework.DjangoFilterBackend',
-    ),
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    "DEFAULT_AUTHENTICATION_CLASSES": DEFAULT_AUTH,
+    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
+    "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
-# Simple jwt settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),  
-    'ROTATE_REFRESH_TOKENS': True,  
-    'BLACKLIST_AFTER_ROTATION': True,
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=3000),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
 }
 
-# OpenAPI/Swagger (drf-spectacular)
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'English App API',
-    'DESCRIPTION': 'API documentation',
-    'VERSION': '1.0.0',
-    'SERVE_INCLUDE_SCHEMA': False,
-    'COMPONENT_SPLIT_REQUEST': True,
-    'SECURITY_SCHEMES': {
-        'BearerAuth': {
-            'type': 'http',
-            'scheme': 'bearer',
-            'bearerFormat': 'JWT',
-        }
-    },
-    'SECURITY': [{'BearerAuth': []}],
+    "TITLE": "English App API",
+    "DESCRIPTION": "API documentation",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SECURITY": [{"CustomBearerAuth": []}, {"CustomBasicAuth": []}],
 }
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+AUTH_USER_MODEL = "accounts.User"
+
+# database
+DATABASES = {
+    "default": {
+        "ENGINE": env("DB_ENGINE"),
+        "NAME": env("DB_NAME"),
+        "USER": env("DB_USER"),
+        "PASSWORD": env("DB_PASSWORD"),
+        "HOST": env("DB_HOST"),
+        "PORT": env("DB_PORT"),
+    }
+}
+
+# cache
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": f"redis://{env('REDIS_HOST')}:{env('REDIS_PORT')}/{env('REDIS_DB')}",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+    }
+}
+
+# email
+EMAIL_HOST = env("EMAIL_HOST")
+EMAIL_HOST_USER = env("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
+EMAIL_PORT = env.int("EMAIL_PORT")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS")
+EMAIL_BACKEND = env("EMAIL_BACKEND")
+
+# oauth2
+OAUTH2_GOOGLE_KEY = env("OAUTH2_GOOGLE_KEY")
+OAUTH2_GOOGLE_SECRET = env("OAUTH2_GOOGLE_SECRET")
+OAUTH2_GOOGLE_SCOPE = env("OAUTH2_GOOGLE_SCOPE")
+
+OAUTH2_FACEBOOK_KEY = env("OAUTH2_FACEBOOK_KEY")
+OAUTH2_FACEBOOK_SECRET = env("OAUTH2_FACEBOOK_SECRET")
+OAUTH2_FACEBOOK_SCOPE = env("OAUTH2_FACEBOOK_SCOPE")
+
+# gcs
+GCS_PUBLIC_BASE_URL = env("GCS_PUBLIC_BASE_URL")
+GCS_PROJECT_ID = env("GCS_PROJECT_ID")
+
+# vertex ai
+VERTEX_AI_PROJECT_ID = env("VERTEX_AI_PROJECT_ID")
+VERTEX_AI_LOCATION = env("VERTEX_AI_LOCATION")
+VERTEX_AI_MODEL = env("VERTEX_AI_MODEL")
+VERTEX_AI_TEMPERATURE = env.float("VERTEX_AI_TEMPERATURE")
+
+# assistant quota defaults
+ASSISTANT_QUOTA_DEFAULT_LIMIT = 50
+ASSISTANT_QUOTA_DEFAULT_PERIOD_SECONDS = 12 * 60 * 60
+ASSISTANT_SHORT_MEMORY_MESSAGES = 6
+
+# dev vs prod
+if DEBUG:
+    OAUTH2_GOOGLE_REDIRECT_URI = env("OAUTH2_GOOGLE_DEV_REDIRECT_URI")
+    OAUTH2_FACEBOOK_REDIRECT_URI = env("OAUTH2_FACEBOOK_DEV_REDIRECT_URI")
+    GCS_BUCKET_NAME = env("GCS_DEV_BUCKET")
+    CORS_ALLOW_ALL_ORIGINS = env.bool("DEV_CORS_ALLOW_ALL_ORIGINS")
+    CORS_ALLOWED_ORIGINS = []
+else:
+    OAUTH2_GOOGLE_REDIRECT_URI = env("OAUTH2_GOOGLE_PRODUCTION_REDIRECT_URI")
+    OAUTH2_FACEBOOK_REDIRECT_URI = env("OAUTH2_FACEBOOK_PRODUCTION_REDIRECT_URI")
+    GCS_BUCKET_NAME = env("GCS_PRODUCTION_BUCKET")
+    CORS_ALLOW_ALL_ORIGINS = env.bool("PRODUCTION_CORS_ALLOW_ALL_ORIGINS")
+    CORS_ALLOWED_ORIGINS = env.list("PRODUCTION_CORS_ALLOWED_ORIGINS")
+
+# storages
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.gcloud.GoogleCloudStorage",
+        "OPTIONS": {
+            "bucket_name": GCS_BUCKET_NAME,
+            "project_id": GCS_PROJECT_ID,
+        },
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
+MEDIA_URL = f"{GCS_PUBLIC_BASE_URL}/{GCS_BUCKET_NAME}/"
+
+# ====================
+# Logging Configuration
+# ====================
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{levelname}] {asctime} {name} - {message}",
+            "style": "{",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+        "simple": {
+            "format": "[{levelname}] {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "storage": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "tests": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
