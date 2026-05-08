@@ -5,7 +5,13 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema, inline_serializer
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    inline_serializer,
+)
 from rest_framework import generics, serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -118,7 +124,9 @@ class AssistantConversationListCreateAPIView(generics.ListCreateAPIView):
 
         # Return the full conversation representation (including id)
         return Response(
-            AssistantConversationSerializer(instance, context={"request": request}).data,
+            AssistantConversationSerializer(
+                instance, context={"request": request}
+            ).data,
             status=status.HTTP_201_CREATED,
         )
 
@@ -151,8 +159,18 @@ class AssistantConversationRetrieveAPIView(generics.RetrieveAPIView):
         ),
         tags=["assistant"],
         parameters=[
-            OpenApiParameter(name="limit", required=False, type=OpenApiTypes.INT, location=OpenApiParameter.QUERY),
-            OpenApiParameter(name="before_id", required=False, type=OpenApiTypes.INT, location=OpenApiParameter.QUERY),
+            OpenApiParameter(
+                name="limit",
+                required=False,
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+            ),
+            OpenApiParameter(
+                name="before_id",
+                required=False,
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+            ),
         ],
         responses={200: AssistantConversationDetailSerializer},
     )
@@ -168,11 +186,17 @@ class AssistantConversationRetrieveAPIView(generics.RetrieveAPIView):
             try:
                 before_id = int(before_id)
             except (TypeError, ValueError):
-                return Response({"detail": "before_id must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": "before_id must be an integer."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             cursor_message = messages_qs.filter(id=before_id).first()
             if cursor_message is None:
-                return Response({"detail": "Cursor message not found."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": "Cursor message not found."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             messages_qs = messages_qs.filter(
                 Q(created_at__lt=cursor_message.created_at)
@@ -182,7 +206,9 @@ class AssistantConversationRetrieveAPIView(generics.RetrieveAPIView):
         selected_messages = list(messages_qs[:limit])
         selected_messages.reverse()
 
-        messages_meta = self._build_messages_meta(conversation, selected_messages, limit, cursor_message)
+        messages_meta = self._build_messages_meta(
+            conversation, selected_messages, limit, cursor_message
+        )
         serializer = self.get_serializer(
             conversation,
             context={
@@ -194,13 +220,10 @@ class AssistantConversationRetrieveAPIView(generics.RetrieveAPIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def get_queryset(self):
-        return (
-            AssistantConversation.objects.filter(
-                user=self.request.user,
-                is_archived=False,
-            )
-            .order_by("-last_message_at")
-        )
+        return AssistantConversation.objects.filter(
+            user=self.request.user,
+            is_archived=False,
+        ).order_by("-last_message_at")
 
     def _get_limit(self, request):
         raw_limit = request.query_params.get("limit")
@@ -217,7 +240,9 @@ class AssistantConversationRetrieveAPIView(generics.RetrieveAPIView):
 
         return max(1, min(value, max_limit))
 
-    def _build_messages_meta(self, conversation, selected_messages, limit, cursor_message=None):
+    def _build_messages_meta(
+        self, conversation, selected_messages, limit, cursor_message=None
+    ):
         total_count = conversation.messages.count()
         if not selected_messages:
             return {
@@ -274,7 +299,9 @@ class AssistantConversationArchiveAPIView(APIView):
         ).first()
 
         if not conversation:
-            return Response({"detail": "Conversation not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "Conversation not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         conversation.is_archived = True
         conversation.save(update_fields=["is_archived", "updated_at"])
@@ -320,13 +347,18 @@ class AssistantConversationRenameAPIView(APIView):
         ).first()
 
         if not conversation:
-            return Response({"detail": "Conversation not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "Conversation not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         conversation.title = serializer.validated_data["title"].strip()
         conversation.is_title_auto = False
         conversation.save(update_fields=["title", "is_title_auto", "updated_at"])
 
-        return Response(AssistantConversationSerializer(conversation).data, status=status.HTTP_200_OK)
+        return Response(
+            AssistantConversationSerializer(conversation).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 class AssistantQuotaAPIView(APIView):
@@ -376,7 +408,7 @@ class AssistantQuotaAPIView(APIView):
         "  - `level` (string): trình độ học viên (ví dụ: 'A2', 'B1').\n"
         "  - `source_text` (string): đoạn văn hoặc câu nguồn liên quan đến yêu cầu.\n"
         "\n"
-        "Ví dụ ngắn về `context`: {\"target_language\": \"Vietnamese\", \"level\": \"B1\", \"source_text\": \"I had already finished my homework before dinner.\" }\n"
+        'Ví dụ ngắn về `context`: {"target_language": "Vietnamese", "level": "B1", "source_text": "I had already finished my homework before dinner." }\n'
     ),
     tags=["assistant"],
     request=AssistantSendMessageSerializer,
@@ -392,7 +424,9 @@ class AssistantQuotaAPIView(APIView):
                     name="AssistantUsageResponse",
                     fields={
                         "prompt_token_count": serializers.IntegerField(allow_null=True),
-                        "completion_token_count": serializers.IntegerField(allow_null=True),
+                        "completion_token_count": serializers.IntegerField(
+                            allow_null=True
+                        ),
                         "total_token_count": serializers.IntegerField(allow_null=True),
                     },
                 ),
@@ -484,7 +518,9 @@ class AssistantConversationMessageAPIView(APIView):
         ).first()
 
         if not conversation:
-            return Response({"detail": "Conversation not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "Conversation not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         message_text = serializer.validated_data["message"]
         request_mode = serializer.validated_data.get("mode")
@@ -492,16 +528,15 @@ class AssistantConversationMessageAPIView(APIView):
 
         mode = normalize_mode(request_mode or conversation.mode)
 
-        memory_limit = max(int(getattr(settings, "ASSISTANT_SHORT_MEMORY_MESSAGES", 6)), 0)
+        memory_limit = max(
+            int(getattr(settings, "ASSISTANT_SHORT_MEMORY_MESSAGES", 6)), 0
+        )
         recent_history = []
         if memory_limit > 0:
-            history_qs = (
-                conversation.messages.filter(
-                    role__in=[AssistantMessage.ROLE_USER, AssistantMessage.ROLE_ASSISTANT],
-                    status=AssistantMessage.STATUS_COMPLETED,
-                )
-                .order_by("-created_at")[:memory_limit]
-            )
+            history_qs = conversation.messages.filter(
+                role__in=[AssistantMessage.ROLE_USER, AssistantMessage.ROLE_ASSISTANT],
+                status=AssistantMessage.STATUS_COMPLETED,
+            ).order_by("-created_at")[:memory_limit]
             import json as _json
 
             recent_history = []
@@ -526,7 +561,9 @@ class AssistantConversationMessageAPIView(APIView):
 
                 recent_history.append({"role": item.role, "content": text_for_history})
 
-        allowed, quota_info = check_and_consume_quota(request.user, amount=1, reserve=True)
+        allowed, quota_info = check_and_consume_quota(
+            request.user, amount=1, reserve=True
+        )
         if not allowed:
             return Response(
                 {
@@ -553,14 +590,26 @@ class AssistantConversationMessageAPIView(APIView):
                 generated_title, is_auto = generate_conversation_title(
                     mode=mode,
                     first_message=message_text,
-                    source_text=context.get("source_text") if isinstance(context, dict) else None,
+                    source_text=(
+                        context.get("source_text")
+                        if isinstance(context, dict)
+                        else None
+                    ),
                 )
                 conversation.title = generated_title
                 conversation.is_title_auto = is_auto
 
             conversation.mode = mode
             conversation.last_message_at = timezone.now()
-            conversation.save(update_fields=["title", "is_title_auto", "mode", "last_message_at", "updated_at"])
+            conversation.save(
+                update_fields=[
+                    "title",
+                    "is_title_auto",
+                    "mode",
+                    "last_message_at",
+                    "updated_at",
+                ]
+            )
 
             try:
                 answer_text, parsed_json, usage = call_assistant_model(
@@ -587,12 +636,21 @@ class AssistantConversationMessageAPIView(APIView):
                     status=status.HTTP_502_BAD_GATEWAY,
                 )
 
-            assistant_content = json.dumps(parsed_json, ensure_ascii=False) if parsed_json is not None else json.dumps({"text": answer_text}, ensure_ascii=False)
+            if parsed_json is None:
+                reply_content = {
+                    "is_valid": False,
+                    "message": "There was an error when processing the question. Please try again.",
+                }
+
+                release_quota(request.user, amount=1)
+            else:
+                reply_content = parsed_json
+
             assistant_message = AssistantMessage.objects.create(
                 conversation=conversation,
                 role=AssistantMessage.ROLE_ASSISTANT,
                 mode=mode,
-                content=assistant_content,
+                content=json.dumps(reply_content, ensure_ascii=False),
                 token_usage_prompt=usage.get("prompt_token_count"),
                 token_usage_completion=usage.get("completion_token_count"),
                 token_usage_total=usage.get("total_token_count"),
@@ -605,7 +663,7 @@ class AssistantConversationMessageAPIView(APIView):
             {
                 "message_id": user_message.id,
                 "assistant_message_id": assistant_message.id,
-                "answer": parsed_json if parsed_json is not None else answer_text,
+                "answer": reply_content,
                 "mode": mode,
                 "usage": usage,
                 "quota": latest_quota,
