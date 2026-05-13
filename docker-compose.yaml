@@ -2,8 +2,6 @@ services:
   backend:
     build: .
     container_name: english_app_api
-    env_file:
-      - .env
     ports:
       - "8000:8000"
     volumes:
