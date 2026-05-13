@@ -40,10 +40,10 @@ class TestFilter(django_filters.FilterSet):
         help_text="Filter by type (R: Receptive, P: Productive)",
     )
 
-    level = django_filters.ChoiceFilter(
+    level = django_filters.MultipleChoiceFilter(
         field_name="level",
         choices=LEVEL_CHOICES,
-        help_text="Filter by level (A1, A2, B1, B2)",
+        help_text="Filter by multiple levels (A1, A2, B1, B2). Use ?level=A1&level=A2 or ?level=A1,A2",
     )
 
     skill = django_filters.ChoiceFilter(
@@ -69,9 +69,15 @@ class TestFilter(django_filters.FilterSet):
         help_text="Filter by teacher's full name (case-insensitive partial match)",
     )
 
+    title = django_filters.CharFilter(
+        field_name="title",
+        lookup_expr="icontains",
+        help_text="Filter by test name (case-insensitive partial match)",
+    )
+
     class Meta:
         model = Test
-        fields = ["type", "level", "skill", "status", "year", "teacher_name"]
+        fields = ["type", "level", "skill", "status", "year", "teacher_name", "title"]
 
 
 class WritingCriteriaTemplateFilter(django_filters.FilterSet):
