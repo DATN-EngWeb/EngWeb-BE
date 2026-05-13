@@ -37,8 +37,3 @@ RUN pipenv install --deploy --system
 COPY . .
 
 EXPOSE 8000
-
-RUN dos2unix /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
-
-CMD ["/app/entrypoint.sh"]

@@ -130,19 +130,19 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
 
                     # RECEPTIVE TESTS: Tests with submission but NO draft (fully completed)
                     receptive_submission_exists = ReceptiveTestHistory.objects.filter(
-                        student=student,
-                        receptive_test__test=OuterRef('pk'),
-                        type='S'
+                        student=student, receptive_test__test=OuterRef("pk"), type="S"
                     )
                     receptive_draft_exists = ReceptiveTestHistory.objects.filter(
-                        student=student,
-                        receptive_test__test=OuterRef('pk'),
-                        type='D'
+                        student=student, receptive_test__test=OuterRef("pk"), type="D"
                     )
-                    receptive_completed = Q(Exists(receptive_submission_exists)) & ~Q(Exists(receptive_draft_exists))
+                    receptive_completed = Q(Exists(receptive_submission_exists)) & ~Q(
+                        Exists(receptive_draft_exists)
+                    )
 
                     # Combine filters - returns both Productive and Receptive tests that match
-                    queryset = queryset.filter(productive_completed | receptive_completed)
+                    queryset = queryset.filter(
+                        productive_completed | receptive_completed
+                    )
 
                 elif my_progress == "draft":
                     # PRODUCTIVE TESTS: Tests with draft (regardless of submission status)
@@ -154,9 +154,7 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
 
                     # RECEPTIVE TESTS: Tests with draft (regardless of submission status)
                     receptive_draft_exists = ReceptiveTestHistory.objects.filter(
-                        student=student,
-                        receptive_test__test=OuterRef('pk'),
-                        type='D'
+                        student=student, receptive_test__test=OuterRef("pk"), type="D"
                     )
                     receptive_draft = Q(Exists(receptive_draft_exists))
 
@@ -172,13 +170,14 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
 
                     # RECEPTIVE TESTS: Tests with no history at all
                     receptive_history_exists = ReceptiveTestHistory.objects.filter(
-                        student=student,
-                        receptive_test__test=OuterRef('pk')
+                        student=student, receptive_test__test=OuterRef("pk")
                     )
                     receptive_no_history = ~Q(Exists(receptive_history_exists))
 
                     # Combine filters - returns both Productive and Receptive tests that match
-                    queryset = queryset.filter(productive_no_history | receptive_no_history)
+                    queryset = queryset.filter(
+                        productive_no_history | receptive_no_history
+                    )
 
             except Student.DoesNotExist:
                 raise PermissionDenied(
@@ -227,16 +226,8 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
 
             queryset = queryset.filter(
                 Q(created_by=teacher, status__in=["P", "D", "I"])
-                |
-                (
-                    ~Q(created_by=teacher)
-                    & Q(status__in=["P", "I"])
-                )
-                |
-                (
-                    Q(created_by__isnull=True)
-                    & Q(status__in=["P", "I"])
-                )
+                | (~Q(created_by=teacher) & Q(status__in=["P", "I"]))
+                | (Q(created_by__isnull=True) & Q(status__in=["P", "I"]))
             )
         elif not self.request.user.is_staff:
             raise PermissionDenied(
@@ -249,7 +240,6 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
         # 2. ordering parameter contains 'submitted' (to enable ordering)
         submitted_param = self.request.query_params.get("submitted", "").lower()
         ordering_param = self.request.query_params.get("ordering", "")
-        
         if submitted_param == "true" or "submitted" in ordering_param:
             queryset = queryset.annotate(
                 submitted=Case(
@@ -337,11 +327,12 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "- Admin: Thấy tất cả bài kiểm tra, bao gồm 'R'. Được phép filter theo status='R'.\n\n"
             "**Tham số lọc (Query Parameters):**\n"
             "- `type`: Loại bài kiểm tra - R (Receptive: Reading/Listening), P (Productive: Speaking/Writing)\n"
-            "- `level`: Cấp độ (A1, A2, B1, B2)\n"
+            "- `level`: Cấp độ (A1, A2, B1, B2) - **Hỗ trợ lọc theo nhiều cấp độ**, VD: ?level=A1&level=A2\n"
             "- `skill`: Kỹ năng - R (Reading), L (Listening), S (Speaking), W (Writing)\n"
             "- `status`: Trạng thái - D (Draft), I (In Review), P (Published), R (Removed)\n"
             "- `year`: Lọc theo năm tạo (VD: 2024, 2025, 2026)\n"
             "- `teacher_name`: Lọc theo tên giáo viên (tìm kiếm không phân biệt hoa thường)\n"
+            "- `title`: Lọc theo tên bài kiểm tra (tìm kiếm không phân biệt hoa thường)\n"
             "- `mine`: Lọc bài kiểm tra theo giáo viên hiện tại - **Yêu cầu đăng nhập và là giáo viên**\n"
             "  - `true`: Lấy các bài test của chính mình\n"
             "  - `false`: Lấy các bài test không phải của mình\n"
@@ -428,7 +419,7 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             ),
             OpenApiParameter(
                 name="level",
-                description="Cấp độ (A1, A2, B1, B2)",
+                description="Cấp độ (A1, A2, B1, B2) - Hỗ trợ lọc theo nhiều cấp độ, VD: ?level=A1&level=A2",
                 required=False,
                 type=str,
             ),
@@ -453,6 +444,12 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             OpenApiParameter(
                 name="teacher_name",
                 description="Lọc theo tên giáo viên (tìm kiếm không phân biệt hoa thường, có thể tìm một phần tên)",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="title",
+                description="Lọc theo tên bài kiểm tra (tìm kiếm không phân biệt hoa thường)",
                 required=False,
                 type=str,
             ),
