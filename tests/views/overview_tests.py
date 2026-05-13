@@ -240,7 +240,6 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
         # 2. ordering parameter contains 'submitted' (to enable ordering)
         submitted_param = self.request.query_params.get("submitted", "").lower()
         ordering_param = self.request.query_params.get("ordering", "")
-
         if submitted_param == "true" or "submitted" in ordering_param:
             queryset = queryset.annotate(
                 submitted=Case(
