@@ -1,8 +1,15 @@
 from django.db.models import Count
-from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    inline_serializer,
+)
+from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from tests.permissions import IsTeacher
 from test_histories.models import (
     ProductiveTestHistory,
     ReceptiveAnswerHistory,
@@ -10,6 +17,7 @@ from test_histories.models import (
 )
 from test_histories.permissions import IsStudent
 from tests.models import ReceptiveQuestion
+from tests.models import Test
 
 
 class StatisticSummaryView(APIView):
@@ -250,5 +258,46 @@ class StatisticSummaryView(APIView):
                 "skill": normalized_skill,
                 "level": normalized_level,
                 **summary,
+            }
+        )
+
+
+class TeacherStatisticSummaryView(APIView):
+    permission_classes = [IsTeacher]
+
+    @extend_schema(
+        summary="Thống kê tổng quan cho giáo viên",
+        description=(
+            "Trả về thống kê các bài test do giáo viên đang đăng nhập tạo ra. "
+            "Các trạng thái được đếm theo Test.status: P = Published, D = Draft, I = Reviewed."
+        ),
+        tags=["statistics"],
+        responses={
+            200: inline_serializer(
+                name="TeacherStatisticSummaryResponse",
+                fields={
+                    "total_test": serializers.IntegerField(),
+                    "published": serializers.IntegerField(),
+                    "draft": serializers.IntegerField(),
+                    "reviewed": serializers.IntegerField(),
+                },
+            ),
+            401: OpenApiResponse(description="Chưa đăng nhập"),
+            403: OpenApiResponse(description="Chỉ teacher được phép truy cập"),
+        },
+    )
+    def get(self, request):
+        teacher = getattr(request.user, "teacher", None)
+        if not teacher:
+            return Response({"detail": "Teacher profile not found."}, status=403)
+
+        queryset = Test.objects.filter(created_by=teacher, status__in=["P", "D", "I"])
+
+        return Response(
+            {
+                "total_test": queryset.count(),
+                "published": queryset.filter(status="P").count(),
+                "draft": queryset.filter(status="D").count(),
+                "reviewed": queryset.filter(status="I").count(),
             }
         )

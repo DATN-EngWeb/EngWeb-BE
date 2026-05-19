@@ -139,9 +139,10 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                         Exists(receptive_draft_exists)
                     )
 
-                    # Combine filters - returns both Productive and Receptive tests that match
+                    # Combine filters by test type so each test only matches its own history table
                     queryset = queryset.filter(
-                        productive_completed | receptive_completed
+                        (Q(type="P") & productive_completed)
+                        | (Q(type="R") & receptive_completed)
                     )
 
                 elif my_progress == "draft":
@@ -158,8 +159,11 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                     )
                     receptive_draft = Q(Exists(receptive_draft_exists))
 
-                    # Combine filters - returns both Productive and Receptive tests that match
-                    queryset = queryset.filter(productive_draft | receptive_draft)
+                    # Combine filters by test type so each test only matches its own history table
+                    queryset = queryset.filter(
+                        (Q(type="P") & productive_draft)
+                        | (Q(type="R") & receptive_draft)
+                    )
 
                 else:  # my_progress == "none"
                     # PRODUCTIVE TESTS: Tests with no history at all
@@ -174,9 +178,10 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                     )
                     receptive_no_history = ~Q(Exists(receptive_history_exists))
 
-                    # Combine filters - returns both Productive and Receptive tests that match
+                    # Combine filters by test type so each test only matches its own history table
                     queryset = queryset.filter(
-                        productive_no_history | receptive_no_history
+                        (Q(type="P") & productive_no_history)
+                        | (Q(type="R") & receptive_no_history)
                     )
 
             except Student.DoesNotExist:

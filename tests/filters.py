@@ -1,5 +1,5 @@
 import django_filters
-from .models import Test, WritingCriteriaTemplate
+from .models import Test, WritingCriteriaTemplate, SpeakingCriteriaTemplate
 
 
 class TestFilter(django_filters.FilterSet):
@@ -105,4 +105,32 @@ class WritingCriteriaTemplateFilter(django_filters.FilterSet):
 
     class Meta:
         model = WritingCriteriaTemplate
+        fields = ["level", "band"]
+
+
+class SpeakingCriteriaTemplateFilter(django_filters.FilterSet):
+    """
+    Filter class for SpeakingCriteriaTemplate model
+    Allows filtering by level and band
+    """
+
+    LEVEL_CHOICES = [
+        ("A1", "A1"),
+        ("A2", "A2"),
+        ("B1", "B1"),
+        ("B2", "B2"),
+    ]
+
+    level = django_filters.ChoiceFilter(
+        field_name="level",
+        choices=LEVEL_CHOICES,
+        help_text="Filter by level (A1, A2, B1, B2)",
+    )
+
+    band = django_filters.NumberFilter(
+        field_name="band", help_text="Filter by band (1, 2, 3, ...)"
+    )
+
+    class Meta:
+        model = SpeakingCriteriaTemplate
         fields = ["level", "band"]
