@@ -52,36 +52,33 @@ def _build_streak_notice(student, previous_last_submitted_date):
     if current_submitted_date != today:
         return None
 
-    # First submission day (no previous submission date).
-    if not previous_last_submitted_date:
+    is_first_submission_today = (
+        not previous_last_submitted_date
+        or timezone.localdate(previous_last_submitted_date) != today
+    )
+
+    def _build_notice(continued):
         return {
-            "continued": False,
+            "continued": continued,
+            "is_first_submission_today": is_first_submission_today,
             "current_streak": student.streak_count,
             "current_streak_milestone_id": current_milestone.id if current_milestone else None,
         }
+
+    # First submission day (no previous submission date).
+    if not previous_last_submitted_date:
+        return _build_notice(False)
 
     previous_date = timezone.localdate(previous_last_submitted_date)
     if previous_date == today - timedelta(days=1):
-        return {
-            "continued": True,
-            "current_streak": student.streak_count,
-            "current_streak_milestone_id": current_milestone.id if current_milestone else None,
-        }
+        return _build_notice(True)
 
     # Already submitted today, keep streak and notify with continued=false.
     if previous_date == today:
-        return {
-            "continued": False,
-            "current_streak": student.streak_count,
-            "current_streak_milestone_id": current_milestone.id if current_milestone else None,
-        }
+        return _build_notice(False)
 
     # Streak reset or other non-consecutive submission days.
-    return {
-        "continued": False,
-        "current_streak": student.streak_count,
-        "current_streak_milestone_id": current_milestone.id if current_milestone else None,
-    }
+    return _build_notice(False)
 
 
 class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
@@ -340,7 +337,7 @@ class ProductiveTestHistoryListCreateView(generics.ListCreateAPIView):
             "- Nếu lần submit đầu tiên: `continued=false`, `current_streak=1`\n"
             "- Nếu đã submit trong hôm nay: `continued=false`, giữ nguyên streak hiện tại\n"
             "- Nếu bị đứt chuỗi rồi quay lại submit: reset chuỗi về `1`\n"
-            "- Response có thêm `streak_notice` gồm `continued`, `current_streak`, `current_streak_milestone` (gồm `id`, `streak_day`)\n\n"
+            "- Response có thêm `streak_notice` gồm `continued`, `is_first_submission_today`, `current_streak`, `current_streak_milestone_id`\n\n"
             "- Nếu đạt mốc thưởng streak: Response có thêm `streak_reward_notice` gồm `id`, `streak_day`, `xp_reward`, `ai_turn_reward`\n\n"
             "**Lưu ý:**\n"
             "- `student` và `attempt` tự động được set\n"
@@ -770,7 +767,7 @@ class ReceptiveTestHistoryListCreateView(generics.ListCreateAPIView):
             "- Nếu lần submit đầu tiên: `continued=false`, `current_streak=1`\n"
             "- Nếu đã submit trong hôm nay: `continued=false`, giữ nguyên streak hiện tại\n"
             "- Nếu bị đứt chuỗi rồi quay lại submit: reset chuỗi về `1`\n"
-            "- Response có thêm `streak_notice` gồm `continued`, `current_streak`, `current_streak_milestone` (gồm `id`, `streak_day`)\n\n"
+            "- Response có thêm `streak_notice` gồm `continued`, `is_first_submission_today`, `current_streak`, `current_streak_milestone_id`\n\n"
             "- Nếu đạt mốc thưởng streak: Response có thêm `streak_reward_notice` gồm `id`, `streak_day`, `xp_reward`, `ai_turn_reward`\n\n"
             "**Lưu ý:**\n"
             "- `student` và `attempt` tự động được set\n"
