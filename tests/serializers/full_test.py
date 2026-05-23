@@ -101,6 +101,96 @@ class ReceptiveTestRetrieveSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
+# Public (student-facing) serializers: same shape as the full ones but with
+# answer-key fields (`is_correct`, `explanation`) stripped so they cannot leak
+# to a student inspecting the network response before submitting the test.
+class ReceptiveAnswerPublicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReceptiveAnswer
+        fields = [
+            "id",
+            "option_label",
+            "answer_text",
+            "resources",
+        ]
+        read_only_fields = ["id"]
+
+
+class ReceptiveQuestionPublicSerializer(serializers.ModelSerializer):
+    receptive_answers = ReceptiveAnswerPublicSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ReceptiveQuestion
+        fields = [
+            "id",
+            "question_number",
+            "content",
+            "score",
+            "resources",
+            "receptive_answers",
+        ]
+        read_only_fields = ["id"]
+
+
+class ReceptivePartPublicSerializer(serializers.ModelSerializer):
+    receptive_questions = ReceptiveQuestionPublicSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ReceptivePart
+        fields = [
+            "id",
+            "order",
+            "format",
+            "description",
+            "content",
+            "score",
+            "resources",
+            "receptive_questions",
+        ]
+
+
+class ReceptiveTestPublicSerializer(serializers.ModelSerializer):
+    receptive_parts = ReceptivePartPublicSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ReceptiveTest
+        fields = [
+            "total_score",
+            "receptive_parts",
+        ]
+
+
+class ReceptiveTestRetrievePublicSerializer(serializers.ModelSerializer):
+    receptive_test = ReceptiveTestPublicSerializer(read_only=True)
+    is_owner = serializers.SerializerMethodField()
+
+    def get_is_owner(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return False
+        teacher = getattr(user, "teacher", None)
+        return bool(teacher and obj.created_by_id == teacher.pk)
+
+    class Meta:
+        model = Test
+        fields = [
+            "id",
+            "title",
+            "type",
+            "level",
+            "skill",
+            "time",
+            "description",
+            "status",
+            "created_at",
+            "updated_at",
+            "is_owner",
+            "receptive_test",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
 class ProductiveTestSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductiveTest
