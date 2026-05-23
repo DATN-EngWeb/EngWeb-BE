@@ -34,7 +34,7 @@ jobs:
             
             # Start containers
             echo "Starting containers..."
-            docker compose up -d
+            docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d
             
             # Wait for services to be healthy with retry logic
             echo "Waiting for Django backend to be ready..."
