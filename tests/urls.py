@@ -7,6 +7,7 @@ from .views.writing_criteria import WritingCriteriaTemplateListView
 from .views.speaking_criteria import SpeakingCriteriaTemplateListView
 from .views.full_tests import (
     ReceptiveTestRetrieveUpdateDestroyAPIView,
+    ReceptiveTestReviewAPIView,
     ProductiveTestRetrieveUpdateDestroyAPIView,
 )
 
@@ -36,6 +37,11 @@ urlpatterns = [
         "full-test/receptive/<int:test_id>",
         ReceptiveTestRetrieveUpdateDestroyAPIView.as_view(),
         name="receptive-test-retrieve",
+    ),
+    path(
+        "full-test/receptive/<int:test_id>/review",
+        ReceptiveTestReviewAPIView.as_view(),
+        name="receptive-test-review",
     ),
     path(
         "full-test/productive/<int:test_id>",
