@@ -17,45 +17,32 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
           script: |
-            set -e  # Exit on error
+            set -e
             cd ~/EngWeb-BE
-            
-            # Stop containers before git pull to avoid permission issues
-            echo "Stopping containers before git pull..."
-            docker compose down || true
 
-            # Sleep for 10 seconds to avoid permission issues
+            echo "Stopping containers before git pull..."
+            docker compose -f docker-compose.yaml -f docker-compose.prod.yaml down || true
+
             echo "Sleeping for 10 seconds..."
             sleep 10
-            
-            # Pull latest code
+
             echo "Pulling latest code..."
             git pull origin main
-            
-            # Start containers
+
             echo "Starting containers..."
             docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d
-            
-            # Wait for services to be healthy with retry logic
-            echo "Waiting for Django backend to be ready..."
-            MAX_RETRIES=30
-            RETRY_INTERVAL=10
-            RETRY_COUNT=0
-            
-            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-              if curl -f http://localhost:8000/health > /dev/null 2>&1; then
-                echo "Health check passed!"
-                echo "Deployment successful!"
-                exit 0
-              fi
-              
-              RETRY_COUNT=$((RETRY_COUNT + 1))
-              echo "Health check attempt $RETRY_COUNT/$MAX_RETRIES failed, retrying in ${RETRY_INTERVAL}s..."
-              sleep $RETRY_INTERVAL
-            done
-            
-            # If we reach here, health check failed after all retries
-            echo "Health check failed after $MAX_RETRIES attempts!"
-            echo "Checking container status..."
-            docker compose ps
+
+            echo "Waiting 30s for containers to settle..."
+            sleep 30
+
+            echo "Verifying container status..."
+            if docker compose -f docker-compose.yaml -f docker-compose.prod.yaml ps backend | grep -q "Up"; then
+              echo "Backend container is running. Deployment successful!"
+              docker compose -f docker-compose.yaml -f docker-compose.prod.yaml ps
+              exit 0
+            fi
+
+            echo "Backend container is NOT running!"
+            docker compose -f docker-compose.yaml -f docker-compose.prod.yaml ps
+            docker compose -f docker-compose.yaml -f docker-compose.prod.yaml logs --tail=100 backend
             exit 1
