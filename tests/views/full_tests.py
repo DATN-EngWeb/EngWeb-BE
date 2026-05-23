@@ -1,4 +1,4 @@
-from rest_framework.generics import RetrieveUpdateDestroyAPIView
+from rest_framework.generics import RetrieveAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework import permissions, status, serializers
 from rest_framework.response import Response
 from rest_framework.exceptions import NotFound, PermissionDenied
@@ -10,9 +10,11 @@ from tests.serializers.full_test import (
     ProductiveTestRetrieveSerializer,
     ProductiveTestUpdateSerializer,
     ReceptiveTestRetrieveSerializer,
+    ReceptiveTestRetrievePublicSerializer,
     ReceptiveTestFullUpdateSerializer,
 )
 from tests.permissions import IsAdminOrOwner
+from test_histories.models import ReceptiveTestHistory
 
 from tests.utils.renumber import renumber_receptive_test
 from tests.utils.scoring import calculate_scores
@@ -26,11 +28,13 @@ from tests.utils.gcs_cleanup import (
 
 @extend_schema(
     methods=["GET"],
-    summary="Lấy chi tiết đề Receptive Test",
+    summary="Lấy chi tiết đề Receptive Test (không kèm đáp án cho student)",
     description=(
         "API này trả về toàn bộ nội dung của một đề Receptive Test (Reading/Listening) theo test_id.\n\n"
         "Chỉ trả về nếu type của đề là R.\n\n"
-        "Response bao gồm thông tin đề, các phần, câu hỏi và đáp án."
+        "- Với Student: response **không** chứa `is_correct` của các đáp án và `explanation` của câu hỏi. "
+        "Dùng cho màn hiển thị đề khi đang làm bài. Để xem đáp án sau khi đã submit, gọi endpoint `/full-test/receptive/<test_id>/review`.\n"
+        "- Với Admin/Teacher: response đầy đủ (gồm `is_correct` và `explanation`) để phục vụ review/edit."
     ),
     tags=["full-test"],
     responses={
@@ -106,6 +110,14 @@ class ReceptiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
         if self.request.method in ["PUT", "PATCH", "DELETE"]:
             return [permissions.IsAuthenticated(), IsAdminOrOwner()]
         return [permissions.IsAuthenticated()]
+
+    def get_serializer_class(self):
+        # Strip answer-key fields (is_correct, explanation) for students on GET.
+        # Admin/Teacher keep the full serializer so they can review/edit the test,
+        # and the PATCH response continues to use the full serializer.
+        if self.request.method == "GET" and getattr(self.request.user, "role", None) == "S":
+            return ReceptiveTestRetrievePublicSerializer
+        return ReceptiveTestRetrieveSerializer
 
     def get_object(self):
         obj = super().get_object()
@@ -412,6 +424,66 @@ class ReceptiveTestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
             context={"request": request},
         )
         return Response(retrieve_serializer.data, status=status.HTTP_200_OK)
+
+
+@extend_schema(
+    methods=["GET"],
+    summary="Lấy chi tiết đề Receptive Test kèm đáp án (review sau khi đã làm bài)",
+    description=(
+        "Trả về toàn bộ nội dung đề Receptive Test kèm `is_correct` và `explanation`.\n\n"
+        "Quyền truy cập:\n"
+        "- Admin/Teacher: luôn được phép.\n"
+        "- Student: phải có ít nhất một submission (`type='S'`) của chính mình cho đề này; "
+        "nếu chưa từng submit sẽ trả 403.\n\n"
+        "Endpoint này tách riêng để tránh lộ đáp án qua endpoint hiển thị đề khi đang làm bài."
+    ),
+    tags=["full-test"],
+    responses={
+        200: ReceptiveTestRetrieveSerializer,
+        403: OpenApiResponse(
+            description="Forbidden: Student has not submitted this test yet, or test is not Published (for students)"
+        ),
+        404: OpenApiResponse(
+            description="Test type is not Receptive (R), does not exist, or has been removed (for non-admin users)"
+        ),
+    },
+)
+class ReceptiveTestReviewAPIView(RetrieveAPIView):
+    queryset = Test.objects.select_related("receptive_test").prefetch_related(
+        "receptive_test__receptive_parts__receptive_questions__receptive_answers"
+    )
+    serializer_class = ReceptiveTestRetrieveSerializer
+    lookup_field = "id"
+    lookup_url_kwarg = "test_id"
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        obj = super().get_object()
+        if obj.type != "R":
+            raise NotFound("This test is not Receptive Test (type is not R)")
+        if not self.request.user.is_staff and obj.status == "R":
+            raise NotFound("This test has been removed.")
+
+        user = self.request.user
+        if user.role == "S":
+            if obj.status != "P":
+                raise PermissionDenied("Students can only view published tests.")
+            student = getattr(user, "student", None)
+            if student is None:
+                raise PermissionDenied("Student profile not found.")
+            has_submission = ReceptiveTestHistory.objects.filter(
+                student=student,
+                receptive_test_id=obj.pk,
+                type="S",
+            ).exists()
+            if not has_submission:
+                raise PermissionDenied(
+                    "You must submit this test at least once before viewing the answer key."
+                )
+        elif user.role not in ["A", "T"]:
+            raise PermissionDenied("You do not have permission to view this test.")
+
+        return obj
 
 
 @extend_schema(
