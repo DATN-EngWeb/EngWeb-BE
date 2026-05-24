@@ -35,6 +35,9 @@ class PostComment(models.Model):
 
     class Meta:
         db_table = "post_comment"
+        indexes = [
+            models.Index(fields=["post", "-created_at"]),
+        ]
 
 class PostReaction(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)

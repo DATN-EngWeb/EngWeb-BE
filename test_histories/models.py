@@ -43,6 +43,8 @@ class ProductiveTestHistory(models.Model):
         ordering = ["-start_time"]
         indexes = [
             models.Index(fields=["student", "productive_test", "attempt", "type"]),
+            models.Index(fields=["productive_test", "type"]),
+            models.Index(fields=["student", "type", "-start_time"]),
         ]
 
 
@@ -83,6 +85,8 @@ class ReceptiveTestHistory(models.Model):
         ordering = ["-start_time"]
         indexes = [
             models.Index(fields=["student", "receptive_test", "attempt", "type"]),
+            models.Index(fields=["receptive_test", "type"]),
+            models.Index(fields=["student", "type", "-start_time"]),
         ]
 
 
@@ -120,4 +124,5 @@ class ReceptiveAnswerHistory(models.Model):
                     "receptive_answer",
                 ]
             ),
+            models.Index(fields=["receptive_test_history", "is_correct"]),
         ]
