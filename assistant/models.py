@@ -39,6 +39,7 @@ class AssistantConversation(models.Model):
         indexes = [
             models.Index(fields=["user", "last_message_at"]),
             models.Index(fields=["user", "is_archived"]),
+            models.Index(fields=["user", "is_archived", "last_message_at"]),
         ]
 
 

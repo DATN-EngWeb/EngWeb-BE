@@ -114,6 +114,9 @@ class User(AbstractUser):
 
     class Meta:
         db_table = "user"
+        indexes = [
+            models.Index(fields=["username"]),
+        ]
 
 # teacher model
 class Teacher(models.Model):
