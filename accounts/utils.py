@@ -214,10 +214,22 @@ def resend_registration_otp_email(user_id):
     cache_key = f"register_{user_id}"
     cache_data = cache.get(cache_key)
 
+    # If no cache data (OTP expired after 5 minutes), query user from database and create new OTP
     if not cache_data:
-        raise ValueError(
-            "Account does not exist or the verification process has expired (over 5 minutes)."
-        )
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            raise ValueError("User not found.")
+
+        new_otp_code = create_otp_code()
+        cache_data = {
+            "otp_code": new_otp_code,
+            "email": user.email,
+            "last_sent": timezone.now().isoformat()
+        }
+        cache.set(cache_key, json.dumps(cache_data), timeout=300)
+        send_registration_otp_email(user.email, new_otp_code)
+        return
 
     cache_data = json.loads(cache_data)
     last_sent = timezone.datetime.fromisoformat(cache_data["last_sent"])
@@ -533,11 +545,21 @@ def resend_forgot_password_otp_email(username):
     cache_key = f"forgot_password_{username}"
     cache_data = cache.get(cache_key)
 
+    # If no cache data (OTP expired after 5 minutes), query user from database and create new OTP
     if not cache_data:
-        raise ValueError(
-            "Account not found or verification process has expired (over 5 minutes). "
-            "Please return to the login page and select 'Forgot Password' again."
-        )
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            raise ValueError("User not found.")
+
+        new_otp_code = create_otp_code()
+        cache_data = {
+            "otp_code": new_otp_code,
+            "last_sent": timezone.now().isoformat()
+        }
+        cache.set(cache_key, json.dumps(cache_data), timeout=300)
+        send_forgot_password_otp_email(username, user.email, new_otp_code)
+        return
 
     cache_data = json.loads(cache_data)
     last_sent = timezone.datetime.fromisoformat(cache_data["last_sent"])
