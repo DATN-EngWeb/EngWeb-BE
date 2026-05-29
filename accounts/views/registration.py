@@ -412,6 +412,8 @@ class TeacherSubmitProfileAPIView(generics.CreateAPIView):
             user_errors["full_name"] = ["This field is required."]
         if not date_of_birth:
             user_errors["date_of_birth"] = ["This field is required."]
+        elif date_of_birth < datetime.now() - timedelta(days=18 * 365):
+            user_errors["date_of_birth"] = ["You must be at least 18 years old."]
         if not avatar_file:
             user_errors["avatar"] = ["This field is required."]
 
