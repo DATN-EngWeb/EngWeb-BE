@@ -6,4 +6,4 @@ media/
 static/
 .cursor/
 .claude/
-test-nens-english-app-sa-key.json
+nens-english-backend-sa.json
