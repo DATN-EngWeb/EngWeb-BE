@@ -408,12 +408,25 @@ class TeacherSubmitProfileAPIView(generics.CreateAPIView):
         date_of_birth = request.data.get("user.date_of_birth")
         avatar_file = request.FILES.get("user.avatar")
 
+        dob = None
         if not full_name:
             user_errors["full_name"] = ["This field is required."]
         if not date_of_birth:
             user_errors["date_of_birth"] = ["This field is required."]
-        elif date_of_birth < datetime.now() - timedelta(days=18 * 365):
-            user_errors["date_of_birth"] = ["You must be at least 18 years old."]
+        else:
+            try:
+                from datetime import datetime, date, timedelta
+                if isinstance(date_of_birth, str):
+                    dob = datetime.strptime(date_of_birth, "%Y-%m-%d").date()
+                else:
+                    dob = date_of_birth
+                
+                eighteen_years_ago = date.today() - timedelta(days=18 * 365)
+                if dob > eighteen_years_ago:
+                    user_errors["date_of_birth"] = ["You must be at least 18 years old."]
+            except ValueError:
+                user_errors["date_of_birth"] = ["Date of birth must be in YYYY-MM-DD format."]
+
         if not avatar_file:
             user_errors["avatar"] = ["This field is required."]
 
@@ -421,7 +434,7 @@ class TeacherSubmitProfileAPIView(generics.CreateAPIView):
             return Response({"user": user_errors}, status=status.HTTP_400_BAD_REQUEST)
 
         user.full_name = full_name
-        user.date_of_birth = date_of_birth
+        user.date_of_birth = dob if dob else date_of_birth
         user.avatar = avatar_file
         user.status = "W"
         user.save()
