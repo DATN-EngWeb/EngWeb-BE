@@ -6,7 +6,7 @@ services:
       - "8000:8000"
     volumes:
       - ./:/app
-      - ./test-nens-english-app-sa-key.json:/app/test-nens-english-app-sa-key.json:ro
+      - ./nens-english-backend-sa.json:/app/nens-english-backend-sa.json:ro
 
   redis:
     image: redis:8.4

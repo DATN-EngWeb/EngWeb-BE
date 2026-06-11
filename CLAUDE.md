@@ -85,6 +85,10 @@ Each Django app owns one bounded slice of the domain. Cross-app references use s
 
 Two custom auth schemes are registered in [accounts/schema.py](accounts/schema.py): `CustomBearerAuth` (JWT) and `CustomBasicAuth`. They're referenced in `SPECTACULAR_SETTINGS["SECURITY"]`. Existing views use `@extend_schema(...)` with Vietnamese descriptions — that's intentional, not a translation error.
 
+### Rate limiting
+
+Sensitive POST endpoints (forum reactions, feedback/AI-grading creation) are throttled with `django-ratelimit`, keyed `per-user` and backed by the Redis `default` cache. The pattern is `@method_decorator(ratelimit(key="user", rate="...", method=["POST"], block=False), name="dispatch")` on the view class. **`block=False` does not reject anything by itself** — each `post()` must manually check `if getattr(request, "limited", False)` and return the 429 response. Follow this same two-part pattern (decorator + in-view check) when adding a throttled endpoint; counters reset if Redis is flushed. See [forum/views.py](forum/views.py) and [feedback/views.py](feedback/views.py).
+
 ### Migration discipline
 
 `makemigrations` runs automatically inside the container entrypoint. Fresh `0001_initial.py` migration files may appear in your working tree after `docker compose up` if you've never committed migrations for a new app. `git add` migration files alongside model changes.
@@ -102,7 +106,11 @@ See [.github/instructions/git-workflow.instructions.md](.github/instructions/git
 
 ## Deployment
 
-Push to `main` triggers SSH-into-VM deploy ([.github/workflows/cd.yml](.github/workflows/cd.yml)): stops containers, `git pull`, `docker compose up -d`, then polls `http://localhost:8000/health` up to 30× / 10s.
+Push to `main` triggers SSH-into-VM deploy ([.github/workflows/cd.yml](.github/workflows/cd.yml)): stops containers, `git pull`, `docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d`, sleeps 30s, then verifies `docker compose ps backend` reports `Up`. There is no HTTP health endpoint — the check is container-state only.
+
+## Performance and indexes
+
+Index strategy, table-size estimates, and known hot query paths are documented in [docs/database_index_strategy.md](docs/database_index_strategy.md). Consult it before adding indexes or tuning queries — and update it when you add or change one.
 
 ## Secrets
 

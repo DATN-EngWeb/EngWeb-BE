@@ -1,4 +1,4 @@
-from django.db.models import Count
+from django.db.models import Count, Q
 from drf_spectacular.utils import (
     OpenApiParameter,
     OpenApiResponse,
@@ -291,7 +291,15 @@ class TeacherStatisticSummaryView(APIView):
         if not teacher:
             return Response({"detail": "Teacher profile not found."}, status=403)
 
-        queryset = Test.objects.filter(created_by=teacher, status__in=["P", "D", "I"])
+        # Exclude overview-only tests that have no corresponding detail record
+        # (a base Test row with no actual content). Mirrors the filter in
+        # tests/views/overview_tests.py so the counts stay consistent.
+        queryset = Test.objects.filter(
+            created_by=teacher, status__in=["P", "D", "I"]
+        ).filter(
+            Q(type="P", productive_test__isnull=False)
+            | Q(type="R", receptive_test__isnull=False)
+        )
 
         return Response(
             {
