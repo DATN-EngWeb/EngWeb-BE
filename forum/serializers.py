@@ -67,6 +67,7 @@ class PostUpdateSerializer(serializers.ModelSerializer):
 class PostCommentListSerializer(serializers.ModelSerializer):
     author_id = serializers.IntegerField(source="user.id", read_only=True)
     author_name = serializers.CharField(source="user.full_name", read_only=True)
+    author_username = serializers.CharField(source="user.username", read_only=True)
     author_avatar = serializers.ImageField(source="user.avatar", read_only=True)
 
     class Meta:
@@ -78,6 +79,7 @@ class PostCommentListSerializer(serializers.ModelSerializer):
             "updated_at",
             "author_id",
             "author_name",
+            "author_username",
             "author_avatar",
         ]
 
