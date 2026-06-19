@@ -3,7 +3,6 @@ db.sqlite3
 .env.dev
 .env.prod
 media/
-static/
 .cursor/
 .claude/
 nens-english-backend-sa.json
