@@ -7,15 +7,16 @@ class PostListSerializer(serializers.ModelSerializer):
     # Get user info
     author_id = serializers.IntegerField(source="productive_test_history.student.user.id", read_only=True)
     author_name = serializers.CharField(source="productive_test_history.student.user.full_name", read_only=True)
+    author_username = serializers.CharField(source="productive_test_history.student.user.username", read_only=True)
     author_avatar = serializers.ImageField(source="productive_test_history.student.user.avatar", read_only=True)
-    
+
     # Get test info
     skill = serializers.CharField(source="productive_test_history.productive_test.test.get_skill_display", read_only=True)
-    
+
     # Get student submission info
     audio_path = serializers.CharField(source="productive_test_history.audio_path", read_only=True)
     user_answer_text = serializers.CharField(source="productive_test_history.user_answer_text", read_only=True)
-    
+
     # Use annotation for is_liked
     is_liked = serializers.BooleanField(read_only=True, default=False)
 
@@ -23,7 +24,7 @@ class PostListSerializer(serializers.ModelSerializer):
         model = Post
         fields = [
             "id", "title", "description", "like_count", "comment_count", "created_at",
-            "author_id", "author_name", "author_avatar", "skill", "audio_path", "user_answer_text", "is_liked"
+            "author_id", "author_name", "author_username", "author_avatar", "skill", "audio_path", "user_answer_text", "is_liked"
         ]
 
 
