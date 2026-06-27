@@ -251,7 +251,7 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                     When(
                         type="P",
                         then=Count(
-                            "productive_test__histories",
+                            "productive_test__histories__student",
                             filter=Q(productive_test__histories__type="S"),
                             distinct=True,
                         ),
@@ -259,7 +259,7 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                     When(
                         type="R",
                         then=Count(
-                            "receptive_test__histories",
+                            "receptive_test__histories__student",
                             filter=Q(receptive_test__histories__type="S"),
                             distinct=True,
                         ),

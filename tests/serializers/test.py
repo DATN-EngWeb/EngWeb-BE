@@ -140,8 +140,10 @@ class TestSerializer(serializers.ModelSerializer):
 
     def get_submitted(self, obj):
         """
-        Calculate total number of submissions for this test.
-        Returns the count of all submission records (type='S') for Productive or Receptive tests.
+        Calculate the number of distinct students who submitted this test.
+        Counts unique students with at least one submission record (type='S')
+        for Productive or Receptive tests — not the total number of submissions
+        (a student submitting multiple attempts is counted once).
         Returns None if not requested via 'submitted' parameter.
         
         OPTIMIZATION: If 'submitted' was already annotated in queryset (for ordering),
@@ -164,17 +166,27 @@ class TestSerializer(serializers.ModelSerializer):
         if obj.type == "P":
             try:
                 productive_test = obj.productive_test
-                return ProductiveTestHistory.objects.filter(
-                    productive_test=productive_test, type="S"
-                ).count()
+                return (
+                    ProductiveTestHistory.objects.filter(
+                        productive_test=productive_test, type="S"
+                    )
+                    .values("student")
+                    .distinct()
+                    .count()
+                )
             except:
                 return 0
         elif obj.type == "R":
             try:
                 receptive_test = obj.receptive_test
-                return ReceptiveTestHistory.objects.filter(
-                    receptive_test=receptive_test, type="S"
-                ).count()
+                return (
+                    ReceptiveTestHistory.objects.filter(
+                        receptive_test=receptive_test, type="S"
+                    )
+                    .values("student")
+                    .distinct()
+                    .count()
+                )
             except:
                 return 0
 
