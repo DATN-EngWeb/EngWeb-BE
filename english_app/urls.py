@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import (
@@ -10,16 +11,6 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     # accounts API
     path("api/accounts/", include("accounts.urls")),
-    # OpenAPI schema
-    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    # Swagger UI
-    path(
-        "api/docs/",
-        SpectacularSwaggerView.as_view(url_name="schema"),
-        name="swagger-ui",
-    ),
-    # ReDoc
-    path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     # Tests API
     path("api/tests/", include("tests.urls")),
     # Storage API
@@ -39,3 +30,21 @@ urlpatterns = [
     # Assistant API
     path("api/assistant/", include("assistant.urls")),
 ]
+
+if settings.DEBUG:
+    urlpatterns += [
+        # OpenAPI schema
+        path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+        # Swagger UI
+        path(
+            "api/docs/",
+            SpectacularSwaggerView.as_view(url_name="schema"),
+            name="swagger-ui",
+        ),
+        # ReDoc
+        path(
+            "api/redoc/",
+            SpectacularRedocView.as_view(url_name="schema"),
+            name="redoc",
+        ),
+    ]

@@ -134,14 +134,24 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
 }
 
-SPECTACULAR_SETTINGS = {
-    "TITLE": "English App API",
-    "DESCRIPTION": "API documentation",
-    "VERSION": "1.0.0",
-    "SERVE_INCLUDE_SCHEMA": False,
-    "COMPONENT_SPLIT_REQUEST": True,
-    "SECURITY": [{"CustomBearerAuth": []}, {"CustomBasicAuth": []}],
-}
+if DEBUG:
+    SPECTACULAR_SETTINGS = {
+        "TITLE": "English App API",
+        "DESCRIPTION": "API documentation",
+        "VERSION": "1.0.0",
+        "SERVE_INCLUDE_SCHEMA": False,
+        "COMPONENT_SPLIT_REQUEST": True,
+        "SECURITY": [{"CustomBearerAuth": []}, {"CustomBasicAuth": []}],
+    }
+else:
+    SPECTACULAR_SETTINGS = {
+        "TITLE": "English App API",
+        "DESCRIPTION": "API documentation",
+        "VERSION": "1.0.0",
+        "SERVE_INCLUDE_SCHEMA": False,
+        "COMPONENT_SPLIT_REQUEST": True,
+        "SECURITY": [{"CustomBearerAuth": []}],
+    }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
