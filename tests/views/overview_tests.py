@@ -63,151 +63,215 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         """
-        Override to handle 'mine' filter parameter and status filtering.
-        - mine=true: Filter tests created by current teacher
-        - mine=false: Filter tests NOT created by current teacher
-        - mine not provided: Show all tests
-        Raises PermissionDenied if non-teacher uses mine parameter.
-        For non-admin users, exclude tests with status='R' (Removed).
-        Raises PermissionDenied if non-admin tries to filter by status='R'.
+        Build the test overview queryset by composing independent filter steps.
+
+        Order matters only for the auth/permission checks (a request that misuses
+        several restricted params fails on the first one), so the steps run in the
+        same order as before the refactor:
+        1. Drop overview-only tests missing their detail record.
+        2. `mine`      (teacher-only filter).
+        3. `my_progress` (student-only filter).
+        4. `my_posts`  (student-only filter).
+        5. Role-based visibility + `status` policy.
+        6. `submitted` / `post_count` annotations (only when requested).
         """
         queryset = super().get_queryset()
+        queryset = self._exclude_overview_only(queryset)
+        queryset = self._apply_mine_filter(queryset)
+        queryset = self._apply_my_progress_filter(queryset)
+        queryset = self._apply_my_posts_filter(queryset)
+        queryset = self._apply_visibility_policy(queryset)
+        queryset = self._annotate_submitted(queryset)
+        queryset = self._annotate_post_count(queryset)
+        return queryset
 
-        # Exclude overview-only tests that do not have the corresponding detail record.
-        queryset = queryset.filter(
+    def _exclude_overview_only(self, queryset):
+        """Exclude overview-only tests that do not have the matching detail record."""
+        return queryset.filter(
             Q(type="P", productive_test__isnull=False)
             | Q(type="R", receptive_test__isnull=False)
         )
+
+    def _apply_mine_filter(self, queryset):
+        """
+        Handle the teacher-only `mine` filter.
+        - mine=true: tests created by the current teacher
+        - mine=false: tests NOT created by the current teacher
+        - mine not provided: no change
+        Raises PermissionDenied if a non-teacher (or anonymous user) uses it.
+        """
         mine = self.request.query_params.get("mine", "").lower()
+        if mine not in ["true", "false"]:
+            return queryset
 
-        if mine in ["true", "false"]:
-            # Check if user is authenticated
-            if not self.request.user.is_authenticated:
-                raise PermissionDenied(
-                    detail="Authentication required to use 'mine' parameter."
-                )
+        if not self.request.user.is_authenticated:
+            raise PermissionDenied(
+                detail="Authentication required to use 'mine' parameter."
+            )
 
-            # Check if user is a teacher
-            try:
-                teacher = Teacher.objects.get(user=self.request.user)
-                if mine == "true":
-                    queryset = queryset.filter(created_by=teacher)
-                else:  # mine == "false"
-                    queryset = queryset.exclude(created_by=teacher)
-            except Teacher.DoesNotExist:
-                raise PermissionDenied(
-                    detail="Only teachers can use 'mine' parameter to filter tests."
-                )
+        try:
+            teacher = Teacher.objects.get(user=self.request.user)
+        except Teacher.DoesNotExist:
+            raise PermissionDenied(
+                detail="Only teachers can use 'mine' parameter to filter tests."
+            )
 
-        # Handle my_progress filter for students
+        if mine == "true":
+            return queryset.filter(created_by=teacher)
+        return queryset.exclude(created_by=teacher)
+
+    def _apply_my_progress_filter(self, queryset):
+        """
+        Handle the student-only `my_progress` filter (completed/draft/none).
+        Each branch matches Productive and Receptive tests against their own
+        history table so a test only ever matches through its own type.
+        Raises PermissionDenied if a non-student (or anonymous user) uses it.
+        """
         my_progress = self.request.query_params.get("my_progress", "").lower()
-        if my_progress in ["completed", "draft", "none"]:
-            # Check if user is authenticated
-            if not self.request.user.is_authenticated:
-                raise PermissionDenied(
-                    detail="Authentication required to use 'my_progress' parameter."
-                )
+        if my_progress not in ["completed", "draft", "none"]:
+            return queryset
 
-            # Check if user is a student
-            try:
-                student = Student.objects.get(user=self.request.user)
+        if not self.request.user.is_authenticated:
+            raise PermissionDenied(
+                detail="Authentication required to use 'my_progress' parameter."
+            )
 
-                # Build Q objects for filtering tests by progress status
-                # Currently only Productive tests (type='P') have history tracking
-                # Receptive tests (type='R') will be added when ReceptiveTestHistory is implemented
+        try:
+            student = Student.objects.get(user=self.request.user)
+        except Student.DoesNotExist:
+            raise PermissionDenied(
+                detail="Only students can use 'my_progress' parameter to filter tests."
+            )
 
-                if my_progress == "completed":
-                    # PRODUCTIVE TESTS: Tests with submission but NO draft (fully completed)
-                    productive_submission_exists = ProductiveTestHistory.objects.filter(
-                        student=student, productive_test__test=OuterRef("pk"), type="S"
-                    )
-                    productive_draft_exists = ProductiveTestHistory.objects.filter(
-                        student=student, productive_test__test=OuterRef("pk"), type="D"
-                    )
-                    productive_completed = Q(Exists(productive_submission_exists)) & ~Q(
-                        Exists(productive_draft_exists)
-                    )
+        if my_progress == "completed":
+            # Tests with submission but NO draft (fully completed)
+            productive_submission_exists = ProductiveTestHistory.objects.filter(
+                student=student, productive_test__test=OuterRef("pk"), type="S"
+            )
+            productive_draft_exists = ProductiveTestHistory.objects.filter(
+                student=student, productive_test__test=OuterRef("pk"), type="D"
+            )
+            productive_completed = Q(Exists(productive_submission_exists)) & ~Q(
+                Exists(productive_draft_exists)
+            )
 
-                    # RECEPTIVE TESTS: Tests with submission but NO draft (fully completed)
-                    receptive_submission_exists = ReceptiveTestHistory.objects.filter(
-                        student=student, receptive_test__test=OuterRef("pk"), type="S"
-                    )
-                    receptive_draft_exists = ReceptiveTestHistory.objects.filter(
-                        student=student, receptive_test__test=OuterRef("pk"), type="D"
-                    )
-                    receptive_completed = Q(Exists(receptive_submission_exists)) & ~Q(
-                        Exists(receptive_draft_exists)
-                    )
+            receptive_submission_exists = ReceptiveTestHistory.objects.filter(
+                student=student, receptive_test__test=OuterRef("pk"), type="S"
+            )
+            receptive_draft_exists = ReceptiveTestHistory.objects.filter(
+                student=student, receptive_test__test=OuterRef("pk"), type="D"
+            )
+            receptive_completed = Q(Exists(receptive_submission_exists)) & ~Q(
+                Exists(receptive_draft_exists)
+            )
 
-                    # Combine filters by test type so each test only matches its own history table
-                    queryset = queryset.filter(
-                        (Q(type="P") & productive_completed)
-                        | (Q(type="R") & receptive_completed)
-                    )
+            return queryset.filter(
+                (Q(type="P") & productive_completed)
+                | (Q(type="R") & receptive_completed)
+            )
 
-                elif my_progress == "draft":
-                    # PRODUCTIVE TESTS: Tests with draft (regardless of submission status)
-                    # If draft exists, it means student is still working on it
-                    productive_draft_exists = ProductiveTestHistory.objects.filter(
-                        student=student, productive_test__test=OuterRef("pk"), type="D"
-                    )
-                    productive_draft = Q(Exists(productive_draft_exists))
+        if my_progress == "draft":
+            # Tests with a draft (regardless of submission status)
+            productive_draft_exists = ProductiveTestHistory.objects.filter(
+                student=student, productive_test__test=OuterRef("pk"), type="D"
+            )
+            productive_draft = Q(Exists(productive_draft_exists))
 
-                    # RECEPTIVE TESTS: Tests with draft (regardless of submission status)
-                    receptive_draft_exists = ReceptiveTestHistory.objects.filter(
-                        student=student, receptive_test__test=OuterRef("pk"), type="D"
-                    )
-                    receptive_draft = Q(Exists(receptive_draft_exists))
+            receptive_draft_exists = ReceptiveTestHistory.objects.filter(
+                student=student, receptive_test__test=OuterRef("pk"), type="D"
+            )
+            receptive_draft = Q(Exists(receptive_draft_exists))
 
-                    # Combine filters by test type so each test only matches its own history table
-                    queryset = queryset.filter(
-                        (Q(type="P") & productive_draft)
-                        | (Q(type="R") & receptive_draft)
-                    )
+            return queryset.filter(
+                (Q(type="P") & productive_draft) | (Q(type="R") & receptive_draft)
+            )
 
-                else:  # my_progress == "none"
-                    # PRODUCTIVE TESTS: Tests with no history at all
-                    productive_history_exists = ProductiveTestHistory.objects.filter(
-                        student=student, productive_test__test=OuterRef("pk")
-                    )
-                    productive_no_history = ~Q(Exists(productive_history_exists))
+        # my_progress == "none": tests with no history at all
+        productive_history_exists = ProductiveTestHistory.objects.filter(
+            student=student, productive_test__test=OuterRef("pk")
+        )
+        productive_no_history = ~Q(Exists(productive_history_exists))
 
-                    # RECEPTIVE TESTS: Tests with no history at all
-                    receptive_history_exists = ReceptiveTestHistory.objects.filter(
-                        student=student, receptive_test__test=OuterRef("pk")
-                    )
-                    receptive_no_history = ~Q(Exists(receptive_history_exists))
+        receptive_history_exists = ReceptiveTestHistory.objects.filter(
+            student=student, receptive_test__test=OuterRef("pk")
+        )
+        receptive_no_history = ~Q(Exists(receptive_history_exists))
 
-                    # Combine filters by test type so each test only matches its own history table
-                    queryset = queryset.filter(
-                        (Q(type="P") & productive_no_history)
-                        | (Q(type="R") & receptive_no_history)
-                    )
+        return queryset.filter(
+            (Q(type="P") & productive_no_history)
+            | (Q(type="R") & receptive_no_history)
+        )
 
-            except Student.DoesNotExist:
-                raise PermissionDenied(
-                    detail="Only students can use 'my_progress' parameter to filter tests."
-                )
+    def _apply_my_posts_filter(self, queryset):
+        """
+        Handle the student-only `my_posts` filter (forum posts). Forum posts only
+        exist for Productive tests, so both branches are scoped to type='P'.
+        - my_posts=true: Productive tests where the current student has at least
+          one forum post.
+        - my_posts=false: all Productive tests, regardless of whether the student
+          has posted (equivalent to filtering type='P').
+        - my_posts not provided: no change.
+        Raises PermissionDenied if a non-student (or anonymous user) uses it.
+        """
+        my_posts = self.request.query_params.get("my_posts", "").lower()
+        if my_posts not in ["true", "false"]:
+            return queryset
 
+        if not self.request.user.is_authenticated:
+            raise PermissionDenied(
+                detail="Authentication required to use 'my_posts' parameter."
+            )
+
+        try:
+            student = Student.objects.get(user=self.request.user)
+        except Student.DoesNotExist:
+            raise PermissionDenied(
+                detail="Only students can use 'my_posts' parameter to filter tests."
+            )
+
+        if my_posts == "false":
+            # All Productive tests, no filtering by whether the student has posted.
+            return queryset.filter(type="P")
+
+        # true: Productive tests where the current student has at least one post.
+        # Import here to avoid a circular import at module load time.
+        from forum.models import Post
+
+        my_post_exists = Post.objects.filter(
+            productive_test_history__student=student,
+            productive_test_history__productive_test__test=OuterRef("pk"),
+        )
+        # Exists() already restricts to Productive tests that have posts.
+        return queryset.filter(Exists(my_post_exists))
+
+    def _apply_visibility_policy(self, queryset):
+        """
+        Apply role-based visibility and validate the `status` filter.
+        - Anonymous/Student: only published tests; may only filter status='P'.
+        - Teacher: own tests can be P/D/I, others only P/I; cannot filter 'R',
+          and cannot filter other teachers' drafts (mine=false + status=D).
+        - Admin: all statuses, no extra filtering.
+        """
+        mine = self.request.query_params.get("mine", "").lower()
         status_filter = self.request.query_params.get("status", "")
 
-        # Visibility policy:
-        # - Anonymous/Student: only published tests
-        # - Teacher: own tests can be P/D/I; others only P/I
-        # - Admin: all statuses
         if not self.request.user.is_authenticated:
             if status_filter and status_filter != "P":
                 raise PermissionDenied(
                     detail="Anonymous users can only filter by status 'P' (Published)."
                 )
-            queryset = queryset.filter(status="P")
-        elif getattr(self.request.user, "role", None) == "S":
+            return queryset.filter(status="P")
+
+        role = getattr(self.request.user, "role", None)
+
+        if role == "S":
             if status_filter and status_filter != "P":
                 raise PermissionDenied(
                     detail="Students can only filter by status 'P' (Published)."
                 )
-            queryset = queryset.filter(status="P")
-        elif getattr(self.request.user, "role", None) == "T":
+            return queryset.filter(status="P")
+
+        if role == "T":
             if status_filter == "R":
                 raise PermissionDenied(
                     detail="Only admin users can filter by status 'R' (Removed)."
@@ -229,64 +293,73 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                     detail="Teacher profile not found for this account."
                 )
 
-            queryset = queryset.filter(
+            return queryset.filter(
                 Q(created_by=teacher, status__in=["P", "D", "I"])
                 | (~Q(created_by=teacher) & Q(status__in=["P", "I"]))
                 | (Q(created_by__isnull=True) & Q(status__in=["P", "I"]))
             )
-        elif not self.request.user.is_staff:
+
+        if not self.request.user.is_staff:
             raise PermissionDenied(
                 detail="This role is not allowed to access test overview."
             )
 
-        # Add annotation for submitted count only when needed
-        # Annotate when:
-        # 1. submitted=true parameter is present (to display value without duplicate query)
-        # 2. ordering parameter contains 'submitted' (to enable ordering)
+        # Admin: no additional filtering (sees every status).
+        return queryset
+
+    def _annotate_submitted(self, queryset):
+        """
+        Annotate `submitted` (distinct students who submitted) when needed:
+        1. submitted=true (to display value without a duplicate query), or
+        2. ordering references 'submitted' (to enable ordering).
+        """
         submitted_param = self.request.query_params.get("submitted", "").lower()
         ordering_param = self.request.query_params.get("ordering", "")
-        if submitted_param == "true" or "submitted" in ordering_param:
-            queryset = queryset.annotate(
-                submitted=Case(
-                    When(
-                        type="P",
-                        then=Count(
-                            "productive_test__histories__student",
-                            filter=Q(productive_test__histories__type="S"),
-                            distinct=True,
-                        ),
-                    ),
-                    When(
-                        type="R",
-                        then=Count(
-                            "receptive_test__histories__student",
-                            filter=Q(receptive_test__histories__type="S"),
-                            distinct=True,
-                        ),
-                    ),
-                    default=Value(0),
-                    output_field=IntegerField(),
-                )
-            )
+        if submitted_param != "true" and "submitted" not in ordering_param:
+            return queryset
 
-        # Add annotation for post count only when requested.
+        return queryset.annotate(
+            submitted=Case(
+                When(
+                    type="P",
+                    then=Count(
+                        "productive_test__histories__student",
+                        filter=Q(productive_test__histories__type="S"),
+                        distinct=True,
+                    ),
+                ),
+                When(
+                    type="R",
+                    then=Count(
+                        "receptive_test__histories__student",
+                        filter=Q(receptive_test__histories__type="S"),
+                        distinct=True,
+                    ),
+                ),
+                default=Value(0),
+                output_field=IntegerField(),
+            )
+        )
+
+    def _annotate_post_count(self, queryset):
+        """Annotate `post_count` (forum posts per test) only when requested."""
         post_count_param = self.request.query_params.get("post_count", "").lower()
-        if post_count_param == "true":
-            queryset = queryset.annotate(
-                post_count=Case(
-                    When(
-                        type="P",
-                        then=Count(
-                            "productive_test__histories__posts",
-                            distinct=True,
-                        ),
-                    ),
-                    default=Value(0),
-                    output_field=IntegerField(),
-                )
-            )
+        if post_count_param != "true":
+            return queryset
 
-        return queryset
+        return queryset.annotate(
+            post_count=Case(
+                When(
+                    type="P",
+                    then=Count(
+                        "productive_test__histories__posts",
+                        distinct=True,
+                    ),
+                ),
+                default=Value(0),
+                output_field=IntegerField(),
+            )
+        )
 
     def get_serializer_context(self):
         """
@@ -349,6 +422,9 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "- `progress_status`: Hiển thị trạng thái hoàn thành của student (true/false) - **Chỉ áp dụng cho student đã đăng nhập**\n"
             "- `submitted`: Hiển thị số lượng học sinh đã submit bài test (true/false)\n"
             "- `post_count`: Hiển thị số lượng bài post trong forum của bài test (true/false)\n"
+            "- `my_posts`: Lọc test mà student hiện tại đã có bài post trên forum (true/false) - **Yêu cầu đăng nhập và là student**\n"
+            "  - `true`: Các test student đã có ít nhất 1 bài post trên forum\n"
+            "  - `false`: Toàn bộ test Productive (tương đương lọc type=P), không lọc theo post\n"
             "- `page`: Số trang (mặc định: 1)\n"
             "- `page_size`: Số phần tử mỗi trang (mặc định: 10, tối đa: 100)\n\n"
             "**Tham số sắp xếp (Ordering):**\n"
@@ -389,6 +465,13 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "- Khi `post_count=true`, API sẽ trả về thêm trường `post_count` cho mỗi test\n"
             "- Trường `post_count` cho biết tổng số bài post forum của bài test đó\n"
             "- Với Receptive test (type='R'), `post_count` luôn là 0\n"
+            "\n"
+            "**Lưu ý về tham số `my_posts`:**\n"
+            "- Chỉ student đã đăng nhập mới được sử dụng tham số này\n"
+            "- `my_posts=true`: Lấy các test mà student đã có ít nhất 1 bài post trên forum của test đó (thực tế chỉ ra test Productive)\n"
+            "- `my_posts=false`: Lấy toàn bộ test Productive (tương đương lọc type=P), không lọc theo việc đã post hay chưa\n"
+            "- Vì forum post chỉ tồn tại cho Productive test nên cả hai giá trị chỉ trả về test Productive\n"
+            "- Nếu chưa đăng nhập hoặc không phải student → 403 Forbidden\n"
             "**Ví dụ:**\n"
             "- `/api/tests/?type=R` - Lấy tất cả bài Receptive Test (Reading/Listening)\n"
             "- `/api/tests/?type=P&level=B1` - Lấy bài Productive Test cấp B1\n"
@@ -412,7 +495,9 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
             "- `/api/tests/?submitted=true&ordering=-submitted` - Lấy bài test kèm số submission, sắp xếp theo nhiều nhất\n"
             "- `/api/tests/?ordering=-submitted` - Sắp xếp theo nhiều submission (KHÔNG hiển thị field submitted)\n"
             "- `/api/tests/?mine=true&submitted=true&ordering=-submitted` - Bài test của mình, xem bài nào được submit nhiều nhất\n"
-            "- `/api/tests/?post_count=true` - Lấy danh sách bài test kèm số lượng bài post forum"
+            "- `/api/tests/?post_count=true` - Lấy danh sách bài test kèm số lượng bài post forum\n"
+            "- `/api/tests/?my_posts=true` - (Student) Lấy các test mà mình đã có bài post trên forum\n"
+            "- `/api/tests/?my_posts=false` - (Student) Lấy toàn bộ test Productive (tương đương type=P)"
         ),
         tags=["tests (overview)"],
         parameters=[
@@ -506,6 +591,18 @@ class TestOverviewListCreateView(generics.ListCreateAPIView):
                     "Hiển thị số lượng bài post forum của bài test (true/false). "
                     "Khi post_count=true, API sẽ trả về thêm trường 'post_count' cho mỗi test. "
                     "Với Receptive test (type='R'), giá trị luôn là 0. "
+                ),
+                required=False,
+                type=bool,
+            ),
+            OpenApiParameter(
+                name="my_posts",
+                description=(
+                    "Lọc test mà student hiện tại đã có bài post trên forum (true/false). "
+                    "true: Các test student đã có bài post; "
+                    "false: Toàn bộ test Productive (tương đương type=P), không lọc theo post. "
+                    "Yêu cầu: Phải đăng nhập và là student. "
+                    "Nếu không thỏa điều kiện sẽ trả về 403."
                 ),
                 required=False,
                 type=bool,
